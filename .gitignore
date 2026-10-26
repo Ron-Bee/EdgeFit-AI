@@ -1,0 +1,22 @@
+# API keys and local settings
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*secret*
+# Never commit local evidence databases or exported benchmark data
+data/*
+!data/.gitkeep
+*.db
+*.db-wal
+*.db-shm
+# Python and editor
+__pycache__/
+.venv/
+.vscode/
+.idea/
+*.db-journal
+*.ps1.backup
+*.env
+*.pyc
