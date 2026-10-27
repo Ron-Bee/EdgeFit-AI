@@ -1,0 +1,321 @@
+package ai.edgefit.diag
+
+import android.app.ActivityManager
+import android.content.Context
+import android.os.Build
+import android.os.Debug
+import android.os.PowerManager
+import android.os.SystemClock
+import org.json.JSONObject
+import java.io.File
+import java.nio.ByteBuffer
+import java.security.SecureRandom
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
+import java.util.concurrent.atomic.AtomicBoolean
+
+/** Phase machine. Pure transition table (unit-tested). */
+object BenchPhases {
+    const val IDLE = "IDLE"
+    const val RUNNING = "RUNNING"
+    private val TERMINAL =
+        setOf(BenchContract.STATUS_COMPLETED, BenchContract.STATUS_CANCELLED,
+            BenchContract.STATUS_FAILED, BenchContract.STATUS_TIMEOUT)
+
+    fun can(from: String, to: String): Boolean =
+        (from == IDLE && to == RUNNING) ||
+            (from == RUNNING && to in TERMINAL) ||
+            (from in TERMINAL && to == IDLE)
+
+    fun isTerminal(phase: String): Boolean = phase in TERMINAL
+}
+
+/**
+ * Benchmark orchestrator: preflight guards, one worker thread, watchdog
+ * timeout, cooperative cancellation, measurement assembly. Exactly one
+ * [BenchResult] per run, delivered on the worker thread.
+ */
+class BenchRunner(private val context: Context) {
+    @Volatile var phase: String = BenchPhases.IDLE
+        private set
+    private var worker: Thread? = null
+    private var mailbox: ByteBuffer? = null
+    private val finished = AtomicBoolean(false)
+    private val timedOut = AtomicBoolean(false)
+    @Volatile private var midThermal: String? = null
+    private val lock = Any()
+
+    fun start(
+        modelFile: File,
+        modelSha256: String,
+        displayName: String,
+        listener: (BenchResult) -> Unit
+    ): Boolean {
+        synchronized(lock) {
+            if (!BenchPhases.can(phase, BenchPhases.RUNNING)) return false
+            phase = BenchPhases.RUNNING
+        }
+        finished.set(false)
+        timedOut.set(false)
+        midThermal = null
+        val box = LlamaBridge.newCancelMailbox()
+        mailbox = box
+        worker = Thread({
+            val result = runBenchmark(modelFile, modelSha256, displayName, box)
+            synchronized(lock) { phase = result.status }
+            listener(result)
+        }, "edgefit-bench")
+        worker!!.start()
+        return true
+    }
+
+    fun cancel() {
+        try {
+            mailbox?.let { LlamaBridge.cancel(it) }
+        } catch (_: Exception) {
+        }
+    }
+
+    fun joinGracefully(timeoutMs: Long): Boolean {
+        return try {
+            worker?.join(timeoutMs)
+            worker?.let { !it.isAlive } ?: true
+        } catch (_: InterruptedException) {
+            false
+        }
+    }
+
+    fun reset(): Boolean = synchronized(lock) {
+        if (!BenchPhases.can(phase, BenchPhases.IDLE)) return false
+        phase = BenchPhases.IDLE
+        true
+    }
+
+    private fun runBenchmark(
+        modelFile: File,
+        modelSha256: String,
+        displayName: String,
+        box: ByteBuffer
+    ): BenchResult {
+        val stamp = utcStamp()
+        val runId = formatRunId(stamp, randomHex8())
+        val collectedAt = utcNow()
+        val profile = DeviceCapabilityCollector(context).collect()
+        val device = profile.device
+        val snapshot = BenchDeviceSnapshot(
+            profileRef = BenchConfig.sha256Hex(
+                ProfileSerializer.serialize(profile).toByteArray(Charsets.UTF_8)),
+            model = device.model,
+            sdkInt = device.sdkInt,
+            supportedAbis = device.supportedAbis,
+            logicalProcessors = device.logicalProcessors,
+            totalRamBytes = device.totalRamBytes
+        )
+        val config = BenchConfig.default(BenchConfig.effectiveThreads(device.logicalProcessors))
+        val thermalBefore = sampleThermal()
+        val pssBefore = processPssKb()
+        val modelBytes = modelFile.length()
+        val memInfo = ActivityManager.MemoryInfo()
+        (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager)
+            .getMemoryInfo(memInfo)
+
+        fun failedNow(reason: String): BenchResult = BenchResult(
+            runId = runId, device = snapshot,
+            model = BenchModelIdentity(displayName, modelBytes, modelSha256,
+                "unknown", emptyMap()),
+            runtimeVersion = llamaVersionOrUnknown(),
+            runtimeAbi = device.supportedAbis.firstOrNull() ?: "unknown",
+            config = config, workload = BenchConfig.workload(),
+            measurements = zeroMeasurements(thermalBefore, null, thermalBefore,
+                pssBefore, pssBefore),
+            status = BenchContract.STATUS_FAILED, error = reason,
+            appVersion = BuildConfig.VERSION_NAME, collectedAtUtc = collectedAt,
+            xNativeBuild = nativeBuildMap()
+        )
+
+        val configErrors = BenchConfig.validate(config)
+        if (configErrors.isNotEmpty()) return failedNow(configErrors.joinToString("; "))
+        if (!LlamaBridge.available) {
+            return failedNow("runtime unavailable: ${LlamaBridge.loadError}")
+        }
+        if (!modelFile.isFile) return failedNow("model file missing")
+        val guardErrors = BenchGuards.preflight(
+            device.supportedAbis, memInfo.availMem, modelBytes, thermalBefore)
+        if (guardErrors.isNotEmpty()) return failedNow(guardErrors.joinToString("; "))
+
+        val wall0 = SystemClock.elapsedRealtime()
+        val allocBefore = LlamaBridge.nativeAllocBytes()
+        val watchdog = Thread({
+            var sampled = false
+            while (!finished.get()) {
+                try {
+                    Thread.sleep(250)
+                } catch (_: InterruptedException) {
+                    return@Thread
+                }
+                val elapsed = SystemClock.elapsedRealtime() - wall0
+                if (!sampled && elapsed >= 2000) {
+                    midThermal = sampleThermal()
+                    sampled = true
+                }
+                if (elapsed >= config.timeoutMs) {
+                    timedOut.set(true)
+                    cancel()
+                    return@Thread
+                }
+            }
+        }, "edgefit-bench-watchdog")
+        watchdog.isDaemon = true
+        watchdog.start()
+
+        var native: JSONObject? = null
+        var nativeError: String? = null
+        try {
+            val raw = LlamaBridge.nativeRun(
+                modelFile.absolutePath, BenchContract.WORKLOAD_PROMPT,
+                config.nCtx, config.nThreads, config.nPredict, box)
+            native = JSONObject(raw)
+        } catch (e: Exception) {
+            nativeError = "native call failed: ${e.message}"
+        } finally {
+            finished.set(true)
+            try {
+                watchdog.join(2000)
+            } catch (_: InterruptedException) {
+            }
+        }
+        val wallMs = SystemClock.elapsedRealtime() - wall0
+        val allocAfter = LlamaBridge.nativeAllocBytes()
+        val pssAfter = processPssKb()
+        val thermalAfter = sampleThermal()
+
+        if (nativeError != null) return failedNow(nativeError)
+        val out = native!!
+        if (!out.optBoolean("ok", false)) {
+            return failedNow(out.optString("error", "native error"))
+        }
+        val cancelled = out.optBoolean("cancelled", false)
+        val prefillMs = out.optLong("prefill_ms", 0)
+        val genMs = out.optLong("gen_ms", 0)
+        val generated = out.optInt("generated_tokens", 0)
+        val prefillTokens = out.optInt("prefill_tokens", 0)
+        val loadMs = (wallMs - prefillMs - genMs).coerceAtLeast(0)
+        val metaJson = out.optJSONObject("meta")
+        val meta = mutableMapOf<String, String>()
+        if (metaJson != null) {
+            val keys = metaJson.keys()
+            while (keys.hasNext() && meta.size < 32) {
+                val key = keys.next()
+                meta[key] = metaJson.optString(key, "")
+            }
+        }
+        val mem = benchMemory(pssBefore, pssAfter, allocBefore, allocAfter)
+        val mid = midThermal ?: thermalBefore
+        val thermal = BenchThermal(
+            before = thermalBefore ?: "unknown",
+            mid = mid ?: "unknown",
+            after = thermalAfter ?: "unknown",
+            available = thermalBefore != null && thermalAfter != null)
+        val measurements = BenchMeasurements(
+            loadMs = loadMs, prefillMs = prefillMs, prefillTokens = prefillTokens,
+            genMs = genMs, generatedTokens = generated,
+            tpsGen = BenchConfig.tps(generated, genMs),
+            tpsPrefill = BenchConfig.tps(prefillTokens, prefillMs),
+            eosStop = out.optBoolean("eos_stop", false), mem = mem, thermal = thermal)
+        val (status, error) = when {
+            cancelled && timedOut.get() ->
+                BenchContract.STATUS_TIMEOUT to "watchdog timeout after ${config.timeoutMs} ms"
+            cancelled -> BenchContract.STATUS_CANCELLED to "cancelled by user or lifecycle"
+            else -> BenchContract.STATUS_COMPLETED to null
+        }
+        return BenchResult(
+            runId = runId, device = snapshot,
+            model = BenchModelIdentity(displayName, modelBytes, modelSha256,
+                meta["general.quantization_version"] ?: "unknown", meta),
+            runtimeVersion = llamaVersionOrUnknown(),
+            runtimeAbi = device.supportedAbis.firstOrNull() ?: "unknown",
+            config = config, workload = BenchConfig.workload(),
+            measurements = measurements, status = status, error = error,
+            appVersion = BuildConfig.VERSION_NAME, collectedAtUtc = collectedAt,
+            xNativeBuild = nativeBuildMap())
+    }
+
+    private fun zeroMeasurements(
+        before: String?, mid: String?, after: String?, pssBefore: Int, pssAfter: Int
+    ): BenchMeasurements = BenchMeasurements(
+        loadMs = 0, prefillMs = 0, prefillTokens = 0, genMs = 0, generatedTokens = 0,
+        tpsGen = 0.0, tpsPrefill = 0.0, eosStop = false,
+        mem = benchMemory(pssBefore, pssAfter, -1, -1),
+        thermal = BenchThermal(before ?: "unknown", mid ?: "unknown",
+            after ?: "unknown", before != null && after != null))
+
+    private fun benchMemory(pssBefore: Int, pssAfter: Int, allocBefore: Long,
+                            allocAfter: Long): BenchMemory {
+        val ok = allocBefore >= 0 && allocAfter >= 0
+        return BenchMemory(pssBefore, pssAfter,
+            if (ok) allocAfter - allocBefore else 0,
+            if (ok) MEM_METHOD else "$MEM_METHOD;alloc_unavailable")
+    }
+
+    private fun processPssKb(): Int {
+        return try {
+            val info = Debug.MemoryInfo()
+            Debug.getMemoryInfo(info)
+            info.totalPss
+        } catch (_: Exception) {
+            0
+        }
+    }
+
+    private fun sampleThermal(): String? {
+        return try {
+            if (Build.VERSION.SDK_INT < 29) return null
+            val power = context.getSystemService(PowerManager::class.java)
+            ProfileContract.thermalName(power.currentThermalStatus)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun llamaVersionOrUnknown(): String {
+        return try {
+            if (LlamaBridge.available) LlamaBridge.nativeVersion() else "unavailable"
+        } catch (_: Exception) {
+            "unavailable"
+        }
+    }
+
+    private fun utcNow(): String {
+        val format = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US)
+        format.timeZone = TimeZone.getTimeZone("UTC")
+        return format.format(Date())
+    }
+
+    private fun utcStamp(): String {
+        val format = SimpleDateFormat("yyyyMMdd'T'HHmmss'Z'", Locale.US)
+        format.timeZone = TimeZone.getTimeZone("UTC")
+        return format.format(Date())
+    }
+
+    private fun nativeBuildMap(): Map<String, String> = mapOf(
+        "variant" to BuildConfig.BUILD_TYPE,
+        "native_opt" to BuildConfig.NATIVE_OPT
+    )
+
+    companion object {
+        const val MEM_METHOD = "debug-memoryinfo+mallinfo2"
+
+        fun formatRunId(stamp: String, randHex8: String): String =
+            "BENCH-$stamp-$randHex8"
+
+        private val random = SecureRandom()
+
+        fun randomHex8(): String {
+            val bytes = ByteArray(4)
+            random.nextBytes(bytes)
+            return bytes.joinToString("") { "%02x".format(it) }
+        }
+    }
+}

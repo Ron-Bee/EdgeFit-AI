@@ -28,3 +28,9 @@ android/local.properties
 # Exported device profiles and stray APKs stay out of the public repo (EF-ANDROID-01)
 edgefit-profile-*.json
 *.apk
+# Owner-acquired llama.cpp source and benchmark result exports (EF-BENCH-01)
+android/third_party/
+edgefit-bench-*.json
+# Generated CMake build outputs and local model weights (EF-LOOP-01)
+android/app/.cxx/
+*.gguf
