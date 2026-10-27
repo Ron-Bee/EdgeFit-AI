@@ -167,6 +167,20 @@ Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
   MODEL_API_KEY). EF-META-06: OFFLINE PASS, LIVE AUTHORIZATION
   REQUIRED.
 
+## EF-META-06 live qualification (executed by owner; not executed by agent)
+
+- Command: `py -3 scripts/ef_meta_06_live.py` — result
+  `EF-META-06 LIVE: PASS - one validated round trip with physical
+  evidence.`, exit code 0.
+- The live request retrieved both physical benchmark run IDs and
+  presented a host-calculated comparison including 37.57x
+  generation throughput improvement.
+- Response completeness: UNQUALIFIED — the model's analysis was
+  visibly incomplete at its final recommendation section. The
+  narrative is not described as presentation-ready.
+- EF-META-06: PASS (live-qualified) with the completeness caveat
+  above. No global eligibility claimed.
+
 ## EF-LOOP-01 (offline integrated PASS; historical replay PASS)
 
 - Agent-executed: integrated orchestrator (`scripts/ef_loop_01.py`)
@@ -193,3 +207,66 @@ Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
 - NOT RUN: prospective physical end-to-end (requires phone
   benchmark + two authorized live API calls). EF-DEMO-01 deferred
   per owner directive; not begun.
+
+## Physical benchmark runs Run A/B (executed by owner; not executed by agent)
+
+- Correction note: the EF-BENCH-01 section above records that
+  milestone's session only. Afterwards the owner built, installed,
+  and ran the benchmark on the Galaxy S22 Ultra: Run A
+  (`BENCH-20261027T042748Z-93ce3477`, unoptimized Debug,
+  0.382809 tok/s) and Run B (`BENCH-20261027T170002Z-36227bc0`,
+  benchmark variant, 14.382022 tok/s) both COMPLETED with VALID
+  contract v1 JSON, ingested under EF-DATA-03b. EF-BENCH-01/02:
+  PHYSICALLY QUALIFIED (implementation + device runs).
+
+## EF-ANDROID-UI-01 acceptance corrections (agent-executed, uncommitted)
+
+- Prompt verified byte-identical to recorded SHA-256 `36104db0…4382`
+  (Kotlin literal, DB row, evidence hash all agree; 118 chars).
+- Added read-only workload view (pre/post-run), EdgeFit AI naming,
+  dark-screen chrome fixes, and section headers; JVM 36/36 OK
+  (5 new workload tests), Python UI conformance 14/14 OK,
+  benchmark APK rebuilt offline. No contract/methodology change.
+- Physical acceptance of the corrections is NOT RUN (owner protocol
+  issued with this milestone).
+
+## EF-ANDROID-UI-01 (implementation HOST QUALIFIED; physical partial)
+
+- Agent-executed (uncommitted at EF-ARCH-02 time): progress
+  mailbox + sampler + execution states + dark benchmark screen
+  with live chart implemented; JVM 31/31 OK (12 new UI tests);
+  NDK-28 native compile clean; Python conformance 11/11 OK;
+  `app-benchmark.apk` built offline.
+- Owner-observed physical runs (executed by owner on Galaxy S22
+  Ultra, Android 16; screenshots reviewed, not agent-executed):
+  Run 1 — 64 tokens, 3859 ms generation, 16.6 tok/s displayed,
+  prefill 23 tokens / 863 ms, thermal none at completion.
+  Run 2 — 64 tokens, 3785 ms generation, 16.9 tok/s displayed,
+  prefill 23 tokens / 939 ms, thermal light during run. Both
+  screenshots show completed results and the new chart.
+- Distinguished status: physical UI completed-run demonstration:
+  OWNER OBSERVED PASS. Complete native event sequencing: NOT
+  FULLY VERIFIED. Exported JSON validation for these two runs:
+  NOT VERIFIED. Cancellation/lifecycle: NOT VERIFIED.
+  Instrumentation overhead: NOT QUALIFIED.
+- EF-ANDROID-UI-01 physical qualification is NOT declared.
+  EF-ANDROID-UI-01: IMPLEMENTATION PASS, HOST TEST PASS.
+
+## EF-ARCH-02 (design complete; owner review required)
+
+- Agent-executed, documentation only: v2 reconciliation across
+  master architecture, decision register (Amendment 002-A +
+  ADR-015 ACCEPTED per owner BYOK approval; ADR-016/017/018
+  PROPOSED), cloud/stats contract merge, product requirements
+  (17 FR + 11 NFR), agentic workflow, release/distribution, and
+  A–U traceability. No source, evidence, database, or history
+  changes; no Meta calls; no commits.
+- EF-ARCH-02: DESIGN COMPLETE, OWNER REVIEW REQUIRED.
+- Acceptance corrections (agent-executed, documentation only):
+  owner-observed UI-01 run evidence recorded without declaring
+  physical qualification; owner META-06 live PASS recorded with
+  response-completeness unqualified; local→global mapping
+  corrected (consent-gated SUBMITTED entry, no auto-eligibility);
+  aggregate/run consent scopes separated with run listing
+  PROPOSED+disabled; six provisional v1 policies recorded as
+  owner-approved design (activation not authorized).

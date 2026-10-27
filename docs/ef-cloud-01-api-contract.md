@@ -5,6 +5,13 @@ proposed deployment choice — NOT configured, no DNS exists, not
 implemented infrastructure:
 `https://api.edgefit.ronbeesoftware.com/v1`.
 
+EF-ARCH-02 reconciliation (ADR-018, PROPOSED): this document is the
+authoritative HTTP surface; `docs/ef-stats-01-contract.md` is the
+statistics methodology annex (grouping, tiers, quorum behavior,
+error statistics, compiler provenance). Where they overlap, this
+surface plus that methodology govern together; conflicts resolve
+toward stricter grouping and explicit insufficient-evidence.
+
 ## Versioning
 
 URL-major version (`/v1`). Additive fields are minor-compatible;
@@ -55,21 +62,31 @@ Returns `200` with the new state.
 
 ### GET /v1/benchmarks/aggregates (public)
 
-Query: `model_sha` (required), `config_hash?`, `device_class?`,
-`workload_id?` (default `edgefit-prompt-v1`).
-Response: `{"groups": [{"model_sha", "config_hash", "device_class",
-"mean_tps", "median_tps", "n", "device_count", "updated_at_utc"}]}`.
+Query: `model_sha` (required), `config_hash?`, `build?`
+(`effective_opt` + status, required to distinguish builds),
+`device_class?`, `workload_id?` (default `edgefit-prompt-v1`).
+Response: `{"groups": [{"model_sha", "config_hash", "build",
+"device_class", "mean_tps", "median_tps", "n", "install_count",
+"mean_abs_pct_error|null", "updated_at_utc"}]}`.
 Only PUBLISHED rows; groups below quorum are omitted with
-`quorum: {"min_n", "min_devices"}` echoed. Aggregates summarize
-device-reported, rule-qualified measurements; they are not
-authenticated hardware proof.
+`quorum: {"min_n", "min_installs"}` echoed (owner-approved
+provisional values 5/3; activation needs qualification). Counts are
+independent installs (salted install hashes) until hardware
+attestation exists. Aggregates summarize device-reported,
+rule-qualified measurements; they are not authenticated hardware
+proof. Prediction-error statistics appear only where loop
+coverage exists, else null.
 
-### GET /v1/benchmarks/runs (public, paginated)
+### GET /v1/benchmarks/runs (PROPOSED — disabled until approved)
 
-Query: same filters + `cursor?`, `limit?` (1–50, default 20).
-Response: run summaries (run id, model sha, config hash, device
-class, tps, tokens, status COMPLETED, collected date). No install
-ids, no raw prompts beyond the workload id.
+Individual-run disclosure is a SEPARATE consent scope from aggregate
+publication (acceptance correction): aggregate-only is the default,
+and this endpoint stays disabled until its disclosure policy is
+reviewed and explicitly approved. Draft shape when enabled — query:
+same filters + `cursor?`, `limit?` (1–50, default 20); response:
+run summaries (run id, model sha, config hash, device class, tps,
+tokens, status COMPLETED, collected date) for opted-in PUBLISHED
+rows only. No install ids, no raw prompts beyond the workload id.
 
 ### GET /v1/models (public)
 
@@ -105,5 +122,20 @@ for quarantine review.
 "quorum": {"min_n": 3, "min_devices": 2}}
 ```
 
-Values illustrative. No endpoint is implemented; this contract
-governs the future backend build.
+Values illustrative (the worked example above predates the
+reconciled 5/3 proposal and stays illustrative only). No endpoint
+is implemented; this contract governs the future backend build.
+
+## EF-ARCH-02 reconciliation notes (PROPOSED)
+
+- `/v1/benchmarks/runs` is the FUTURE optional individual
+  public-run disclosure mechanism, currently PROPOSED and disabled
+  pending disclosure-policy approval: when enabled, opted-in
+  PUBLISHED rows only, no install ids, no raw prompts. Quorum
+  applies to aggregates, not to run listing.
+- `device_count` is renamed `install_count` with salted-hash
+  semantics (ADR-005/ADR-018); hardware-attested counts stay out
+  of scope until an attestation mechanism exists.
+- The two existing S22 Ultra workstation rows are different build
+  cohorts (n=1 each) and MUST NOT appear in any published
+  aggregate; a present-day query must answer insufficient-evidence.

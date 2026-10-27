@@ -1,9 +1,16 @@
-# EF-STATS-01 public model statistics API contract (PROPOSED)
+# EF-STATS-01 public model statistics methodology (PROPOSED)
 
 Status: DESIGN ONLY. No endpoint is deployed, no statistics are
 published, and no community data exists. This document defines the
 rules a future public API must follow before it may serve aggregates.
-All thresholds below are PROPOSED and require owner review.
+Thresholds and counting below are owner-approved provisional design
+policies; production activation still requires qualification.
+
+EF-ARCH-02 reconciliation (ADR-018, PROPOSED): this document is the
+methodology annex; the HTTP surface is authoritative in
+`docs/ef-cloud-01-api-contract.md` (`/v1/benchmarks/aggregates`,
+`/v1/benchmarks/runs`). The `/v1/stats/*` sketch below is
+superseded by those paths and kept only for history.
 
 ## Evidence tiers (never mixed)
 
@@ -15,6 +22,9 @@ All thresholds below are PROPOSED and require owner review.
   Never leaves the host without per-submission consent.
 - `global_eligible`: consented, qualified, deduplicated submissions
   in the global database. ONLY this tier feeds public statistics.
+  Here `global_eligible` means pipeline-PUBLISHED rows; it is not a
+  local prerequisite — submissions enter as `SUBMITTED` on consent
+  alone, and no local state auto-grants eligibility.
 
 ## Cohort definition (grouping keys)
 
@@ -39,7 +49,9 @@ For generation throughput (`tps_gen`) and prefill throughput, plus
 prediction error where loop manifests exist:
 
 - `sample_count` (n): number of eligible measurements
-- `device_count`: number of distinct devices (see privacy note)
+- `install_count`: number of distinct installs by salted install
+  hash (ADR-005 method adopted as PROPOSED; honest terminology
+  until hardware attestation exists — see privacy note)
 - `mean`, `median`, `min`, `max`
 - `variability`: interquartile range when n >= 8, else `null` with reason
 - `mean_abs_pct_error`, `median_abs_pct_error`: prediction error vs
@@ -47,9 +59,10 @@ prediction error where loop manifests exist:
 
 ## Minimum cohort size and insufficient evidence
 
-PROPOSED thresholds: publish aggregates only when `sample_count >= 5`
-AND `device_count >= 3`. Below either threshold the API returns the
-cohort definition, both counts, and:
+Owner-approved provisional thresholds: publish aggregates only
+when `sample_count >= 5` AND `install_count >= 3` (design policy;
+activation needs implementation qualification). Below either
+threshold the API returns the cohort definition, both counts, and:
 
 ```json
 {"status": "insufficient-evidence",
@@ -71,10 +84,12 @@ PROPOSED but not decided:
 - Option B: per-install random UUID generated on first launch,
   submitted only with consent, revocable by rotation.
 
-Until one is chosen and reviewed, `device_count` is `null` with
-`"method": "undecided"`, which forces `insufficient-evidence` under
-the thresholds above. This is intentional: no public average ships
-before the privacy design is settled.
+EF-ARCH-02 adopts Option B (salted install hash, ADR-005) as the
+owner-approved provisional method. Until an implementation is
+qualified, `install_count` is `null` with `"method": "undecided"`,
+which forces `insufficient-evidence` under the thresholds above.
+This is intentional: no public average ships before the privacy
+design is implemented and qualified.
 
 ## Consent, revocation, and identity
 
@@ -82,8 +97,12 @@ before the privacy design is settled.
   eligible row. Revocation removes the row from future aggregates
   (past published aggregates are versioned snapshots, never
   silently restated).
+- Aggregate publication and individual-run disclosure are
+  INDEPENDENT consent scopes (acceptance correction):
+  aggregate-only is the default, and run-level listing stays
+  PROPOSED and disabled until its disclosure policy is approved.
 - No run ids, profile hashes, IP addresses, install ids, or
-  free-text fields in public responses. Cohort keys only.
+  free-text fields in public aggregate responses. Cohort keys only.
 - Synthetic examples are served from a separate path/flag and are
   always labeled; clients cannot mistake them for community data.
 
@@ -95,7 +114,11 @@ query MUST answer `insufficient-evidence` for both. Any document,
 dashboard, or demo showing a "community average" from these two runs
 is fabrication.
 
-## API surface sketch (not implemented)
+## API surface sketch (SUPERSEDED — kept for history)
+
+Per ADR-018 the authoritative surface is EF-CLOUD-01
+(`/v1/benchmarks/aggregates`, `/v1/benchmarks/runs`); the sketch
+below is retained only to record what was merged:
 
 - `GET /v1/stats/cohorts?model_sha256=...&device_class=...&...`
   exact-match cohort lookup; full cohort key required (no partial
@@ -104,6 +127,9 @@ is fabrication.
 - JSON only; versioned (`v1`); rate-limited; no authentication
   required for reads; submissions (EF-CLOUD-01) are authenticated
   and separate.
+
+Grouping, quorum, tier, compiler-provenance, and error-statistics
+rules in this annex still govern that surface.
 
 ## Pre-deployment gates (EF-STATS-01 / EF-CLOUD-01 blockers)
 
