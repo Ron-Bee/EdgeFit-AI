@@ -69,4 +69,127 @@
 - EF-DATA-02: PASS (ingestion-qualified). Platform-reported device data
   only; not a physical inference-performance measurement.
 
+## EF-BENCH-01 (implementation qualified; device/APK NOT RUN)
+
+- Agent-executed: JNI bridge compiles clean against real llama.cpp
+  v0.7.0 headers (NDK 28 clang, arm64); Kotlin main sources compile;
+  JVM suites 18/18 OK (config, guards, serialization, state machine,
+  calculations, profile export preserved); `test_ef_bench_01.py`
+  18/18 OK; EF-DATA-01 PASS; EF-META-05 14/14 OK; EF-ANDROID-01 25/25
+  OK; EF-DATA-02 29/29 OK; EF-META-04 12/12 PASS.
+- NOT RUN: Gradle APK build, install, and any on-device benchmark.
+  No model downloaded by the agent. EF-META-05 allowlists unchanged.
+
 Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
+
+## EF-DATA-03 (implementation qualified; database NOT mutated)
+
+- Agent-executed: additive `physical_benchmark_results` +
+  `bench_context_links` schema (migration 3) plus CLI importer
+  (`scripts/ef_data_03_import.py`), read-only retrieval
+  (`scripts/ef_bench_retrieve_03.py`), and offline A/B comparison
+  (`scripts/ef_bench_compare_03.py`) implemented.
+- Agent-executed: `scripts/test_ef_data_03.py` 35/35 OK (isolated
+  temp databases; CLI commit mode never invoked against the real
+  database). One test-found defect fixed: the v3 CLI parser accepted
+  flags only before the positional path, unlike EF-DATA-02; parsing
+  is now order-independent.
+- Agent-executed regressions: EF-DATA-02 29/29 OK; EF-META-05 14/14
+  OK; EF-ANDROID-01 25/25 OK; EF-BENCH-01 19/19 OK; bench native 3/3
+  OK; EF-META-04 12/12 PASS; EF-DATA-01 PASS. No Meta API calls.
+- Agent-executed evidence integrity: all 5 evidence SHA-256 values
+  match owner-supplied hashes (Run A bench 4C02B3CF...,
+  Run B bench D720CF20..., profiles 9C27FBBB.../A375D8A2.../838B9FD2...).
+  New Run B files independently re-validated offline: `VALID:
+  contract v1 result`, `VALID: contract v1 profile`.
+- Agent-executed dry-run previews (read-only, exit 0): Run A
+  `BENCH-20261027T042748Z-93ce3477` with 2 proposed
+  `same_device_context` links (deltas +8862s / -334s); Run B
+  `BENCH-20261027T170002Z-36227bc0` with 1 proposed link
+  (delta -108s). Both report `migration_needed: True`,
+  `identical_record_exists: False`.
+- Agent-executed offline comparison (exit 0): matched device model,
+  model SHA-256, workload, token counts, context, threads, sampler,
+  backend; generation 0.382809 -> 14.382022 tok/s (37.57x recomputed
+  from timings); prefill 37.85x; thermal difference reported as
+  caveat; requested `-O3 -g` kept distinct from verified effective
+  `-O2`. One physical pair, not a population result.
+- Database UNCHANGED: `data/edgefit.db` SHA-256 identical before and
+  after all previews and comparisons
+  (`986A70E2...C4EE7`); no new files in `data/`. EF-META-05
+  synthetic behavior and tool allowlist unchanged.
+- Pending owner gates: dry-run review; attestation wording for
+  effective `-O2`; explicit two-flag commit authorization per run;
+  post-commit read-only verification. EF-DATA-03: LOCAL
+  IMPLEMENTATION PASS, ingestion NOT YET QUALIFIED.
+
+## EF-DATA-03b (qualified; owner import confirmed)
+
+- Owner-executed: both physical benchmark runs committed with
+  EF-DATA-03 gates; post-import verification reported migrations
+  [2, 3], 2 physical rows, 3 contextual links, synthetic records
+  intact. Database SHA-256 `B36977AD...190FE9D`.
+- Agent-executed acceptance (pre-import): importer/migration/
+  retrieval source review with no blocking defects; evidence hashes
+  and contracts re-verified; journal mode `delete`; pre-import backup
+  `data/edgefit.db.pre-import-03b-20261027T174115Z` created via the
+  SQLite backup API and content-matched to live; exact two-record
+  rehearsal on an isolated copy (values, flags, states, links,
+  idempotent re-import, conflict rejection, retrieval, no path
+  disclosure) all green. Effective `-O2` independently confirmed in
+  all 77 compile commands. Live database never written by the agent.
+- EF-DATA-03b: PASS (ingestion-qualified). Both rows `ingested`.
+
+## EF-META-06 (offline qualified; live NOT RUN)
+
+- Agent-executed: separate `retrieve_physical_benchmarks` dispatcher
+  (`scripts/ef_dispatch_06.py`) with narrow model-visible projection,
+  host-pinned COMPLETED filter, and deterministic host comparison;
+  bounded live module (`scripts/ef_meta_06_live.py`, max one tool
+  call, two requests max) implemented. EF-META-05 synthetic files
+  untouched (git-verified); no tool merging.
+- Agent-executed: `scripts/test_ef_meta_06.py` 39/39 OK (mocked
+  transport only; all fake API payloads labeled synthetic test
+  artifacts) covering dispatch matrix, injection rejection,
+  source separation, empty/missing/corrupt/changed DB, state
+  labeling without promotion, output caps, prompt-injection
+  isolation, secret non-disclosure, recomputed 37.57x speedup with
+  banned-claim scan, and offline live-path failures.
+- Agent-executed regressions: EF-META-05 14/14 OK; EF-DATA-03 35/35
+  OK; EF-DATA-02 29/29 OK; EF-ANDROID-01 25/25 OK; EF-BENCH-01 19/19
+  OK; bench native 3/3 OK; EF-META-04 PASS (exit 0); EF-DATA-01 PASS.
+  No Meta API calls.
+- Database UNCHANGED: `data/edgefit.db` SHA-256 `B36977AD...190FE9D`
+  before, during, and after all offline work; both rows remain
+  `ingested`. No writes, no promotion, no cloud.
+- Pending: explicit owner authorization for the bounded live
+  demonstration (`py -3 scripts/ef_meta_06_live.py` with
+  MODEL_API_KEY). EF-META-06: OFFLINE PASS, LIVE AUTHORIZATION
+  REQUIRED.
+
+## EF-LOOP-01 (offline integrated PASS; historical replay PASS)
+
+- Agent-executed: integrated orchestrator (`scripts/ef_loop_01.py`)
+  implemented over qualified components: mocked-or-live Meta
+  prediction persisted to a local run manifest before benchmarking,
+  identity/integrity-checked benchmark association, deterministic
+  error computation, and a bounded grounded follow-up. SQLite is
+  read-only in the loop; manifests live under gitignored
+  `data/loop_runs/`. Statistics API designed only
+  (`docs/ef-stats-01-contract.md`, PROPOSED, not deployed).
+- Agent-executed: `scripts/test_ef_loop_01.py` 26/26 OK (mocked
+  Meta, hermetic temp manifests). The historical-replay demo
+  exposed and fixed one real bug (followup assumed init-shaped
+  evidence packs); regression test added.
+- Agent-executed historical replay (honestly labeled, mocked
+  follow-up): real S22 Ultra profile + real Run B benchmark with a
+  supplied 12.0 tps estimate completed `REPLAY-DEMO-01` end to end:
+  errors +2.382 tps (+19.85%), recommendation `adopt_config`.
+- Agent-executed regressions: EF-META-06 39/39 OK; EF-META-05 14/14
+  OK; EF-DATA-03 35/35 OK; EF-DATA-02 29/29 OK; EF-ANDROID-01 25/25
+  OK; EF-BENCH-01 19/19 OK; bench native 3/3 OK; EF-META-04 PASS
+  (exit 0); EF-DATA-01 PASS. No Meta API calls, no DB writes
+  (SHA-256 `B36977AD...190FE9D` unchanged).
+- NOT RUN: prospective physical end-to-end (requires phone
+  benchmark + two authorized live API calls). EF-DEMO-01 deferred
+  per owner directive; not begun.
