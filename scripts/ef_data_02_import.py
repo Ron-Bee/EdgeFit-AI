@@ -33,6 +33,9 @@ DEFAULT_DB_PATH = ROOT / "data" / "edgefit.db"
 
 MIGRATION_VERSION = 2
 MIGRATION_NAME = "ef-data-02 physical device profiles"
+# Highest migration this importer understands. Bumped for EF-DATA-03 so the
+# v2 tool keeps working on v3 databases (additive bench tables it ignores).
+MAX_KNOWN_MIGRATION_VERSION = 3
 IMPORT_SCHEMA_VERSION = 1
 SOURCE_VALUE = "physical_device_import"
 ACK_FLAG = "--acknowledge-physical-import"
@@ -176,7 +179,7 @@ def check_expected_schema(connection):
         versions = [
             row[0] for row in connection.execute("SELECT version FROM schema_migrations")
         ]
-        if any(v > MIGRATION_VERSION for v in versions):
+        if any(v > MAX_KNOWN_MIGRATION_VERSION for v in versions):
             raise ImportError("database has unknown future migration version")
         if MIGRATION_VERSION in versions and "physical_device_profiles" not in tables:
             raise ImportError("database migration record without profile table")
