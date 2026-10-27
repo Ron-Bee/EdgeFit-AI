@@ -35,6 +35,20 @@ py -3 .\scripts\test_ef_android_01.py
 
 Exported `edgefit-profile-*.json` files stay outside this repository.
 
+## EF-DATA-02 ingestion
+
+`scripts/ef_data_02_import.py` imports validated contract-v1 profiles
+into a dedicated `physical_device_profiles` table (additive migration;
+EF-DATA-01 fixtures and EF-META-05 queries untouched). Preview is the
+default and performs zero writes; commit requires two explicit flags
+and is never run by tests. Full procedure: `docs/ef-data-02-import.md`.
+
+```powershell
+py -3 .\scripts\ef_data_02_import.py <profile.json>
+py -3 .\scripts\ef_data_02_import.py <profile.json> --commit --acknowledge-physical-import
+py -3 .\scripts\test_ef_data_02.py
+```
+
 ## Qualification scripts
 
 - `scripts/Test-EF-META-04.ps1` — PowerShell local invalid tool-argument tests (no Meta API usage).
@@ -43,6 +57,8 @@ Exported `edgefit-profile-*.json` files stay outside this repository.
 - `scripts/ef_meta_05_live.py` — Opt-in live Meta API round trip (requires `MODEL_API_KEY`; owner-executed).
 - `scripts/ef_android_profile_01.py` — Offline contract-v1 profile validator (validate-only; never writes to SQLite).
 - `scripts/test_ef_android_01.py` — Python standard-library EF-ANDROID-01 contract tests (no Meta API usage, no device).
+- `scripts/ef_data_02_import.py` — Offline controlled profile importer (preview default; two-flag commit; never run by tests).
+- `scripts/test_ef_data_02.py` — Python standard-library EF-DATA-02 import/migration tests on isolated temp databases.
 
 Synthetic fixture values are illustrative and not physical measurements.
 Run from repository root:

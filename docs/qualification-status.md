@@ -44,4 +44,29 @@
   this repository): `VALID: contract v1 profile`.
 - EF-ANDROID-01: PASS (device-qualified).
 
+## EF-DATA-02 (qualified; owner import confirmed)
+
+- Agent-executed: importer + additive migration implemented;
+  `scripts/test_ef_data_02.py` 29/29 OK (isolated temp databases;
+  CLI commit mode never invoked); EF-DATA-01 PASS; EF-META-05 14/14
+  OK; EF-ANDROID-01 25/25 OK; EF-META-04 12/12 PASS.
+- Agent-executed read-only verification of the owner-imported
+  database: SQLite integrity ok; exactly one physical profile row;
+  stored SHA-256 matches the owner-reported hash; stored JSON bytes
+  re-hash identically; synthetic fixtures intact; EF-META-05
+  retrieval unchanged. No database writes performed; the evidence
+  file was never read or copied by the agent.
+- EF-META-05 tool allowlist unchanged.
+
+## EF-DATA-02 owner import (executed by owner; not executed by agent)
+
+- `COMMIT: imported PHYS-9C27FBBB2AB74BD7`, SHA-256
+  `9c27fbbb2ab74bd73822f552feebfc5c473c7cfc9a4da59b26e0eb6e73db2d42`,
+  backup `data/edgefit.db.bak-20261027T022612Z`.
+- Post-import preview: `migration_needed: False`,
+  `identical_record_exists: True`. Original evidence SHA-256 unchanged.
+- Independent verification returned exit code 0 with `EF-DATA-02 verified.`
+- EF-DATA-02: PASS (ingestion-qualified). Platform-reported device data
+  only; not a physical inference-performance measurement.
+
 Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
