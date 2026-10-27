@@ -3,10 +3,14 @@ package ai.edgefit.diag
 import android.app.Activity
 import android.content.Intent
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.provider.OpenableColumns
+import android.view.View
 import android.view.WindowInsets
+import android.view.WindowInsetsController
 import android.widget.Button
+import android.widget.FrameLayout
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -36,7 +40,10 @@ class MainActivity : Activity() {
     private var pendingFilename: String? = null
     private var staged: StagedModel? = null
     private var benchJson: String? = null
+    private var lastResult: BenchResult? = null
     private lateinit var runner: BenchRunner
+    private lateinit var mainRoot: View
+    private lateinit var benchScreen: BenchScreenView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,6 +62,7 @@ class MainActivity : Activity() {
         cancelButton = Button(this).apply { text = "Cancel"; isEnabled = false }
         saveButton = Button(this).apply { text = "Save Result"; isEnabled = false }
         val select = Button(this).apply { text = "Select Model File" }
+        val workloadButton = Button(this).apply { text = "View Workload" }
         val runRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(runButton, LinearLayout.LayoutParams(0,
@@ -62,13 +70,22 @@ class MainActivity : Activity() {
             addView(cancelButton, LinearLayout.LayoutParams(0,
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         }
+        fun sectionHeader(title: String): TextView =
+            TextView(this).apply {
+                text = title
+                textSize = 18f
+                setTypeface(typeface, android.graphics.Typeface.BOLD)
+                setPadding(0, dp(12), 0, dp(4))
+            }
         val scrollContent = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
+            addView(sectionHeader("Device Capabilities"))
             addView(summaryView)
-            addView(TextView(context).apply { text = "\nBenchmark" })
+            addView(sectionHeader("Benchmark"))
             addView(modelView)
             addView(select)
             addView(benchView)
+            addView(workloadButton)
             addView(saveButton)
         }
         val scroller = ScrollView(this).apply { addView(scrollContent) }
@@ -97,7 +114,53 @@ class MainActivity : Activity() {
                 basePadding + bars[2], basePadding + bars[3])
             insets
         }
-        setContentView(layout)
+        mainRoot = layout
+        benchScreen = BenchScreenView(this).apply {
+            visibility = View.GONE
+            onCancel = {
+                setRunning(false)
+                runner.cancel()
+            }
+            onSave = {
+                val json = benchJson
+                if (json == null) {
+                    statusText("No benchmark result to save.")
+                } else {
+                    pendingJson = json
+                    pendingFilename = resultFilename()
+                    launchSaver()
+                }
+            }
+            onBack = { showMain() }
+            onWorkload = {
+                val result = lastResult
+                if (result == null) {
+                    statusText("No benchmark result yet.")
+                } else {
+                    BenchWorkloadView.show(
+                        this@MainActivity, result.config,
+                        "%s (%d MB)".format(
+                            result.model.displayName,
+                            result.model.sizeBytes / 1048576),
+                        result.measurements.prefillTokens
+                    )
+                }
+            }
+        }
+        benchScreen.setOnApplyWindowInsetsListener { view, insets ->
+            val bars = systemBarInsets(insets)
+            view.setPadding(bars[0], bars[1], bars[2], bars[3])
+            insets
+        }
+        val root = FrameLayout(this).apply {
+            addView(mainRoot, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT))
+            addView(benchScreen, FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT))
+        }
+        setContentView(root)
         refresh()
         export.setOnClickListener {
             val json = refresh()
@@ -110,6 +173,16 @@ class MainActivity : Activity() {
             launchSaver()
         }
         select.setOnClickListener { launchPicker() }
+        workloadButton.setOnClickListener {
+            val model = staged
+            BenchWorkloadView.show(
+                this, currentBenchConfig(),
+                model?.let {
+                    "%s (%d MB)".format(it.name, it.bytes / 1048576)
+                },
+                lastResult?.measurements?.prefillTokens
+            )
+        }
         runButton.setOnClickListener { startBench() }
         cancelButton.setOnClickListener {
             runner.cancel()
@@ -134,11 +207,49 @@ class MainActivity : Activity() {
 
     override fun onDestroy() {
         runner.cancel()
+        runner.setProgressListener(null)
         try {
             runner.joinGracefully(1000)
         } catch (_: Exception) {
         }
         super.onDestroy()
+    }
+
+    private fun showBenchScreen() {
+        applyBenchChrome(dark = true)
+        benchScreen.visibility = View.VISIBLE
+        mainRoot.visibility = View.GONE
+    }
+
+    private fun showMain() {
+        applyBenchChrome(dark = false)
+        benchScreen.visibility = View.GONE
+        mainRoot.visibility = View.VISIBLE
+    }
+
+    /**
+     * Hides the light action-bar header on the dark benchmark screen so
+     * content is never hidden behind it, and keeps status/navigation
+     * icons legible on both screens. Bar colors stay system-owned;
+     * only icon contrast is toggled, so restore is exact.
+     */
+    private fun applyBenchChrome(dark: Boolean) {
+        if (dark) actionBar?.hide() else actionBar?.show()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val controller = window.insetsController ?: return
+            val mask = WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS or
+                WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS
+            controller.setSystemBarsAppearance(if (dark) 0 else mask, mask)
+        } else {
+            @Suppress("DEPRECATION")
+            val flags = View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR or
+                View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR
+            @Suppress("DEPRECATION")
+            val current = window.decorView.systemUiVisibility
+            @Suppress("DEPRECATION")
+            window.decorView.systemUiVisibility =
+                if (dark) current and flags.inv() else current or flags
+        }
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -188,17 +299,62 @@ class MainActivity : Activity() {
         runButton.isEnabled = false
         cancelButton.isEnabled = true
         saveButton.isEnabled = false
+        runner.setProgressListener { update ->
+            runOnUiThread { benchScreen.render(update) }
+        }
         val started = runner.start(model.file, model.sha256, model.name) { result ->
             runOnUiThread { onBenchDone(result) }
         }
         if (!started) {
+            runner.setProgressListener(null)
             runButton.isEnabled = true
             cancelButton.isEnabled = false
             statusText("A benchmark is already running.")
+            return
+        }
+        val config = currentBenchConfig()
+        val profile = try {
+            DeviceCapabilityCollector(this).collect()
+        } catch (_: Exception) {
+            null
+        }
+        benchScreen.showRun(
+            model.name, model.bytes, model.sha256, config,
+            runtimeVersionLabel(), runtimeAbiLabel(profile))
+        showBenchScreen()
+    }
+
+    /**
+     * The exact config derivation the runner uses, so pre-run display
+     * and execution agree. Post-run display uses result.config.
+     */
+    private fun currentBenchConfig(): BenchConfigData {
+        val profile = try {
+            DeviceCapabilityCollector(this).collect()
+        } catch (_: Exception) {
+            null
+        }
+        val threads = BenchConfig.effectiveThreads(
+            profile?.device?.logicalProcessors ?: BenchConfig.N_THREADS)
+        return BenchConfig.default(threads)
+    }
+
+    private fun runtimeVersionLabel(): String {
+        return try {
+            if (LlamaBridge.available) LlamaBridge.nativeVersion()
+            else "unavailable"
+        } catch (_: Exception) {
+            "unavailable"
         }
     }
 
+    private fun runtimeAbiLabel(profile: CollectedProfile?): String {
+        return profile?.device?.supportedAbis?.firstOrNull() ?: "unknown"
+    }
+
     private fun onBenchDone(result: BenchResult) {
+        runner.setProgressListener(null)
+        lastResult = result
         runButton.isEnabled = true
         cancelButton.isEnabled = false
         val measurements = result.measurements
@@ -209,6 +365,7 @@ class MainActivity : Activity() {
         if (result.error != null) {
             benchView.append("\n${result.error}")
         }
+        benchScreen.showResult(result)
         try {
             benchJson = BenchResultJson.serialize(result)
             saveButton.isEnabled = true

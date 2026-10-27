@@ -32,6 +32,9 @@ object LlamaBridge {
         mailbox.put(0, 1)
     }
 
+    /** 64-byte progress mailbox polled by the sampler; see BenchProgress. */
+    fun newProgressMailbox(): ByteBuffer = BenchProgressMailbox.allocate()
+
     external fun nativeVersion(): String
     external fun nativeAllocBytes(): Long
 
@@ -39,6 +42,8 @@ object LlamaBridge {
      * Runs load + prefill + generation synchronously. Returns a JSON object
      * string: {"ok":true,...} or {"ok":false,"error":...}. Polls the mailbox
      * byte each token; nonzero aborts promptly with cancelled=true.
+     * Progress is written to [progressMailbox] when it holds at least 64
+     * bytes; otherwise the benchmark runs without live display.
      */
     external fun nativeRun(
         modelPath: String,
@@ -46,6 +51,7 @@ object LlamaBridge {
         nCtx: Int,
         nThreads: Int,
         nPredict: Int,
-        cancelMailbox: ByteBuffer
+        cancelMailbox: ByteBuffer,
+        progressMailbox: ByteBuffer
     ): String
 }

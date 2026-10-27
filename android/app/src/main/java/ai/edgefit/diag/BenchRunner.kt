@@ -40,12 +40,29 @@ object BenchPhases {
 class BenchRunner(private val context: Context) {
     @Volatile var phase: String = BenchPhases.IDLE
         private set
+    /** Display execution state; see BenchExecutionState. */
+    @Volatile var execState: String = BenchExecutionState.IDLE
+        private set
     private var worker: Thread? = null
     private var mailbox: ByteBuffer? = null
+    private var progressBox: ByteBuffer? = null
     private val finished = AtomicBoolean(false)
     private val timedOut = AtomicBoolean(false)
     @Volatile private var midThermal: String? = null
+    @Volatile private var liveThermal: String? = null
+    @Volatile private var livePssKb: Int = -1
+    @Volatile private var wallStartMs: Long = 0L
+    @Volatile private var progressListener: ((BenchLiveUpdate) -> Unit)? = null
     private val lock = Any()
+
+    /**
+     * Live updates at ~4 Hz on the sampler thread. The activity must
+     * marshal to the main thread. Listener exceptions are swallowed so a
+     * UI bug can never kill timeout enforcement.
+     */
+    fun setProgressListener(listener: ((BenchLiveUpdate) -> Unit)?) {
+        progressListener = listener
+    }
 
     fun start(
         modelFile: File,
@@ -60,11 +77,18 @@ class BenchRunner(private val context: Context) {
         finished.set(false)
         timedOut.set(false)
         midThermal = null
+        liveThermal = null
+        livePssKb = -1
+        execState = BenchExecutionState.VALIDATING_MODEL
         val box = LlamaBridge.newCancelMailbox()
         mailbox = box
+        val prog = LlamaBridge.newProgressMailbox()
+        progressBox = prog
         worker = Thread({
-            val result = runBenchmark(modelFile, modelSha256, displayName, box)
+            val result = runBenchmark(modelFile, modelSha256, displayName, box, prog)
             synchronized(lock) { phase = result.status }
+            execState = result.status
+            emitLive()
             listener(result)
         }, "edgefit-bench")
         worker!!.start()
@@ -90,14 +114,41 @@ class BenchRunner(private val context: Context) {
     fun reset(): Boolean = synchronized(lock) {
         if (!BenchPhases.can(phase, BenchPhases.IDLE)) return false
         phase = BenchPhases.IDLE
+        execState = BenchExecutionState.IDLE
         true
+    }
+
+    /** Builds one live update from the mailbox; safe on any thread. */
+    private fun emitLive() {
+        val listener = progressListener ?: return
+        val box = progressBox
+        val snap = if (box == null) BenchProgressMailbox.invalid()
+            else BenchProgressMailbox.read(box)
+        val mapped = BenchExecutionState.fromNativeStage(snap.nativeStage)
+        if (snap.valid && mapped != null &&
+            BenchExecutionState.can(execState, mapped)
+        ) {
+            execState = mapped
+        }
+        val update = BenchLiveUpdate(
+            execState = execState,
+            progress = snap,
+            elapsedMs = SystemClock.elapsedRealtime() - wallStartMs,
+            thermal = liveThermal,
+            pssKb = livePssKb
+        )
+        try {
+            listener(update)
+        } catch (_: Exception) {
+        }
     }
 
     private fun runBenchmark(
         modelFile: File,
         modelSha256: String,
         displayName: String,
-        box: ByteBuffer
+        box: ByteBuffer,
+        prog: ByteBuffer
     ): BenchResult {
         val stamp = utcStamp()
         val runId = formatRunId(stamp, randomHex8())
@@ -146,20 +197,32 @@ class BenchRunner(private val context: Context) {
         if (guardErrors.isNotEmpty()) return failedNow(guardErrors.joinToString("; "))
 
         val wall0 = SystemClock.elapsedRealtime()
+        wallStartMs = wall0
+        liveThermal = thermalBefore
+        livePssKb = pssBefore
+        emitLive()
         val allocBefore = LlamaBridge.nativeAllocBytes()
         val watchdog = Thread({
             var sampled = false
+            var tick = 0
             while (!finished.get()) {
                 try {
                     Thread.sleep(250)
                 } catch (_: InterruptedException) {
                     return@Thread
                 }
+                tick++
                 val elapsed = SystemClock.elapsedRealtime() - wall0
                 if (!sampled && elapsed >= 2000) {
                     midThermal = sampleThermal()
                     sampled = true
                 }
+                // Live thermal/PSS at ~0.5 Hz; mailbox progress at ~4 Hz.
+                if (tick % 8 == 0) {
+                    liveThermal = sampleThermal()
+                    livePssKb = processPssKb()
+                }
+                emitLive()
                 if (elapsed >= config.timeoutMs) {
                     timedOut.set(true)
                     cancel()
@@ -175,7 +238,7 @@ class BenchRunner(private val context: Context) {
         try {
             val raw = LlamaBridge.nativeRun(
                 modelFile.absolutePath, BenchContract.WORKLOAD_PROMPT,
-                config.nCtx, config.nThreads, config.nPredict, box)
+                config.nCtx, config.nThreads, config.nPredict, box, prog)
             native = JSONObject(raw)
         } catch (e: Exception) {
             nativeError = "native call failed: ${e.message}"
@@ -185,6 +248,9 @@ class BenchRunner(private val context: Context) {
                 watchdog.join(2000)
             } catch (_: InterruptedException) {
             }
+        }
+        if (BenchExecutionState.can(execState, BenchExecutionState.FINALIZING)) {
+            execState = BenchExecutionState.FINALIZING
         }
         val wallMs = SystemClock.elapsedRealtime() - wall0
         val allocAfter = LlamaBridge.nativeAllocBytes()

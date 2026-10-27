@@ -3,7 +3,7 @@
 
     <!-- No permissions: every collected signal needs none. -->
     <application
-        android:label="EdgeFitDiag"
+        android:label="EdgeFit AI"
         android:theme="@android:style/Theme.Material.Light">
         <activity
             android:name=".MainActivity"
