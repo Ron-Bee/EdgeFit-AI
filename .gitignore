@@ -20,3 +20,11 @@ __pycache__/
 *.ps1.backup
 *.env
 *.pyc
+# Android build outputs and local SDK path (EF-ANDROID-01)
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+# Exported device profiles and stray APKs stay out of the public repo (EF-ANDROID-01)
+edgefit-profile-*.json
+*.apk

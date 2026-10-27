@@ -23,4 +23,25 @@
 - The model analysis explicitly identified the evidence as synthetic and not physically verified.
 - EF-META-05: PASS (live-qualified). No physical benchmark or accuracy improvement claimed.
 
+## EF-ANDROID-01 (qualified; device validation owner-confirmed)
+
+- Contract v1 (`docs/android-profile-contract.md`) plus EdgeFitDiag collector
+  app (`android/`) implemented. Export via Storage Access Framework to a
+  user-chosen destination. No auto-import; EF-META-05 approved device-class
+  constraints unchanged.
+- Agent-executed: Kotlin main sources compile clean (kotlinc 2.1.10 against
+  android-35); JVM serializer tests 4/4 OK (JUnit 4.13.2);
+  `scripts/test_ef_android_01.py` 25/25 OK; EF-DATA-01 PASS; EF-META-05
+  14/14 OK; EF-META-04 12/12 PASS.
+- No benchmarks executed; no Honey LLM or BeeBench code used.
+
+## EF-ANDROID-01 physical-device evidence (executed by owner; not executed by agent)
+
+- Android Studio Gradle sync: PASS. APK build, install, launch on Galaxy
+  S22 Ultra (Android 16): PASS. UI export-button hotfix: confirmed functional.
+- Export through system file picker, ADB authorization and transfer: PASS.
+- Profile `edgefit-profile-20261026-210006.json` (714 bytes, stored outside
+  this repository): `VALID: contract v1 profile`.
+- EF-ANDROID-01: PASS (device-qualified).
+
 Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
