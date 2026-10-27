@@ -71,10 +71,13 @@ is re-checked before commit.
 
 ## Preview/commit workflow (PowerShell 5.1, repo root)
 
-Preview (default, zero writes — safe to run any time):
+Preview (default, zero writes — safe to run any time).
+
+Set `$env:EdgeFitEvidence` to the folder holding your local evidence
+exports (kept outside the repository); the commands below use it:
 
 ```powershell
-py -3 .\scripts\ef_data_03_import.py C:\Users\Ron\EdgeFit-Evidence\edgefit-bench-20261026-233319.json --expect-sha 4C02B3CFC9B4DF1B59D098CF35101AB88128F20CF1A417B5B8C8119289A09105 --associate-profile C:\Users\Ron\EdgeFit-Evidence\edgefit-profile-20261026-210006.json --associate-profile C:\Users\Ron\EdgeFit-Evidence\edgefit-profile-20261026-233322.json
+py -3 .\scripts\ef_data_03_import.py $env:EdgeFitEvidence\edgefit-bench-20261026-233319.json --expect-sha 4C02B3CFC9B4DF1B59D098CF35101AB88128F20CF1A417B5B8C8119289A09105 --associate-profile $env:EdgeFitEvidence\edgefit-profile-20261026-210006.json --associate-profile $env:EdgeFitEvidence\edgefit-profile-20261026-233322.json
 ```
 
 Preview shows the run id, status, source hash, target database,
@@ -85,7 +88,7 @@ creates journals, backups, or the database file.
 Commit (explicit two-flag authorization; NOT YET EXECUTED):
 
 ```powershell
-py -3 .\scripts\ef_data_03_import.py C:\Users\Ron\EdgeFit-Evidence\edgefit-bench-20261026-233319.json --expect-sha 4C02... --associate-profile <profile.json> --effective-opt "-O2" --effective-opt-source "operator attestation ..." --commit --acknowledge-physical-import
+py -3 .\scripts\ef_data_03_import.py $env:EdgeFitEvidence\edgefit-bench-20261026-233319.json --expect-sha 4C02... --associate-profile <profile.json> --effective-opt "-O2" --effective-opt-source "operator attestation ..." --commit --acknowledge-physical-import
 ```
 
 Commit re-validates, copies a timestamped backup next to the database

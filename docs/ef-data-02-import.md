@@ -39,10 +39,13 @@ atomic transaction with rollback on any failure.
 
 ## Preview/commit workflow (PowerShell 5.1, repo root)
 
-Preview (default, zero writes — safe to run any time):
+Preview (default, zero writes — safe to run any time).
+
+Set `$env:EdgeFitEvidence` to the folder holding your local evidence
+exports (kept outside the repository); the commands below use it:
 
 ```powershell
-py -3 .\scripts\ef_data_02_import.py C:\Users\Ron\EdgeFit-Evidence\edgefit-profile-20261026-210006.json
+py -3 .\scripts\ef_data_02_import.py $env:EdgeFitEvidence\edgefit-profile-20261026-210006.json
 ```
 
 Preview shows the proposed id, source hash, target database, schema
@@ -52,7 +55,7 @@ journals, backups, or the database file.
 Commit (explicit two-flag authorization; NOT YET EXECUTED):
 
 ```powershell
-py -3 .\scripts\ef_data_02_import.py C:\Users\Ron\EdgeFit-Evidence\edgefit-profile-20261026-210006.json --commit --acknowledge-physical-import
+py -3 .\scripts\ef_data_02_import.py $env:EdgeFitEvidence\edgefit-profile-20261026-210006.json --commit --acknowledge-physical-import
 ```
 
 Commit re-validates, copies a timestamped backup next to the database
