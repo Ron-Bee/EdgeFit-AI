@@ -21,6 +21,19 @@ class MetaSessionClient(
 ) {
     class ClientError(val code: String, message: String) : Exception(message)
 
+    data class ProposalSpec(
+        val parentId: String,
+        val packText: String,
+        val currentConfig: BenchConfigData,
+        val nextSeq: Int,
+        val modelSha: String,
+        val workloadId: String,
+        val attemptsUsed: Int,
+        val attemptsMax: Int,
+        val allowedRunIds: Set<String>,
+        val deviceMaxThreads: Int
+    )
+
     data class PredictionSpec(
         val sessionId: String,
         val deviceLines: List<String>,
@@ -136,6 +149,54 @@ class MetaSessionClient(
                 spec.sessionId, valid.genTps, valid.prefillTps, valid.rawJson,
                 SessionManager.SOURCE_LIVE_META, valid.evidenceCited
             )
+        }
+
+    /**
+     * Requests and validates one agent proposal. Persists nothing:
+     * the caller ([AgentManager.storeProposal]) stores or terminally
+     * declines. Same guards as predictions: keyed, single-flight,
+     * no retries.
+     */
+    fun requestProposal(spec: ProposalSpec): AgentApi.ValidProposal =
+        guardedFlight("proposal:${spec.parentId}") {
+            val apiKey = keys.getKey()
+                ?: throw ClientError("NO_KEY", "no API key configured")
+            val body = MetaApi.requestBody(
+                AgentApi.proposalSystem(spec.deviceMaxThreads),
+                AgentApi.proposalUser(
+                    spec.packText, spec.currentConfig, spec.nextSeq,
+                    spec.modelSha, spec.workloadId, spec.attemptsUsed,
+                    spec.attemptsMax
+                )
+            )
+            val text = postForText(apiKey, body)
+            val raw = try {
+                MetaApi.rawSlice(text)
+            } catch (e: MetaApi.MetaError) {
+                throw ClientError(e.code, e.message ?: e.code)
+            }
+            if (raw.toByteArray(Charsets.UTF_8).size >
+                AgentApi.MAX_PROPOSAL_RAW_BYTES
+            ) {
+                throw ClientError("REPLY_TOO_LARGE", "reply exceeds bound")
+            }
+            val payload = MetaApi.extractJsonObject(text)
+                ?: throw ClientError("BAD_RESPONSE", "no JSON object in reply")
+            try {
+                AgentApi.validateProposal(
+                    payload, raw,
+                    AgentApi.ProposalExpectation(
+                        modelSha = spec.modelSha,
+                        workloadId = spec.workloadId,
+                        currentConfig = spec.currentConfig,
+                        nextSeq = spec.nextSeq,
+                        allowedRunIds = spec.allowedRunIds,
+                        deviceMaxThreads = spec.deviceMaxThreads
+                    )
+                )
+            } catch (e: AgentApi.AgentError) {
+                throw ClientError(e.code, e.message ?: e.code)
+            }
         }
 
     /**

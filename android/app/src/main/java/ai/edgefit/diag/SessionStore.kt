@@ -35,7 +35,12 @@ data class SessionRecord(
     val recoveryNotes: List<String> = emptyList(),
     val budgetMax: Int = 5,
     val budgetUsed: Int = 0,
-    val outcome: String? = null
+    val outcome: String? = null,
+    // EF-AGENT-01 additive links. Absent (null) on pre-agent records;
+    // schema version stays 1 because every reader tolerates absence.
+    val parentSessionId: String? = null,
+    val experimentSeq: Int? = null,
+    val agent: Map<String, Any?>? = null
 ) {
     fun toMap(): Map<String, Any?> = linkedMapOf(
         "schema_version" to schemaVersion,
@@ -60,7 +65,10 @@ data class SessionRecord(
         "recovery_notes" to recoveryNotes,
         "budget_max" to budgetMax,
         "budget_used" to budgetUsed,
-        "outcome" to outcome
+        "outcome" to outcome,
+        "parent_session_id" to parentSessionId,
+        "experiment_seq" to experimentSeq,
+        "agent" to agent
     )
 
     companion object {
@@ -116,6 +124,14 @@ data class SessionRecord(
                 bad("budget must be numeric")
             }
             val config = strMap("config") ?: bad("config missing")
+            val seqRaw = map["experiment_seq"]
+            if (seqRaw != null && seqRaw !is Number) {
+                bad("experiment_seq must be a number")
+            }
+            val parent = optStr("parent_session_id")
+            if (parent != null && !SessionStore.isValidId(parent)) {
+                bad("parent_session_id malformed")
+            }
             return SessionRecord(
                 sessionId = str("session_id").also {
                     if (it != id) bad("session_id/filename mismatch")
@@ -141,7 +157,10 @@ data class SessionRecord(
                 recoveryNotes = notes,
                 budgetMax = budgetMax.toInt(),
                 budgetUsed = budgetUsed.toInt(),
-                outcome = optStr("outcome")
+                outcome = optStr("outcome"),
+                parentSessionId = parent,
+                experimentSeq = (map["experiment_seq"] as? Number)?.toInt(),
+                agent = strMap("agent")
             )
         }
     }
@@ -168,7 +187,7 @@ class SessionStore(rootDir: File) {
         const val MAX_HISTORY = 32
         const val MAX_QUARANTINE = 50
         val ID_PATTERN = Regex("^SES-[0-9a-f]{16}$")
-        val MODES = setOf("byok", "replay", "offline_test")
+        val MODES = setOf("byok", "replay", "offline_test", "agent")
         private val HEX64 = Regex("^[0-9a-f]{64}$")
 
         fun newSessionId(random: SecureRandom = SecureRandom()): String {

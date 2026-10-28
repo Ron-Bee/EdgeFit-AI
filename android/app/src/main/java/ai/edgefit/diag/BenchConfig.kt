@@ -35,6 +35,40 @@ object BenchConfig {
     fun effectiveThreads(logicalProcessors: Int): Int =
         N_THREADS.coerceAtMost(logicalProcessors.coerceAtLeast(1))
 
+    /**
+     * Single resolution point: an explicit override wins verbatim,
+     * otherwise the device-derived default. Pure for unit tests.
+     */
+    fun resolveExecutionConfig(
+        override: BenchConfigData?,
+        logicalProcessors: Int
+    ): BenchConfigData = override
+        ?: default(effectiveThreads(logicalProcessors))
+
+    /**
+     * Pre-run display resolution (AUD-03): the run screen must show
+     * the config the runner will execute — a bound session override
+     * wins verbatim, else the live default. Mirrors
+     * [resolveExecutionConfig], whose null branch equals
+     * `default(effectiveThreads(...))` by construction. Pure for
+     * unit tests.
+     */
+    fun displayConfig(
+        bound: BenchConfigData?,
+        liveDefault: BenchConfigData
+    ): BenchConfigData = bound ?: liveDefault
+
+    /**
+     * Native workload arguments in exact JNI parameter order
+     * (nCtx, nThreads, nPredict). The runner's SOLE producer of
+     * native parameters: result-config and JNI args both derive
+     * from one validated instance through this funnel, so the
+     * recorded config cannot silently diverge from what native
+     * executed. Pure for unit tests.
+     */
+    fun nativeArgs(config: BenchConfigData): List<Int> =
+        listOf(config.nCtx, config.nThreads, config.nPredict)
+
     fun validate(config: BenchConfigData): List<String> {
         val errors = mutableListOf<String>()
         if (config.nCtx !in MIN_CTX..MAX_CTX) errors.add("n_ctx out of range")

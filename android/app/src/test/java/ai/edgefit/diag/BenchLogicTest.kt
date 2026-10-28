@@ -172,6 +172,100 @@ class BenchLogicTest {
         assertTrue(id.matches(Regex("BENCH-\\d{8}T\\d{6}Z-[0-9a-f]{8}")))
     }
 
+    // ---- executed-config chain (EF-AGENT-01 physical prep) ----
+    //
+    // These tests pin the requested -> validated -> native-args ->
+    // recorded chain through its single pure funnel. They prove the
+    // mapping cannot diverge — not the JNI boundary itself, which
+    // rests on code inspection (runBenchmark is the sole caller)
+    // plus the on-device export carrying the executed config.
+
+    @Test
+    fun resolveExecutionConfigHonorsOverrideVerbatim() {
+        val custom = BenchConfig.default().copy(nCtx = 1024, nThreads = 8)
+        val resolved = BenchConfig.resolveExecutionConfig(custom, 8)
+        assertEquals(1024, resolved.nCtx)
+        assertEquals(8, resolved.nThreads)
+        assertEquals(64, resolved.nPredict)
+    }
+
+    @Test
+    fun resolveExecutionConfigDerivesDefault() {
+        val eight = BenchConfig.resolveExecutionConfig(null, 8)
+        assertEquals(512, eight.nCtx)
+        assertEquals(4, eight.nThreads)
+        val two = BenchConfig.resolveExecutionConfig(null, 2)
+        assertEquals(2, two.nThreads)
+    }
+
+    @Test
+    fun nativeArgsFollowExactJniOrder() {
+        // JNI signature order: (modelPath, prompt, nCtx, nThreads,
+        // nPredict, cancelMailbox, progressMailbox).
+        assertEquals(listOf(512, 4, 64),
+            BenchConfig.nativeArgs(BenchConfig.default()))
+        assertEquals(listOf(1024, 8, 128),
+            BenchConfig.nativeArgs(BenchConfig.default()
+                .copy(nCtx = 1024, nThreads = 8, nPredict = 128)))
+        assertEquals(listOf(128, 1, 1),
+            BenchConfig.nativeArgs(BenchConfig.default()
+                .copy(nCtx = 128, nThreads = 1, nPredict = 1)))
+        assertEquals(listOf(4096, 16, 256),
+            BenchConfig.nativeArgs(BenchConfig.default()
+                .copy(nCtx = 4096, nThreads = 16, nPredict = 256)))
+    }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun executionChainPreservesValuesEndToEnd() {
+        val cases = listOf(
+            BenchConfig.default() to listOf(512, 4, 64),
+            BenchConfig.default().copy(nThreads = 8) to listOf(512, 8, 64),
+            BenchConfig.default().copy(nCtx = 1024, nPredict = 128) to
+                listOf(1024, 4, 128)
+        )
+        for ((requested, expectedArgs) in cases) {
+            // Requested -> resolved -> validated -> native args.
+            val resolved = BenchConfig.resolveExecutionConfig(requested, 8)
+            assertTrue(BenchConfig.validate(resolved).isEmpty())
+            assertEquals(expectedArgs, BenchConfig.nativeArgs(resolved))
+            // Recorded form round-trips losslessly (JSON Ints parse
+            // back as Longs; values must survive).
+            val stored = SessionJson.parse(
+                SessionJson.stringify(
+                    SessionBenchBridge.configMap(resolved)))
+                as Map<String, Any?>
+            val rebuilt = SessionBenchBridge.configData(stored)
+            assertEquals(resolved, rebuilt)
+        }
+    }
+
+    @Test
+    fun invalidOverrideRefusedBeforeNativeArgs() {
+        val bad = BenchConfig.default().copy(nThreads = 99)
+        val errors = BenchConfig.validate(
+            BenchConfig.resolveExecutionConfig(bad, 8))
+        assertFalse(errors.isEmpty())
+        // The runner returns failedNow on this path and never
+        // reaches the native call (structural order verified by
+        // inspection of runBenchmark: validate -> guards -> JNI).
+    }
+
+    @Test
+    fun configDataRejectsMalformedMaps() {
+        assertEquals(null, SessionBenchBridge.configData(emptyMap()))
+        assertEquals(null, SessionBenchBridge.configData(mapOf(
+            "n_ctx" to 512, "n_threads" to 4, "n_predict" to 64,
+            "temperature" to 0.0, "sampler" to "greedy",
+            "seed" to 42L))) // timeout_ms missing
+        val outOfRange = SessionBenchBridge.configMap(
+            BenchConfig.default().copy(nThreads = 99))
+        assertEquals(null, SessionBenchBridge.configData(outOfRange))
+        val wrongSampler = SessionBenchBridge.configMap(
+            BenchConfig.default().copy(sampler = "top_k"))
+        assertEquals(null, SessionBenchBridge.configData(wrongSampler))
+    }
+
     @Test
     fun nativeBuildProvenanceOptional() {
         val legacy = BenchResultJson.serialize(completedResult())
@@ -189,5 +283,30 @@ class BenchLogicTest {
             device = completedResult().device.copy(model = "A\"B\nC"))
         val json = BenchResultJson.serialize(result)
         assertTrue(json.contains("\"model\":\"A\\\"B\\nC\""))
+    }
+
+    @Test
+    fun displayConfigBoundOverrideWinsVerbatim() {
+        val approved = BenchConfig.default().copy(nCtx = 1024, nThreads = 8)
+        val shown = BenchConfig.displayConfig(approved, BenchConfig.default())
+        assertEquals(1024, shown.nCtx)
+        assertEquals(8, shown.nThreads)
+        assertEquals(64, shown.nPredict)
+    }
+
+    @Test
+    fun displayConfigStandaloneKeepsLiveDefault() {
+        val live = BenchConfig.default(2)
+        assertEquals(live, BenchConfig.displayConfig(null, live))
+    }
+
+    @Test
+    fun displayConfigMatchesExecutionResolution() {
+        val approved = BenchConfig.default().copy(nCtx = 1024, nThreads = 8)
+        val live = BenchConfig.default(BenchConfig.effectiveThreads(8))
+        assertEquals(BenchConfig.resolveExecutionConfig(approved, 8),
+            BenchConfig.displayConfig(approved, live))
+        assertEquals(BenchConfig.resolveExecutionConfig(null, 8),
+            BenchConfig.displayConfig(null, live))
     }
 }

@@ -49,6 +49,7 @@ class MainActivity : Activity() {
     private var activeSessionId: String? = null
     private lateinit var metaVault: MetaKeyVault
     private lateinit var metaClient: MetaSessionClient
+    private lateinit var agentManager: AgentManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -60,9 +61,20 @@ class MainActivity : Activity() {
         metaVault = MetaKeyVault(filesDir, AndroidKeySeal())
         metaClient = MetaSessionClient(
             sessionManager, HttpsMetaTransport(), metaVault)
+        agentManager = AgentManager(sessionManager)
         Thread({
             val actions = try {
-                sessionManager.recoverOnLaunch()
+                val found = sessionManager.recoverOnLaunch().toMutableList()
+                try {
+                    for (parent in sessionManager.listSessions()) {
+                        if (parent.mode == "agent") {
+                            found.addAll(agentManager.reconcile(parent.sessionId))
+                        }
+                    }
+                } catch (e: Exception) {
+                    found.add("agent reconcile failed: ${e.message}")
+                }
+                found
             } catch (e: Exception) {
                 listOf("recovery failed: ${e.message}")
             }
@@ -91,6 +103,7 @@ class MainActivity : Activity() {
         val workloadButton = Button(this).apply { text = "View Workload" }
         val sessionsButton = Button(this).apply { text = "Sessions" }
         val metaButton = Button(this).apply { text = "Meta API" }
+        val agentButton = Button(this).apply { text = "Agent" }
         val runRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(runButton, LinearLayout.LayoutParams(0,
@@ -117,6 +130,7 @@ class MainActivity : Activity() {
             addView(workloadButton)
             addView(sessionsButton)
             addView(metaButton)
+            addView(agentButton)
             addView(saveButton)
         }
         val scroller = ScrollView(this).apply { addView(scrollContent) }
@@ -218,6 +232,7 @@ class MainActivity : Activity() {
         runButton.setOnClickListener { startBench() }
         sessionsButton.setOnClickListener { showSessions() }
         metaButton.setOnClickListener { showMetaSettings() }
+        agentButton.setOnClickListener { showAgent(null) }
         cancelButton.setOnClickListener {
             runner.cancel()
             statusText("Cancellation requested.")
@@ -330,6 +345,21 @@ class MainActivity : Activity() {
             return
         }
         runner.reset()
+        // A bound session dictates the executed config (agent-approved
+        // or offline-recorded); standalone runs use the live default.
+        // Derivation is identical, so legacy behavior is unchanged.
+        val boundId = activeSessionId
+        val boundConfig = boundId?.let {
+            try {
+                SessionBenchBridge.configData(sessionManager.get(it).config)
+            } catch (_: Exception) {
+                null
+            }
+        }
+        if (boundId != null && boundConfig == null) {
+            statusText("Bound session config unreadable; run refused.")
+            return
+        }
         benchView.text = "Benchmark: running…"
         runButton.isEnabled = false
         cancelButton.isEnabled = true
@@ -337,7 +367,8 @@ class MainActivity : Activity() {
         runner.setProgressListener { update ->
             runOnUiThread { benchScreen.render(update) }
         }
-        val started = runner.start(model.file, model.sha256, model.name) { result ->
+        val started = runner.startWithConfig(
+            model.file, model.sha256, model.name, boundConfig) { result ->
             runOnUiThread { onBenchDone(result) }
         }
         if (!started) {
@@ -348,7 +379,10 @@ class MainActivity : Activity() {
             return
         }
         bindSessionToRun()
-        val config = currentBenchConfig()
+        // AUD-03: show the config the runner executes (bound
+        // override wins), never the live default over an approval.
+        val config = BenchConfig.displayConfig(
+            boundConfig, currentBenchConfig())
         val profile = try {
             DeviceCapabilityCollector(this).collect()
         } catch (_: Exception) {
@@ -439,6 +473,22 @@ class MainActivity : Activity() {
         activeSessionId = null
         refreshSessionLine()
         SessionBenchBridge.attachAsync(sessionManager, id, result) { outcome ->
+            // IO thread here: agent accounting scans the store, so it
+            // stays off the UI thread; only the text crosses over.
+            val agentNote = outcome.fold(
+                onSuccess = { record ->
+                    record.parentSessionId?.let { parentId ->
+                        try {
+                            agentManager.afterExperiment(parentId)?.let {
+                                " Agent $it."
+                            } ?: ""
+                        } catch (_: Exception) {
+                            ""
+                        }
+                    } ?: ""
+                },
+                onFailure = { "" }
+            )
             runOnUiThread {
                 outcome.fold(
                     onSuccess = { record ->
@@ -447,7 +497,8 @@ class MainActivity : Activity() {
                             record.comparison as? Map<String, Any?>
                         val detail = if (comparison == null) record.state
                         else SessionView.comparisonLine(comparison)
-                        statusText("Session ${record.sessionId}: $detail.")
+                        statusText(
+                            "Session ${record.sessionId}: $detail.$agentNote")
                         refreshSessionLine()
                     },
                     onFailure = { e ->
@@ -760,7 +811,11 @@ class MainActivity : Activity() {
     private fun runLivePrediction(existingId: String?) {
         try {
             val id = existingId ?: createLiveSession()
-            if (existingId == null) sessionManager.requestPrediction(id)
+            if (existingId == null ||
+                sessionManager.get(id).state == SessionState.SESSION_CREATED
+            ) {
+                sessionManager.requestPrediction(id)
+            }
             val spec = livePredictionSpec(id)
             val record = metaClient.requestPrediction(spec)
             sessionManager.authorizeBenchmark(id, "live prediction recorded")
@@ -890,6 +945,253 @@ class MainActivity : Activity() {
                     "No assessment recorded (nothing was persisted):\n" +
                         "${e.message}")
             }
+        }
+    }
+
+    // ---- optimization agent (EF-AGENT-01) ----
+
+    private fun showAgent(selectedId: String?) {
+        AgentView.show(
+            this,
+            initialId = selectedId,
+            parents = {
+                sessionManager.listSessions().filter { it.mode == "agent" }
+            },
+            detail = { id -> agentDetail(id) },
+            onNew = { createAgentSession() },
+            onRequest = { id -> startAgentProposal(id) },
+            onApprove = { id -> approveAndRunExperiment(id) },
+            onReject = { id -> rejectAgentProposal(id) },
+            onFinish = { id -> finishAgentSession(id) }
+        )
+    }
+
+    private fun agentDetail(id: String): AgentView.AgentDetail {
+        val gate = agentManager.proposalGate(id)
+        return AgentView.AgentDetail(
+            parent = agentManager.getParent(id),
+            children = agentManager.childrenOf(id),
+            pack = agentManager.buildPack(id),
+            gateOk = gate.first,
+            gateReason = gate.second
+        )
+    }
+
+    private fun createAgentSession(): String {
+        val model = staged ?: return "Stage a model file first."
+        return try {
+            val profile = try {
+                DeviceCapabilityCollector(this).collect()
+            } catch (_: Exception) {
+                null
+            }
+            val parent = agentManager.createAgent(
+                deviceModel = profile?.device?.model,
+                profileSha256 = profile?.let {
+                    BenchConfig.sha256Hex(ProfileSerializer.serialize(it)
+                        .toByteArray(Charsets.UTF_8))
+                },
+                modelSha256 = model.sha256,
+                modelSizeBytes = model.bytes,
+                modelDisplay = model.name,
+                workloadId = BenchContract.WORKLOAD_ID,
+                promptSha256 = BenchConfig.workload().promptSha256,
+                baseConfig = currentBenchConfig()
+            )
+            "Agent ${parent.sessionId} created with experiment 1 shell. " +
+                "Run experiment 1 via Sessions (Predict), then request " +
+                "a proposal here."
+        } catch (e: Exception) {
+            "Agent creation failed: ${e.message}"
+        }
+    }
+
+    private fun deviceMaxThreads(): Int {
+        val logical = try {
+            DeviceCapabilityCollector(this).collect()
+                .device.logicalProcessors
+        } catch (_: Exception) {
+            BenchConfig.N_THREADS
+        }
+        return BenchConfig.MAX_THREADS.coerceAtMost(logical.coerceAtLeast(1))
+    }
+
+    private fun startAgentProposal(parentId: String) {
+        val fields = listOf(
+            "agent evidence pack (run ids, configs, throughputs, errors)",
+            "current configuration + next experiment number",
+            "model SHA-256 + workload id",
+            "experiment budget used/max"
+        )
+        MetaView.showAuthorizeDialog(
+            this,
+            MetaView.authorizeText(
+                "Optimization proposal for $parentId", fields, keyNote()),
+            "Request"
+        ) {
+            Thread({
+                runAgentProposal(parentId)
+            }, "edgefit-agent-proposal").start()
+        }
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun runAgentProposal(parentId: String) {
+        try {
+            val gate = agentManager.proposalGate(parentId)
+            if (!gate.first) throw IllegalStateException(gate.second)
+            val parent = agentManager.getParent(parentId)
+            val pack = agentManager.buildPack(parentId)
+            val proposal = metaClient.requestProposal(
+                MetaSessionClient.ProposalSpec(
+                    parentId = parentId,
+                    packText = AgentEvidence.renderPack(pack),
+                    currentConfig = agentManager.currentConfig(parentId),
+                    nextSeq = agentManager.nextSeq(parentId),
+                    modelSha = parent.modelSha256,
+                    workloadId = parent.workloadId,
+                    attemptsUsed = parent.budgetUsed,
+                    attemptsMax = parent.budgetMax,
+                    allowedRunIds = pack.comparable.map { it.runId }.toSet(),
+                    deviceMaxThreads = deviceMaxThreads()
+                )
+            )
+            val stored = agentManager.storeProposal(
+                parentId, proposal, pack.packHash,
+                agentManager.nextSeq(parentId))
+            runOnUiThread {
+                val declined = (stored.agent as? Map<String, Any?>)
+                    ?.get("terminal_reason") ==
+                    AgentManager.END_NO_FURTHER_TESTING
+                statusText(if (declined) {
+                    "Agent declined further testing; session closed."
+                } else {
+                    "Proposal pending review for $parentId."
+                })
+                showAgent(parentId)
+            }
+        } catch (e: Exception) {
+            val struck = e is MetaSessionClient.ClientError &&
+                e.code in setOf("BAD_PROPOSAL", "BAD_RESPONSE",
+                    "REPLY_TOO_LARGE")
+            val note = if (struck) {
+                try {
+                    agentManager.recordInvalidProposal(parentId,
+                        e.message ?: e.code)
+                    " Invalid proposal recorded."
+                } catch (_: Exception) {
+                    ""
+                }
+            } else {
+                ""
+            }
+            runOnUiThread {
+                statusText("Proposal failed: ${e.message}.$note")
+                showAgent(parentId)
+            }
+        }
+    }
+
+    /**
+     * Approve & Run Once: creates the approved child with the
+     * proposal's expected outcome as its persisted prediction,
+     * links + charges exactly once, binds, and starts the run.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun approveAndRunExperiment(parentId: String) {
+        Thread({
+            try {
+                val parent = agentManager.getParent(parentId)
+                val pending = (parent.agent as? Map<String, Any?>)
+                    ?.get("pending_proposal") as? Map<String, Any?>
+                    ?: throw IllegalStateException("no proposal pending")
+                val seq = (pending["experiment_seq"] as? Number)?.toInt()
+                    ?: throw IllegalStateException("proposal seq missing")
+                val proposed = SessionBenchBridge.configData(
+                    pending["proposed_config"] as? Map<String, Any?>
+                        ?: throw IllegalStateException("proposal config bad"))
+                    ?: throw IllegalStateException("proposal config invalid")
+                val model = staged
+                    ?: throw IllegalStateException("stage the model first")
+                if (model.sha256.lowercase() != parent.modelSha256) {
+                    throw IllegalStateException("staged model differs")
+                }
+                val profile = try {
+                    DeviceCapabilityCollector(this).collect()
+                } catch (_: Exception) {
+                    null
+                }
+                val child = sessionManager.createSession(
+                    mode = "byok",
+                    deviceModel = profile?.device?.model,
+                    profileSha256 = profile?.let {
+                        BenchConfig.sha256Hex(ProfileSerializer.serialize(it)
+                            .toByteArray(Charsets.UTF_8))
+                    },
+                    modelSha256 = model.sha256,
+                    modelSizeBytes = model.bytes,
+                    modelDisplay = model.name,
+                    workloadId = parent.workloadId,
+                    promptSha256 = parent.promptSha256,
+                    config = SessionBenchBridge.configMap(proposed),
+                    parentSessionId = parentId,
+                    experimentSeq = seq
+                )
+                sessionManager.requestPrediction(child.sessionId)
+                val expectedGen =
+                    (pending["expected_gen_tps"] as? Number)?.toDouble()
+                        ?: throw IllegalStateException("expected gen bad")
+                val expectedPrefill =
+                    (pending["expected_prefill_tps"] as? Number)?.toDouble()
+                        ?: throw IllegalStateException("expected prefill bad")
+                sessionManager.recordPrediction(
+                    child.sessionId, expectedGen, expectedPrefill,
+                    SessionJson.stringify(linkedMapOf(
+                        "expected_gen_tps" to expectedGen,
+                        "expected_prefill_tps" to expectedPrefill,
+                        "hypothesis" to pending["hypothesis"],
+                        "uncertainty" to pending["uncertainty"],
+                        "supporting_evidence_ids" to
+                            pending["supporting_evidence_ids"],
+                        "proposal_hash" to pending["proposal_hash"]
+                    )),
+                    SessionManager.SOURCE_LIVE_META,
+                    ((pending["supporting_evidence_ids"] as? List<*>)
+                        ?.mapNotNull { it as? String } ?: emptyList()))
+                sessionManager.authorizeBenchmark(
+                    child.sessionId, "agent experiment $seq approved")
+                agentManager.approveProposal(parentId, child.sessionId)
+                activeSessionId = child.sessionId
+                runOnUiThread {
+                    refreshSessionLine()
+                    statusText("Experiment $seq approved; starting run.")
+                    startBench()
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    refreshSessionLine()
+                    statusText("Approval failed: ${e.message}")
+                    showAgent(parentId)
+                }
+            }
+        }, "edgefit-agent-approve").start()
+    }
+
+    private fun rejectAgentProposal(parentId: String): String {
+        return try {
+            agentManager.rejectProposal(parentId, "rejected by developer")
+            "Proposal preserved as rejected. Request another or Finish."
+        } catch (e: Exception) {
+            "Reject failed: ${e.message}"
+        }
+    }
+
+    private fun finishAgentSession(parentId: String): String {
+        return try {
+            agentManager.finishAgent(parentId)
+            "Agent session finished with summary."
+        } catch (e: Exception) {
+            "Finish failed: ${e.message}"
         }
     }
 

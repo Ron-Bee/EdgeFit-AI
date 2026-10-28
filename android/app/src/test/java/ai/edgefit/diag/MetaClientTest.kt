@@ -473,6 +473,109 @@ class MetaClientTest {
             .contains("n_threads"))
     }
 
+    // ---- agent proposals (mock transport; never live) ----
+
+    private fun proposalSpec() = MetaSessionClient.ProposalSpec(
+        parentId = "SES-0000000000000000",
+        packText = "mock pack",
+        currentConfig = BenchConfig.default(),
+        nextSeq = 2,
+        modelSha = MODEL_SHA,
+        workloadId = BenchContract.WORKLOAD_ID,
+        attemptsUsed = 1,
+        attemptsMax = 5,
+        allowedRunIds = setOf("BENCH-1"),
+        deviceMaxThreads = 8
+    )
+
+    private fun proposalJson(): String = SessionJson.stringify(linkedMapOf(
+        "model_sha" to MODEL_SHA,
+        "workload_id" to BenchContract.WORKLOAD_ID,
+        "experiment_seq" to 2,
+        "current_config" to mapOf(
+            "n_ctx" to 512, "n_threads" to 4, "n_predict" to 64),
+        "propose_experiment" to true,
+        "proposed_config" to mapOf("n_threads" to 8),
+        "hypothesis" to "mock hypothesis",
+        "expected_direction" to "faster",
+        "expected_gen_tps" to 16.0,
+        "expected_prefill_tps" to 24.0,
+        "uncertainty" to "mock uncertainty",
+        "supporting_evidence_ids" to listOf("BENCH-1"),
+        "limitations" to listOf("mock limit"),
+        "benefit" to "mock benefit",
+        "no_experiment_reason" to null
+    ))
+
+    @Test
+    fun proposalSuccessValidatesWithoutPersisting() {
+        setup()
+        vault.setSessionKey(KEY)
+        transport.respondText(proposalJson())
+        val valid = client.requestProposal(proposalSpec())
+        assertTrue(valid.proposeExperiment)
+        assertEquals(8, valid.proposedConfig!!.nThreads)
+        assertEquals(1, transport.calls)
+        // The client persists nothing; the store is untouched.
+        assertEquals(0, manager.store.count())
+    }
+
+    @Test
+    fun proposalRefusedWithoutKey() {
+        setup()
+        try {
+            client.requestProposal(proposalSpec())
+            fail("keyless proposal attempted")
+        } catch (e: MetaSessionClient.ClientError) {
+            assertEquals("NO_KEY", e.code)
+        }
+        assertEquals(0, transport.calls)
+    }
+
+    @Test
+    fun proposalValidationFailureSurfacesCode() {
+        setup()
+        vault.setSessionKey(KEY)
+        transport.respondText(SessionJson.stringify(linkedMapOf(
+            "model_sha" to "0".repeat(64),
+            "workload_id" to BenchContract.WORKLOAD_ID,
+            "experiment_seq" to 2,
+            "current_config" to mapOf(
+                "n_ctx" to 512, "n_threads" to 4, "n_predict" to 64),
+            "propose_experiment" to true,
+            "proposed_config" to mapOf("n_threads" to 8),
+            "hypothesis" to "h",
+            "expected_direction" to "faster",
+            "expected_gen_tps" to 16.0,
+            "expected_prefill_tps" to 24.0,
+            "uncertainty" to "u",
+            "supporting_evidence_ids" to listOf("BENCH-1"),
+            "limitations" to emptyList<String>(),
+            "benefit" to "b",
+            "no_experiment_reason" to null
+        )))
+        try {
+            client.requestProposal(proposalSpec())
+            fail("identity mismatch accepted")
+        } catch (e: MetaSessionClient.ClientError) {
+            assertEquals("BAD_PROPOSAL", e.code)
+        }
+        assertEquals(1, transport.calls)
+    }
+
+    @Test
+    fun proposalHonorsHttpAndTransportErrors() {
+        setup()
+        vault.setSessionKey(KEY)
+        transport.respondStatus(429, "mock limited")
+        try {
+            client.requestProposal(proposalSpec())
+            fail("429 accepted")
+        } catch (e: MetaSessionClient.ClientError) {
+            assertEquals("RATE_LIMITED", e.code)
+        }
+    }
+
     // ---- prior evidence ----
 
     @Test

@@ -25,6 +25,21 @@ object SessionView {
         return value
     }
 
+    /**
+     * Predict-gate (AUD-01): a byok session with no recorded
+     * prediction may request one while SESSION_CREATED (agent
+     * experiment shells start here) or PREDICTION_PENDING (retry
+     * after a failed attempt). Recorded, authorized, compared, and
+     * non-byok sessions are never offered a prediction. Pure for
+     * unit tests; the activity transitions CREATED exactly once on
+     * confirm and commits durably before any benchmark can bind.
+     */
+    fun canPredict(record: SessionRecord): Boolean =
+        record.mode == "byok" &&
+            (record.state == SessionState.SESSION_CREATED ||
+                record.state == SessionState.PREDICTION_PENDING) &&
+            record.prediction == null
+
     @Suppress("UNCHECKED_CAST")
     fun buildSummary(record: SessionRecord): String {
         val lines = mutableListOf(
@@ -148,10 +163,7 @@ object SessionView {
                 }.isEnabled = record.state ==
                     SessionState.BENCHMARK_AUTHORIZED &&
                     record.sessionId != bound
-                if (onPredict != null && record.mode == "byok" &&
-                    record.state == SessionState.PREDICTION_PENDING &&
-                    record.prediction == null
-                ) {
+                if (onPredict != null && canPredict(record)) {
                     addButton("Predict") {
                         dialog?.dismiss()
                         onPredict(record.sessionId)

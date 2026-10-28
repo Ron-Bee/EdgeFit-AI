@@ -19,6 +19,32 @@ object SessionBenchBridge {
         Thread(runnable, "edgefit-session-io").apply { isDaemon = true }
     }
 
+    /**
+     * Rebuilds validated config from a stored map (JSON numbers may
+     * be Long). Null when malformed or out of contract ranges.
+     */
+    fun configData(map: Map<String, Any?>): BenchConfigData? {
+        return try {
+            fun long(key: String): Long =
+                (map[key] as? Number)?.toLong()
+                    ?: throw IllegalArgumentException(key)
+            val config = BenchConfigData(
+                nCtx = long("n_ctx").toInt(),
+                nThreads = long("n_threads").toInt(),
+                nPredict = long("n_predict").toInt(),
+                temperature = (map["temperature"] as? Number)?.toDouble()
+                    ?: throw IllegalArgumentException("temperature"),
+                sampler = map["sampler"] as? String
+                    ?: throw IllegalArgumentException("sampler"),
+                seed = long("seed"),
+                timeoutMs = long("timeout_ms")
+            )
+            if (BenchConfig.validate(config).isNotEmpty()) null else config
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /** Canonical config spelling, shared by creation and attach. */
     fun configMap(config: BenchConfigData): Map<String, Any?> = linkedMapOf(
         "n_ctx" to config.nCtx,
@@ -32,18 +58,33 @@ object SessionBenchBridge {
 
     /** Bounded measured values retained in the session record. */
     fun measurementsMap(measurements: BenchMeasurements): Map<String, Any?> =
-        linkedMapOf(
-            "load_ms" to measurements.loadMs,
-            "prefill_ms" to measurements.prefillMs,
-            "prefill_tokens" to measurements.prefillTokens,
-            "gen_ms" to measurements.genMs,
-            "generated_tokens" to measurements.generatedTokens,
-            "tps_gen" to measurements.tpsGen,
-            "tps_prefill" to measurements.tpsPrefill,
-            "thermal_before" to measurements.thermal.before,
-            "thermal_mid" to measurements.thermal.mid,
-            "thermal_after" to measurements.thermal.after
-        )
+        measurementsMap(measurements, null, null, null)
+
+    /**
+     * Full variant: runtime + native-build provenance for agent
+     * comparability. Pre-agent records omit the runtime_* keys.
+     */
+    fun measurementsMap(
+        measurements: BenchMeasurements,
+        runtimeVersion: String?,
+        runtimeAbi: String?,
+        nativeBuild: Map<String, String>?
+    ): Map<String, Any?> = linkedMapOf(
+        "load_ms" to measurements.loadMs,
+        "prefill_ms" to measurements.prefillMs,
+        "prefill_tokens" to measurements.prefillTokens,
+        "gen_ms" to measurements.genMs,
+        "generated_tokens" to measurements.generatedTokens,
+        "tps_gen" to measurements.tpsGen,
+        "tps_prefill" to measurements.tpsPrefill,
+        "thermal_before" to measurements.thermal.before,
+        "thermal_mid" to measurements.thermal.mid,
+        "thermal_after" to measurements.thermal.after,
+        "runtime_version" to runtimeVersion,
+        "runtime_abi" to runtimeAbi,
+        "native_variant" to nativeBuild?.get("variant"),
+        "native_opt" to nativeBuild?.get("native_opt")
+    )
 
     fun sourceHash(result: BenchResult): String =
         BenchConfig.sha256Hex(
@@ -65,7 +106,9 @@ object SessionBenchBridge {
                 runId = result.runId,
                 sourceSha256 = sourceHash(result),
                 status = result.status,
-                measurements = measurementsMap(result.measurements),
+                measurements = measurementsMap(
+                    result.measurements, result.runtimeVersion,
+                    result.runtimeAbi, result.xNativeBuild),
                 collectedAtUtc = result.collectedAtUtc,
                 modelSha256 = result.model.sha256,
                 workloadId = result.workload.id,

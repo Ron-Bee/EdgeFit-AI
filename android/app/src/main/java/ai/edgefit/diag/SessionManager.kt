@@ -55,7 +55,9 @@ class SessionManager(
         workloadId: String,
         promptSha256: String,
         config: Map<String, Any?>,
-        budgetMax: Int = 5
+        budgetMax: Int = 5,
+        parentSessionId: String? = null,
+        experimentSeq: Int? = null
     ): SessionRecord {
         if (mode !in SessionStore.MODES) throw SessionError("unknown mode $mode")
         if (!SessionStore.isHex64(modelSha256)) {
@@ -68,6 +70,15 @@ class SessionManager(
             throw SessionError("prompt_sha256 must be 64 hex")
         }
         if (modelSizeBytes <= 0) throw SessionError("model size must be > 0")
+        if (parentSessionId != null && !SessionStore.isValidId(parentSessionId)) {
+            throw SessionError("parent session id malformed")
+        }
+        if (experimentSeq != null && experimentSeq < 1) {
+            throw SessionError("experiment seq must be >= 1")
+        }
+        if ((parentSessionId == null) != (experimentSeq == null)) {
+            throw SessionError("parent link and seq travel together")
+        }
         val now = clock()
         val record = SessionRecord(
             sessionId = SessionStore.newSessionId(),
@@ -86,7 +97,9 @@ class SessionManager(
             workloadId = workloadId,
             promptSha256 = promptSha256.lowercase(),
             config = config,
-            budgetMax = budgetMax
+            budgetMax = budgetMax,
+            parentSessionId = parentSessionId,
+            experimentSeq = experimentSeq
         )
         return store.save(record)
     }
@@ -210,7 +223,11 @@ class SessionManager(
             ?: throw SessionError("no prediction recorded")
         val isReplay = prediction["source_type"] == SOURCE_REPLAY
         val predictedAt = prediction["created_at_utc"] as? String ?: ""
-        if (!isReplay && collectedAtUtc <= predictedAt) {
+        // Strictly earlier only (FIX2): both stamps are
+        // second-precision, and agent-approved runs routinely start
+        // in their commit second. State order (RUNNING requires a
+        // recorded prediction) already enforces real precedence.
+        if (!isReplay && collectedAtUtc < predictedAt) {
             throw SessionError("measurement predates prediction")
         }
         for (other in store.listIds()) {
@@ -242,9 +259,18 @@ class SessionManager(
                 "status" to status,
                 "measurements" to measurements,
                 "collected_at_utc" to collectedAtUtc,
-                "attached_at_utc" to clock()
+                "attached_at_utc" to clock(),
+                // The configuration the runner actually executed
+                // (identity-verified above); pre-agent records omit it.
+                "executed_config" to config
             ),
-            budgetUsed = record.budgetUsed + 1
+            // Agent children account against the parent budget; the
+            // parent charges exactly once per approved attempt.
+            budgetUsed = if (record.parentSessionId == null) {
+                record.budgetUsed + 1
+            } else {
+                record.budgetUsed
+            }
         )
         if (benchState == SessionState.BENCHMARK_COMPLETED) {
             val predictedGen = (prediction["predicted_gen_tps"] as Number).toDouble()

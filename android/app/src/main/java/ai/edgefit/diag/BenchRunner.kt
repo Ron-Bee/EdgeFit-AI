@@ -69,6 +69,21 @@ class BenchRunner(private val context: Context) {
         modelSha256: String,
         displayName: String,
         listener: (BenchResult) -> Unit
+    ): Boolean = startWithConfig(
+        modelFile, modelSha256, displayName, null, listener)
+
+    /**
+     * Narrow authorized configuration bridge (EF-AGENT-01): runs the
+     * identical native workload with a host-validated config instead
+     * of the fixed default. Null keeps legacy default behavior
+     * byte-for-byte. The executed config is recorded in the result.
+     */
+    fun startWithConfig(
+        modelFile: File,
+        modelSha256: String,
+        displayName: String,
+        config: BenchConfigData?,
+        listener: (BenchResult) -> Unit
     ): Boolean {
         synchronized(lock) {
             if (!BenchPhases.can(phase, BenchPhases.RUNNING)) return false
@@ -85,7 +100,8 @@ class BenchRunner(private val context: Context) {
         val prog = LlamaBridge.newProgressMailbox()
         progressBox = prog
         worker = Thread({
-            val result = runBenchmark(modelFile, modelSha256, displayName, box, prog)
+            val result = runBenchmark(
+                modelFile, modelSha256, displayName, box, prog, config)
             synchronized(lock) { phase = result.status }
             execState = result.status
             emitLive()
@@ -148,7 +164,8 @@ class BenchRunner(private val context: Context) {
         modelSha256: String,
         displayName: String,
         box: ByteBuffer,
-        prog: ByteBuffer
+        prog: ByteBuffer,
+        configOverride: BenchConfigData?
     ): BenchResult {
         val stamp = utcStamp()
         val runId = formatRunId(stamp, randomHex8())
@@ -164,7 +181,8 @@ class BenchRunner(private val context: Context) {
             logicalProcessors = device.logicalProcessors,
             totalRamBytes = device.totalRamBytes
         )
-        val config = BenchConfig.default(BenchConfig.effectiveThreads(device.logicalProcessors))
+        val config = BenchConfig.resolveExecutionConfig(
+            configOverride, device.logicalProcessors)
         val thermalBefore = sampleThermal()
         val pssBefore = processPssKb()
         val modelBytes = modelFile.length()
@@ -236,9 +254,13 @@ class BenchRunner(private val context: Context) {
         var native: JSONObject? = null
         var nativeError: String? = null
         try {
+            // Single funnel: native receives exactly the validated
+            // config's args, in JNI order; the recorded result keeps
+            // the same instance's values (see nativeArgs tests).
+            val args = BenchConfig.nativeArgs(config)
             val raw = LlamaBridge.nativeRun(
                 modelFile.absolutePath, BenchContract.WORKLOAD_PROMPT,
-                config.nCtx, config.nThreads, config.nPredict, box, prog)
+                args[0], args[1], args[2], box, prog)
             native = JSONObject(raw)
         } catch (e: Exception) {
             nativeError = "native call failed: ${e.message}"
