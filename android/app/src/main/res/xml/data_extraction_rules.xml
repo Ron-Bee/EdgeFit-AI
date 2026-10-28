@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- API 31+ counterpart of backup_rules.xml: same device-bound
+     session state excluded from cloud backup and device transfer. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="file" path="sessions/" />
+        <exclude domain="file" path="sessions-quarantine/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="file" path="sessions/" />
+        <exclude domain="file" path="sessions-quarantine/" />
+    </device-transfer>
+</data-extraction-rules>

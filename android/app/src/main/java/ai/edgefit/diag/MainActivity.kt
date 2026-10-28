@@ -44,12 +44,30 @@ class MainActivity : Activity() {
     private lateinit var runner: BenchRunner
     private lateinit var mainRoot: View
     private lateinit var benchScreen: BenchScreenView
+    private lateinit var sessionManager: SessionManager
+    private lateinit var sessionLine: TextView
+    private var activeSessionId: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pendingJson = savedInstanceState?.getString(KEY_PENDING_JSON)
         pendingFilename = savedInstanceState?.getString(KEY_PENDING_FILENAME)
+        activeSessionId = savedInstanceState?.getString(KEY_ACTIVE_SESSION)
         runner = BenchRunner(this)
+        sessionManager = SessionManager(filesDir)
+        Thread({
+            val actions = try {
+                sessionManager.recoverOnLaunch()
+            } catch (e: Exception) {
+                listOf("recovery failed: ${e.message}")
+            }
+            runOnUiThread {
+                refreshSessionLine()
+                if (actions.isNotEmpty()) {
+                    statusText("Session recovery: ${actions.joinToString("; ")}")
+                }
+            }
+        }, "edgefit-session-recover").start()
         val density = resources.displayMetrics.density
         fun dp(value: Int): Int = (value * density + 0.5f).toInt()
         val basePadding = dp(16)
@@ -57,12 +75,16 @@ class MainActivity : Activity() {
         statusView = TextView(this)
         modelView = TextView(this).apply { text = "Model: none selected" }
         benchView = TextView(this).apply { text = "Benchmark: idle" }
+        sessionLine = TextView(this).apply {
+            text = SessionView.buildActiveLine(null, null)
+        }
         val export = Button(this).apply { text = "Export Profile" }
         runButton = Button(this).apply { text = "Run Benchmark" }
         cancelButton = Button(this).apply { text = "Cancel"; isEnabled = false }
         saveButton = Button(this).apply { text = "Save Result"; isEnabled = false }
         val select = Button(this).apply { text = "Select Model File" }
         val workloadButton = Button(this).apply { text = "View Workload" }
+        val sessionsButton = Button(this).apply { text = "Sessions" }
         val runRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(runButton, LinearLayout.LayoutParams(0,
@@ -85,7 +107,9 @@ class MainActivity : Activity() {
             addView(modelView)
             addView(select)
             addView(benchView)
+            addView(sessionLine)
             addView(workloadButton)
+            addView(sessionsButton)
             addView(saveButton)
         }
         val scroller = ScrollView(this).apply { addView(scrollContent) }
@@ -162,6 +186,7 @@ class MainActivity : Activity() {
         }
         setContentView(root)
         refresh()
+        refreshSessionLine()
         export.setOnClickListener {
             val json = refresh()
             if (json == null) {
@@ -184,6 +209,7 @@ class MainActivity : Activity() {
             )
         }
         runButton.setOnClickListener { startBench() }
+        sessionsButton.setOnClickListener { showSessions() }
         cancelButton.setOnClickListener {
             runner.cancel()
             statusText("Cancellation requested.")
@@ -256,6 +282,7 @@ class MainActivity : Activity() {
         super.onSaveInstanceState(outState)
         outState.putString(KEY_PENDING_JSON, pendingJson)
         outState.putString(KEY_PENDING_FILENAME, pendingFilename)
+        outState.putString(KEY_ACTIVE_SESSION, activeSessionId)
     }
 
     private fun systemBarInsets(insets: WindowInsets): IntArray {
@@ -312,6 +339,7 @@ class MainActivity : Activity() {
             statusText("A benchmark is already running.")
             return
         }
+        bindSessionToRun()
         val config = currentBenchConfig()
         val profile = try {
             DeviceCapabilityCollector(this).collect()
@@ -322,6 +350,19 @@ class MainActivity : Activity() {
             model.name, model.bytes, model.sha256, config,
             runtimeVersionLabel(), runtimeAbiLabel(profile))
         showBenchScreen()
+    }
+
+    /** Binds the active authorized session to this run, or unbinds. */
+    private fun bindSessionToRun() {
+        val id = activeSessionId ?: return
+        try {
+            sessionManager.noteRunStarted(id)
+            statusText("Benchmark running for session $id.")
+        } catch (e: Exception) {
+            activeSessionId = null
+            refreshSessionLine()
+            statusText("Session binding failed (${e.message}); standalone run.")
+        }
     }
 
     /**
@@ -373,6 +414,52 @@ class MainActivity : Activity() {
         } catch (e: Exception) {
             benchJson = null
             statusText("Result serialize failed: ${e.message}")
+        }
+        attachSessionToResult(result)
+    }
+
+    /**
+     * Attaches the finished run to the bound session off the UI thread.
+     * Standalone runs are labeled as such; no prediction is invented.
+     */
+    private fun attachSessionToResult(result: BenchResult) {
+        val id = activeSessionId
+        if (id == null) {
+            benchView.append("\nStandalone physical measurement (no session).")
+            return
+        }
+        activeSessionId = null
+        refreshSessionLine()
+        SessionBenchBridge.attachAsync(sessionManager, id, result) { outcome ->
+            runOnUiThread {
+                outcome.fold(
+                    onSuccess = { record ->
+                        @Suppress("UNCHECKED_CAST")
+                        val comparison =
+                            record.comparison as? Map<String, Any?>
+                        val detail = if (comparison == null) record.state
+                        else SessionView.comparisonLine(comparison)
+                        statusText("Session ${record.sessionId}: $detail.")
+                        refreshSessionLine()
+                    },
+                    onFailure = { e ->
+                        // The bound run will never attach; record the
+                        // failure now instead of waiting for recovery.
+                        Thread({
+                            try {
+                                sessionManager.markBenchmarkFailed(
+                                    id, "attach failed: ${e.message}")
+                            } catch (_: Exception) {
+                            }
+                            runOnUiThread {
+                                statusText(
+                                    "Session attach failed: ${e.message}")
+                                refreshSessionLine()
+                            }
+                        }, "edgefit-session-fail").start()
+                    }
+                )
+            }
         }
     }
 
@@ -497,6 +584,102 @@ class MainActivity : Activity() {
         statusView.text = message
     }
 
+    // ---- sessions (EF-SESSION-01) ----
+
+    private fun showSessions() {
+        SessionView.show(
+            this,
+            load = { sessionManager.listSessions() },
+            activeId = { activeSessionId },
+            onCreate = { gen, prefill -> createOfflineSession(gen, prefill) },
+            onBind = { id -> bindSession(id) },
+            onDelete = { id -> deleteSession(id) }
+        )
+    }
+
+    /**
+     * Creates an offline-test session from the staged model and the
+     * exact config the next run will use, then authorizes and binds it.
+     * Labeled offline_test throughout; never a Meta prediction.
+     */
+    private fun createOfflineSession(gen: Double, prefill: Double): String {
+        val model = staged ?: return "Stage a model file first."
+        return try {
+            val profile = try {
+                DeviceCapabilityCollector(this).collect()
+            } catch (_: Exception) {
+                null
+            }
+            val config = currentBenchConfig()
+            val created = sessionManager.createSession(
+                mode = "offline_test",
+                deviceModel = profile?.device?.model,
+                profileSha256 = profile?.let {
+                    BenchConfig.sha256Hex(ProfileSerializer.serialize(it)
+                        .toByteArray(Charsets.UTF_8))
+                },
+                modelSha256 = model.sha256,
+                modelSizeBytes = model.bytes,
+                modelDisplay = model.name,
+                workloadId = BenchContract.WORKLOAD_ID,
+                promptSha256 = BenchConfig.workload().promptSha256,
+                config = SessionBenchBridge.configMap(config)
+            )
+            sessionManager.requestPrediction(created.sessionId)
+            sessionManager.recordPrediction(
+                created.sessionId, gen, prefill,
+                """{"predicted_gen_tps":$gen,"predicted_prefill_tps":$prefill,"source":"offline_test"}""",
+                SessionManager.SOURCE_OFFLINE_TEST, emptyList())
+            sessionManager.authorizeBenchmark(
+                created.sessionId, "offline test created")
+            activeSessionId = created.sessionId
+            refreshSessionLine()
+            "Created ${created.sessionId}, authorized and bound to next run."
+        } catch (e: Exception) {
+            "Session creation failed: ${e.message}"
+        }
+    }
+
+    private fun bindSession(id: String): String {
+        return try {
+            val record = sessionManager.get(id)
+            if (record.state != SessionState.BENCHMARK_AUTHORIZED) {
+                return "Only authorized sessions bind (state ${record.state})."
+            }
+            activeSessionId = id
+            refreshSessionLine()
+            "Bound $id to the next run."
+        } catch (e: Exception) {
+            "Bind failed: ${e.message}"
+        }
+    }
+
+    private fun deleteSession(id: String): String {
+        if (activeSessionId == id) activeSessionId = null
+        refreshSessionLine()
+        return if (sessionManager.deleteSession(id)) "Deleted $id."
+        else "No session $id."
+    }
+
+    private fun refreshSessionLine() {
+        val id = activeSessionId
+        if (id == null) {
+            sessionLine.text = SessionView.buildActiveLine(null, null)
+            return
+        }
+        val record = try {
+            sessionManager.get(id)
+        } catch (_: Exception) {
+            null
+        }
+        if (record == null) {
+            activeSessionId = null
+            sessionLine.text = SessionView.buildActiveLine(null, null)
+        } else {
+            sessionLine.text = SessionView.buildActiveLine(id, record)
+        }
+    }
+
     private fun humanSummary(profile: CollectedProfile): String {
         val device = profile.device
         val lines = mutableListOf(
@@ -528,5 +711,6 @@ class MainActivity : Activity() {
         private const val REQUEST_OPEN_DOCUMENT = 2
         private const val KEY_PENDING_JSON = "pending_json"
         private const val KEY_PENDING_FILENAME = "pending_filename"
+        private const val KEY_ACTIVE_SESSION = "active_session"
     }
 }

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Session records are device-bound experiment state; a restore onto
+     another device must not resurrect them. -->
+<full-backup-content>
+    <exclude domain="file" path="sessions/" />
+    <exclude domain="file" path="sessions-quarantine/" />
+</full-backup-content>

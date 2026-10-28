@@ -270,3 +270,54 @@ Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
   aggregate/run consent scopes separated with run listing
   PROPOSED+disabled; six provisional v1 policies recorded as
   owner-approved design (activation not authorized).
+
+## EF-SESSION-01 (implementation + host qualified; physical scoped)
+
+- Agent-executed: durable on-device session layer implemented
+  (atomic-file store under app-private `filesDir/sessions/`, 13
+  explicit states, strict zero-dependency JSON codec,
+  prediction-before-measurement integrity, duplicate-run
+  refusal, deterministic EF-LOOP-01-parity comparison,
+  launch recovery, minimal sessions dialog with offline-test
+  creation, backup exclusions). `BenchRunner`, JNI, llama.cpp,
+  and bench-result contract v1 unchanged (git-verified).
+- Agent-executed: JVM `:app:testDebugUnitTest` 70/70 OK (34 new
+  adversarial session tests: transitions, immutability,
+  mismatches, time-order, replay labeling, duplicates,
+  idempotency, quarantine vs unsupported-version, recovery,
+  parity vectors, view builders).
+- Agent-executed: `scripts/test_ef_session_parity.py` 1/1 OK —
+  shared vectors verified against the real
+  `ef_loop_01.cmd_attach_bench` (signed error,
+  prediction-denominator percentages, round 3/2).
+- Agent-executed regressions: EF-LOOP-01 26/26 OK; EF-BENCH-01
+  19/19 OK; bench native 3/3 OK; EF-DATA-02 29/29 OK;
+  EF-DATA-03 35/35 OK; EF-META-05 14/14 OK; EF-META-06 39/39
+  OK; EF-ANDROID-01 25/25 OK; EF-ANDROID-UI-01 14/14 OK;
+  EF-META-04 12/12 PASS; EF-DATA-01 PASS. No Meta API calls.
+- Agent-executed: `:app:assembleBenchmark` BUILD SUCCESSFUL
+  offline; `app-benchmark.apk` verified to contain the session
+  classes, native benchmark libraries, and both backup-rule
+  resources. APK not published; build outputs not committed.
+- Database UNCHANGED: `data/edgefit.db` SHA-256
+  `B36977AD...190FE9D` identical before and after all suites.
+  No writes, no promotion, no cloud, no key handling.
+- EF-SESSION-01: IMPLEMENTATION PASS, HOST TEST PASS.
+
+## EF-SESSION-01 physical acceptance (executed by owner on Galaxy S22 Ultra; not executed by agent)
+
+- Offline-test prediction 15.0 generation tok/s and 23.0
+  prefill tok/s recorded in session `SES-763f9d7f001d830f`;
+  benchmark `BENCH-20261028T031436Z-11b940fb` COMPLETED and
+  associated; session reached COMPARISON_READY with signed
+  generation error -3.825 tok/s (-25.5%).
+- The session remained intact after the owner completely
+  closed and reopened the application (relaunch persistence
+  demonstrated).
+- Scoped acceptance only: session creation, benchmark
+  association, deterministic comparison, relaunch
+  persistence. Forced process-death recovery,
+  rotation/cancellation, and comprehensive lifecycle
+  qualification remain explicitly DEFERRED, not failed.
+- EF-SESSION-01: PHYSICAL SCOPED PASS (no full lifecycle
+  qualification claimed).
