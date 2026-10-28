@@ -47,6 +47,8 @@ class MainActivity : Activity() {
     private lateinit var sessionManager: SessionManager
     private lateinit var sessionLine: TextView
     private var activeSessionId: String? = null
+    private lateinit var metaVault: MetaKeyVault
+    private lateinit var metaClient: MetaSessionClient
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -55,6 +57,9 @@ class MainActivity : Activity() {
         activeSessionId = savedInstanceState?.getString(KEY_ACTIVE_SESSION)
         runner = BenchRunner(this)
         sessionManager = SessionManager(filesDir)
+        metaVault = MetaKeyVault(filesDir, AndroidKeySeal())
+        metaClient = MetaSessionClient(
+            sessionManager, HttpsMetaTransport(), metaVault)
         Thread({
             val actions = try {
                 sessionManager.recoverOnLaunch()
@@ -85,6 +90,7 @@ class MainActivity : Activity() {
         val select = Button(this).apply { text = "Select Model File" }
         val workloadButton = Button(this).apply { text = "View Workload" }
         val sessionsButton = Button(this).apply { text = "Sessions" }
+        val metaButton = Button(this).apply { text = "Meta API" }
         val runRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(runButton, LinearLayout.LayoutParams(0,
@@ -110,6 +116,7 @@ class MainActivity : Activity() {
             addView(sessionLine)
             addView(workloadButton)
             addView(sessionsButton)
+            addView(metaButton)
             addView(saveButton)
         }
         val scroller = ScrollView(this).apply { addView(scrollContent) }
@@ -210,6 +217,7 @@ class MainActivity : Activity() {
         }
         runButton.setOnClickListener { startBench() }
         sessionsButton.setOnClickListener { showSessions() }
+        metaButton.setOnClickListener { showMetaSettings() }
         cancelButton.setOnClickListener {
             runner.cancel()
             statusText("Cancellation requested.")
@@ -593,7 +601,9 @@ class MainActivity : Activity() {
             activeId = { activeSessionId },
             onCreate = { gen, prefill -> createOfflineSession(gen, prefill) },
             onBind = { id -> bindSession(id) },
-            onDelete = { id -> deleteSession(id) }
+            onDelete = { id -> deleteSession(id) },
+            onPredict = { id -> startLivePrediction(id) },
+            onFollowUp = { id -> startLiveFollowUp(id) }
         )
     }
 
@@ -677,6 +687,209 @@ class MainActivity : Activity() {
             sessionLine.text = SessionView.buildActiveLine(null, null)
         } else {
             sessionLine.text = SessionView.buildActiveLine(id, record)
+        }
+    }
+
+    // ---- live Meta (EF-BYOK-01) ----
+
+    private fun showMetaSettings() {
+        MetaView.showKeyDialog(
+            this,
+            status = {
+                MetaView.keyStatusLine(metaVault.hasSession(),
+                    metaVault.sessionSuffix(), metaVault.hasPersisted())
+            },
+            onSave = { key, remember -> saveMetaKey(key, remember) },
+            onForget = {
+                if (metaVault.forget()) "Key forgotten everywhere."
+                else "No key was stored."
+            },
+            onPredict = { startLivePrediction(null) }
+        )
+    }
+
+    private fun saveMetaKey(key: String, remember: Boolean): String {
+        return try {
+            metaVault.setSessionKey(key)
+            if (remember) metaVault.persistSessionKey()
+            if (remember) "Key saved session + securely persisted."
+            else "Session-only key set; dies with the app."
+        } catch (e: Exception) {
+            "Save failed: ${e.message}"
+        }
+    }
+
+    private fun keyNote(): String = when {
+        metaVault.hasSession() -> "your session-only key"
+        metaVault.hasPersisted() -> "your saved key (decrypts for this call)"
+        else -> "NO KEY CONFIGURED (request will refuse)"
+    }
+
+    /**
+     * Live prediction for a new session (null) or a retry on a
+     * PREDICTION_PENDING byok session. Authorization first, one POST,
+     * durable commit before any benchmark can bind.
+     */
+    private fun startLivePrediction(existingId: String?) {
+        val model = staged
+        if (existingId == null && model == null) {
+            MetaView.showResultDialog(this, "Predict with Meta",
+                "Stage a model file first.")
+            return
+        }
+        val fields = listOf(
+            "device profile summary (model, Android/API, ABIs, CPUs, RAM)",
+            "model identity (display name, SHA-256, size, quantization)",
+            "workload id + prompt SHA-256",
+            "benchmark config (ctx/threads/tokens/sampler/runtime)",
+            "up to ${MetaApi.MAX_PRIOR_RUNS} prior on-device run ids + " +
+                "throughputs, if any"
+        )
+        MetaView.showAuthorizeDialog(
+            this,
+            MetaView.authorizeText(
+                "Live throughput prediction", fields, keyNote()),
+            "Predict"
+        ) {
+            Thread({
+                runLivePrediction(existingId)
+            }, "edgefit-meta-predict").start()
+        }
+    }
+
+    private fun runLivePrediction(existingId: String?) {
+        try {
+            val id = existingId ?: createLiveSession()
+            if (existingId == null) sessionManager.requestPrediction(id)
+            val spec = livePredictionSpec(id)
+            val record = metaClient.requestPrediction(spec)
+            sessionManager.authorizeBenchmark(id, "live prediction recorded")
+            activeSessionId = id
+            runOnUiThread {
+                refreshSessionLine()
+                statusText("Live prediction recorded for $id; " +
+                    "bound to the next run.")
+                MetaView.showResultDialog(this, "Live Meta Prediction",
+                    MetaView.predictionText(record) +
+                        "\n\nRun the benchmark to measure against it.")
+            }
+        } catch (e: Exception) {
+            runOnUiThread {
+                refreshSessionLine()
+                statusText("Live prediction failed: ${e.message}")
+                MetaView.showResultDialog(this, "Live Meta Prediction",
+                    "No prediction recorded (nothing was persisted):\n" +
+                        "${e.message}")
+            }
+        }
+    }
+
+    /** Creates the byok session shell; prediction comes only from Meta. */
+    private fun createLiveSession(): String {
+        val model = staged ?: throw IllegalStateException("no staged model")
+        val profile = try {
+            DeviceCapabilityCollector(this).collect()
+        } catch (_: Exception) {
+            null
+        }
+        val created = sessionManager.createSession(
+            mode = "byok",
+            deviceModel = profile?.device?.model,
+            profileSha256 = profile?.let {
+                BenchConfig.sha256Hex(ProfileSerializer.serialize(it)
+                    .toByteArray(Charsets.UTF_8))
+            },
+            modelSha256 = model.sha256,
+            modelSizeBytes = model.bytes,
+            modelDisplay = model.name,
+            workloadId = BenchContract.WORKLOAD_ID,
+            promptSha256 = BenchConfig.workload().promptSha256,
+            config = SessionBenchBridge.configMap(currentBenchConfig())
+        )
+        return created.sessionId
+    }
+
+    private fun livePredictionSpec(sessionId: String):
+        MetaSessionClient.PredictionSpec {
+        val model = staged ?: throw IllegalStateException("no staged model")
+        val profile = try {
+            DeviceCapabilityCollector(this).collect()
+        } catch (_: Exception) {
+            null
+        }
+        val device = profile?.device
+        return MetaSessionClient.PredictionSpec(
+            sessionId = sessionId,
+            deviceLines = if (device == null) {
+                listOf("unavailable")
+            } else {
+                listOf(
+                    "model=${device.manufacturer} ${device.model}",
+                    "android=${device.androidRelease} api=${device.sdkInt}",
+                    "abis=${device.supportedAbis.joinToString(",")}",
+                    "cpus=${device.logicalProcessors}",
+                    "ram_total_mb=${device.totalRamBytes / 1048576}",
+                    "ram_avail_mb=${device.availRamBytes / 1048576}",
+                    "thermal=${profile.thermal?.statusName ?: "unavailable"}",
+                    "battery=${profile.battery?.pct ?: "unavailable"}"
+                )
+            },
+            modelDisplay = model.name,
+            modelSha = model.sha256,
+            modelSizeBytes = model.bytes,
+            // Pre-run quantization is genuinely unknown: the native
+            // meta field only exists after inference. Never parsed
+            // from the filename.
+            quantization = "unknown",
+            workloadId = BenchContract.WORKLOAD_ID,
+            promptSha = BenchConfig.workload().promptSha256,
+            config = currentBenchConfig(),
+            runtimeVersion = runtimeVersionLabel(),
+            runtimeAbi = runtimeAbiLabel(profile)
+        )
+    }
+
+    private fun startLiveFollowUp(sessionId: String) {
+        val fields = listOf(
+            "benchmark run id + model/workload/config identity",
+            "persisted predicted throughputs",
+            "measured throughputs",
+            "host-computed signed + percentage errors",
+            "thermal + memory-method qualifiers"
+        )
+        MetaView.showAuthorizeDialog(
+            this,
+            MetaView.authorizeText(
+                "Follow-up assessment for $sessionId", fields, keyNote()),
+            "Request"
+        ) {
+            Thread({
+                runLiveFollowUp(sessionId)
+            }, "edgefit-meta-followup").start()
+        }
+    }
+
+    private fun runLiveFollowUp(sessionId: String) {
+        try {
+            val before = sessionManager.get(sessionId)
+            if (before.state == SessionState.COMPARISON_READY) {
+                sessionManager.requestFollowup(sessionId)
+            }
+            val record = metaClient.requestFollowUp(sessionId)
+            runOnUiThread {
+                refreshSessionLine()
+                statusText("Follow-up recorded for $sessionId.")
+                MetaView.showResultDialog(this, "Meta Follow-Up",
+                    MetaView.followUpText(record))
+            }
+        } catch (e: Exception) {
+            runOnUiThread {
+                refreshSessionLine()
+                statusText("Follow-up failed: ${e.message}")
+                MetaView.showResultDialog(this, "Meta Follow-Up",
+                    "No assessment recorded (nothing was persisted):\n" +
+                        "${e.message}")
+            }
         }
     }
 

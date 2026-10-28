@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- BYOK talks to exactly one HTTPS host; cleartext is denied on every
+     API level (the platform default only covers API 28+). -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

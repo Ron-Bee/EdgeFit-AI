@@ -1,13 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <!-- No permissions: every collected signal needs none. -->
+    <!-- INTERNET solely for direct user-authorized BYOK calls to
+         https://api.meta.ai (see network_security_config + host
+         allowlist). Offline profiling/benchmarking needs nothing. -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <application
         android:label="EdgeFit AI"
         android:theme="@android:style/Theme.Material.Light"
         android:allowBackup="true"
         android:fullBackupContent="@xml/backup_rules"
-        android:dataExtractionRules="@xml/data_extraction_rules">
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:networkSecurityConfig="@xml/network_security_config">
         <activity
             android:name=".MainActivity"
             android:exported="true">

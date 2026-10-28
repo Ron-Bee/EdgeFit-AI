@@ -4,4 +4,5 @@
 <full-backup-content>
     <exclude domain="file" path="sessions/" />
     <exclude domain="file" path="sessions-quarantine/" />
+    <exclude domain="file" path="meta_key.bin" />
 </full-backup-content>

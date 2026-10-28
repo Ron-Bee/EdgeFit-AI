@@ -257,6 +257,7 @@ class SessionStoreTest {
     }
 
     @Test
+    @Suppress("UNCHECKED_CAST")
     fun sessionIdFilenameMismatchRejected() {
         val mgr = manager()
         val id = mgr.newSession().sessionId

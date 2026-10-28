@@ -85,6 +85,9 @@ object SessionView {
      * @param onCreate creates + authorizes an offline-test session.
      * @param onBind binds an authorized session to the next run.
      * @param onDelete deletes a session. Each returns a status message.
+     * @param onPredict retries a live prediction on a PENDING byok
+     * session; @param onFollowUp starts follow-up on a compared byok
+     * session. Both dismiss this dialog first (they open their own).
      */
     fun show(
         activity: Activity,
@@ -92,8 +95,11 @@ object SessionView {
         activeId: () -> String?,
         onCreate: (Double, Double) -> String,
         onBind: (String) -> String,
-        onDelete: (String) -> String
+        onDelete: (String) -> String,
+        onPredict: ((String) -> Unit)? = null,
+        onFollowUp: ((String) -> Unit)? = null
     ) {
+        var dialog: AlertDialog? = null
         val density = activity.resources.displayMetrics.density
         fun dp(value: Int): Int = (value * density + 0.5f).toInt()
         val list = LinearLayout(activity).apply {
@@ -127,27 +133,44 @@ object SessionView {
                 val buttons = LinearLayout(activity).apply {
                     orientation = LinearLayout.HORIZONTAL
                 }
-                val bind = Button(activity).apply {
-                    text = "Bind"
-                    isEnabled = record.state ==
-                        SessionState.BENCHMARK_AUTHORIZED &&
-                        record.sessionId != bound
-                    setOnClickListener {
-                        notice.text = onBind(record.sessionId)
-                        refresh()
+                fun addButton(label: String, action: () -> Unit): Button {
+                    val button = Button(activity).apply {
+                        text = label
+                        setOnClickListener { action() }
+                    }
+                    buttons.addView(button, LinearLayout.LayoutParams(0,
+                        LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                    return button
+                }
+                addButton("Bind") {
+                    notice.text = onBind(record.sessionId)
+                    refresh()
+                }.isEnabled = record.state ==
+                    SessionState.BENCHMARK_AUTHORIZED &&
+                    record.sessionId != bound
+                if (onPredict != null && record.mode == "byok" &&
+                    record.state == SessionState.PREDICTION_PENDING &&
+                    record.prediction == null
+                ) {
+                    addButton("Predict") {
+                        dialog?.dismiss()
+                        onPredict(record.sessionId)
                     }
                 }
-                val delete = Button(activity).apply {
-                    text = "Delete"
-                    setOnClickListener {
-                        notice.text = onDelete(record.sessionId)
-                        refresh()
+                if (onFollowUp != null && record.mode == "byok" &&
+                    record.followup == null &&
+                    (record.state == SessionState.COMPARISON_READY ||
+                        record.state == SessionState.FOLLOWUP_PENDING)
+                ) {
+                    addButton("Follow-Up") {
+                        dialog?.dismiss()
+                        onFollowUp(record.sessionId)
                     }
                 }
-                buttons.addView(bind, LinearLayout.LayoutParams(0,
-                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-                buttons.addView(delete, LinearLayout.LayoutParams(0,
-                    LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+                addButton("Delete") {
+                    notice.text = onDelete(record.sessionId)
+                    refresh()
+                }
                 list.addView(buttons)
             }
         }
@@ -196,7 +219,7 @@ object SessionView {
             addView(form)
         }
         refresh()
-        AlertDialog.Builder(activity)
+        dialog = AlertDialog.Builder(activity)
             .setTitle("Local Sessions")
             .setView(ScrollView(activity).apply { addView(content) })
             .setPositiveButton("Close", null)

@@ -321,3 +321,64 @@ Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
   qualification remain explicitly DEFERRED, not failed.
 - EF-SESSION-01: PHYSICAL SCOPED PASS (no full lifecycle
   qualification claimed).
+
+## EF-BYOK-01 (implementation + host qualified; physical scoped)
+
+- Agent-executed: direct BYOK Mode A implemented (Meta Model API
+  contract mirrored from the live-qualified 05/06 calls; Keystore
+  AES/GCM vault with session-only default and Forget Key;
+  allowlisted HTTPS client with timeouts, size caps, no retries;
+  per-action authorization dialogs; strict prediction/follow-up
+  validation; live orchestration over the EF-SESSION-01 state
+  machine; minimal Meta UI). No-tools requests; no managed
+  backend. `BenchRunner`, JNI, workload, session integrity
+  rules, and bench-result contract v1 unchanged (git-verified).
+- Agent-executed: JVM `:app:testDebugUnitTest` 119/119 OK (49
+  new: contract shape, URL allowlist, prompt identities,
+  extraction, prediction/follow-up validation matrix,
+  proposal quarantine, vault custody with fake seal,
+  orchestration with scripted mock transport, view builders).
+  Mocks are labeled and never claimed as live qualification.
+- Agent-executed regressions: session parity 1/1 OK; EF-LOOP-01
+  26/26 OK; EF-BENCH-01 19/19 OK; bench native 3/3 OK;
+  EF-DATA-02 29/29 OK; EF-DATA-03 35/35 OK; EF-META-05 14/14
+  OK; EF-META-06 39/39 OK; EF-ANDROID-01 25/25 OK;
+  EF-ANDROID-UI-01 14/14 OK; EF-META-04 12/12 PASS; EF-DATA-01
+  PASS. No Meta API calls by the agent.
+- Agent-executed: `:app:assembleBenchmark` BUILD SUCCESSFUL
+  offline; `app-benchmark.apk` verified (`ai.edgefit.diag.bench`,
+  INTERNET the sole permission, Meta classes + allowlisted URL
+  + network config + backup exclusions present). APK not
+  published; build outputs not committed.
+- Database UNCHANGED: `data/edgefit.db` SHA-256
+  `B36977AD...190FE9D` identical before and after all suites.
+  No writes, no credentials in source or artifacts
+  (grep-verified), no key in logs/exports/state.
+- EF-BYOK-01: IMPLEMENTATION PASS, HOST TEST PASS.
+
+## EF-BYOK-01 physical acceptance (executed by owner on Galaxy S22 Ultra, Android 16; not executed by agent)
+
+- One linked live session `SES-aa255b757ace13cd`: live_meta
+  prediction from `muse-spark-1.3` (12.0 generation tok/s,
+  45.0 prefill tok/s, low confidence, uncertainty disclosed)
+  recorded BEFORE the physical benchmark; benchmark
+  completed; deterministic comparison +6.417 tok/s (+53.48%,
+  prediction underestimated measurement); explicitly
+  authorized live follow-up received, displayed, and recorded
+  (insufficient for generalization, one proposed experiment,
+  not automatically executed).
+- Owner-confirmed: session contents persisted after closing
+  and reopening EdgeFit AI; Forget Key cleared the
+  user-visible stored credential state.
+- Scoped acceptance only: live prediction, benchmark
+  association, deterministic comparison, authorized
+  follow-up, relaunch persistence, key clearing. Benchmark
+  run id and export for the live session were not reported;
+  independent export inspection is DEFERRED.
+- Explicitly DEFERRED, not PASS: forced process-death and
+  activity-lifecycle edge cases; Keystore error/restoration
+  scenarios; redirect and transport hardening; comprehensive
+  public-release security qualification.
+- EF-BYOK-01: PHYSICAL SCOPED PASS. LIVE META API PASS
+  (owner-executed, one session). FULL PREDICTION→BENCHMARK→
+  FOLLOW-UP PASS (owner-executed, one session).
