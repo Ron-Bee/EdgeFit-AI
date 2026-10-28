@@ -382,3 +382,104 @@ Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
 - EF-BYOK-01: PHYSICAL SCOPED PASS. LIVE META API PASS
   (owner-executed, one session). FULL PREDICTION→BENCHMARK→
   FOLLOW-UP PASS (owner-executed, one session).
+
+## EF-AGENT-01 (implementation + host qualified; live/physical NOT RUN)
+
+- Agent-executed: bounded within-model optimization loop
+  implemented (agent parent/child sessions, evidence packs
+  with comparable/contextual split, strict proposal
+  validation, narrow runner config bridge, explicit
+  approve/reject/finish, 5-attempt budget, stagnation/user/
+  decline/invalid termination, reconcile + summaries, agent
+  dialog). Plain validated JSON, no function calling. Native
+  workload, JNI, and bench-result contract v1 unchanged
+  (git-verified); runner override path keeps legacy default
+  byte-for-byte.
+- Agent-executed: JVM `:app:testDebugUnitTest` 165/165 OK (46
+  new: 12 protocol, 7 evidence, 18 lifecycle, 5 view, 4
+  client-proposal mocks). All Python suites, EF-DATA-01, and
+  EF-META-04 12/12 green.
+- Agent-executed: `:app:assembleBenchmark` BUILD SUCCESSFUL
+  offline; APK verified to contain agent classes and the
+  config bridge. APK not published; build outputs not
+  committed. Implementation UNCOMMITTED at checkpoint time.
+- Database UNCHANGED: `data/edgefit.db` SHA-256
+  `B36977AD...190FE9D` identical before and after all suites.
+  No Meta API calls by the agent, no benchmarks run.
+- EF-AGENT-01: IMPLEMENTATION PASS, HOST TEST PASS. LIVE
+  AGENT PROPOSAL NOT RUN. PHYSICAL AGENT EXPERIMENT NOT RUN.
+  END-TO-END AGENTIC LOOP NOT RUN.
+
+## EF-MODEL-ARCH-01 (design-only reconciliation; owner review required)
+
+- Agent-executed, documentation only: incorporated the
+  owner-supplied consolidated amendment (3–5 candidate
+  shortlist; the task brief's "35" is a transcription error
+  and the amendment governs). Added FR-MODEL-01/02/03,
+  FR-EVID-01/02, NFR-MODEL-01 (all PROPOSED); PROPOSED
+  ADR-019 for optional anonymous Mode A public-evidence
+  reads with a precise no-key/no-measurements boundary;
+  master-architecture Mode A clarification plus stale-status
+  refresh against verified milestone evidence; agentic
+  within-model vs alternative-model scoping; cloud catalog
+  and `model-candidates` endpoint proposals; stats
+  cross-model read rules with quorum intact; traceability
+  rows V/W/X plus an AGENT-01 status correction.
+- No accepted ADR was changed or weakened. FR-BYOK-02 keeps
+  its no-backend-contact acceptance for the built client,
+  with a recorded pending interaction for FR-EVID-01. No
+  multi-model testing, public cohort data, cloud, website,
+  distribution, or physical work is claimed or begun.
+- EF-MODEL-ARCH-01: DESIGN COMPLETE, OWNER REVIEW REQUIRED.
+
+## EF-UX-REQ-01 (documentation only; owner review required)
+
+- Agent-executed, documentation only: owner-requirements
+  reconciliation for the pre-submission UI/UX overhaul. Added
+  FR-UX-01 (coherent main experience), FR-ONBOARD-01
+  (skippable onboarding with durable-record retirement),
+  FR-RPT-01 (report import/attachment as a separate
+  milestone) — all PROPOSED / OWNER-REQUESTED, NOT STARTED;
+  a milestone-governance rule covering all remaining
+  milestones; four open owner decisions (Skip permanence,
+  standalone-run counting, replay counting, C-vs-D order);
+  master-architecture §18 amendment + component rows 9a/9b;
+  traceability rows Y/Z/AA plus the A–G pre-submission
+  roadmap; this entry. No ADR added or amended (no new
+  architecture decision; no accepted decision conflicts);
+  agentic workflow untouched.
+- All pre-existing FR/NFR/ADR text preserved verbatim in
+  place; cloud, stats, web, and multi-model scope retained
+  long-term with statuses unchanged. Nothing designed,
+  implemented, or qualified by this milestone.
+- EF-UX-REQ-01: DESIGN COMPLETE, OWNER REVIEW REQUIRED.
+
+## EF-AGENT-01 physical acceptance (device records read by agent via run-as; runs executed by owner on Galaxy S22 Ultra, Android 16)
+
+- Agent parent `SES-a77eaa6f4cd92641`, budget 4/5 after four
+  attempts. Experiment 4 child `SES-63a4ace2c6d85778`:
+  proposal `81c7c178` approved (256/4/64, expected 17.5/27.0
+  tok/s, citing exp-1 baseline); run
+  `BENCH-20261028T224503Z-38ccf1f5` (source `06ac974d…`)
+  COMPLETED with executed config equal to approved config;
+  measured 17.738359201773836 generation / 30.997304582210244
+  prefill tok/s; host comparison +0.238 (+1.36%) / +3.997
+  (+14.8%); explicitly authorized live follow-up recorded
+  from `muse-spark-1.3` (underestimated, supports_conclusion
+  false, single-observation limits stated).
+- Same-second attachment (prediction and collection both
+  `22:45:03Z`) succeeded on device: FIX2 physically verified.
+  Prior rejected experiments 2/3 preserved bit-identically;
+  failed runs correctly excluded from evidence packs.
+- Agent-executed host evidence at checkpoint: JVM
+  `:app:testDebugUnitTest` 202/202 OK (AGENT-01 + FIX + FIX2
+  suites); `:app:assembleBenchmark` BUILD SUCCESSFUL;
+  EF-META-04 12/12 PASS. Python suites NOT RUN (no
+  interpreter in agent environment).
+- Scoped only: one approved-experiment loop + exp-1 cycle.
+  Stagnation/invalid-strike/reject termination paths remain
+  UNQUALIFIED live. No statistical or causal optimization
+  improvement is established (n=1 per config; thermal
+  conditions differed between runs).
+- EF-AGENT-01: PHYSICAL SCOPED PASS. LIVE AGENT PROPOSAL
+  PASS. END-TO-END AGENTIC LOOP PASS (scoped).
