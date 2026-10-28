@@ -26,18 +26,22 @@ DEPLOYED · PRODUCTION QUALIFIED · BLOCKED per EF-ARCH-02.
 | # | Component | Status | Notes |
 |---|---|---|---|
 | 1a | Windows SQLite prototype (profiles, experiments, predictions, observations) | QUALIFIED | EF-DATA-01 fixtures + EF-DATA-02 import, workstation-hosted |
-| 1b | On-device Android private session store | NOT STARTED | App holds no SQLite/Room code; JSON export only |
+| 1b | On-device Android private session store | IMPLEMENTED · HOST QUALIFIED · PHYSICAL SCOPED | EF-SESSION-01: atomic-file store (see §17); JVM 70/70; one owner session observed |
 | 2 | EdgeFit cloud backend (auth API, validation, consent, retrieval) | PROPOSED | `api.edgefit.ronbeesoftware.com` (proposed, not configured) |
 | 3 | Global SQL evidence database (consented, qualified, deduplicated) | PROPOSED | Multi-device; Cloudflare D1 candidate |
 | 4 | Muse Spark connection | QUALIFIED PROTOTYPE (Windows-hosted EF-META-05) | Live round trip qualified on workstation; cloud orchestration PROPOSED |
-| 4a | Direct BYOK mode (Mode A) | PROPOSED (direction ACCEPTED, ADR-015) | User key, direct HTTPS, Keystore rules; not built |
+| 4a | Direct BYOK mode (Mode A) | IMPLEMENTED · HOST QUALIFIED · PHYSICAL SCOPED + LIVE 1 session | EF-BYOK-01: vault, allowlisted HTTPS, validation; JVM 119/119; one owner live loop |
 | 4b | Managed service mode (Mode B) | PROPOSED | Server-side key; not built, never claimed |
+| 4c | Mode A public evidence reads | PROPOSED (EF-MODEL-ARCH-01, ADR-019) | Anonymous catalog/aggregate reads; backend undeployed |
 | 5 | Public explorer `edgefit.ronbeesoftware.com` | PROPOSED | Static site over public API (proposed, not configured) |
+| 5a | Model catalog + candidate evidence | PROPOSED (EF-MODEL-ARCH-01) | Catalog + `model-candidates` endpoint design; nothing served |
 | 6 | Backend API contract EF-CLOUD-01 | PROPOSED | `docs/ef-cloud-01-api-contract.md` |
 | 6a | Stats methodology EF-STATS-01 | PROPOSED | Annex to EF-CLOUD-01 per ADR-018 |
 | 7 | GitHub source + public snapshots | IMPLEMENTED (source) / PROPOSED (snapshots) | Never the live database |
-| 8 | Android session store | NOT STARTED | Contract in §17; EF-SESSION-01 |
-| 9 | Bounded agentic loop | PROPOSED (design) | `docs/edgefit-agentic-workflow.md`; workstation loop HOST QUALIFIED |
+| 8 | Android session store | IMPLEMENTED · HOST QUALIFIED · PHYSICAL SCOPED | Same component as 1b; contract in §17; EF-SESSION-01 |
+| 9 | Bounded agentic loop | IMPLEMENTED · HOST QUALIFIED · PHYSICAL SCOPED | EF-AGENT-01: committed bf56878; JVM 202/202; S22 exp-4 loop + FIX2 verified; termination paths unqualified |
+| 9a | UX overhaul + onboarding | PROPOSED (requirements only) | EF-UX-REQ-01: FR-UX-01, FR-ONBOARD-01; nothing designed or built |
+| 9b | Report import/attachment | PROPOSED (requirements only) | EF-UX-REQ-01: FR-RPT-01, separate milestone; exporter exists, importer none |
 | 10 | Signed distribution | NOT STARTED | `docs/edgefit-release-and-distribution.md`; EF-DIST-01 |
 
 `ronbeesoftware.com` subdomains, Cloudflare Workers, and D1 are
@@ -59,12 +63,19 @@ Global evidence DB        Meta Muse Spark (responses API)
 Public explorer (static site)
 ```
 
-v2 Mode A (direct BYOK, PROPOSED direction ACCEPTED): the phone
-additionally calls `api.meta.ai` directly over HTTPS with the
-developer's own key (explicit taps only, session custody default).
-No EdgeFit backend is contacted in this mode; the user's key never
-leaves the phone except to Meta. Mode B (managed service) keeps the
-topology above with a server-side key and remains PROPOSED.
+v2 Mode A (direct BYOK, direction ACCEPTED, client IMPLEMENTED
+per EF-BYOK-01): the phone calls `api.meta.ai` directly over HTTPS
+with the developer's own key (explicit taps only, session custody
+default). The demonstrated client contacts no EdgeFit backend in
+this mode; the user's key never leaves the phone except to Meta.
+EF-MODEL-ARCH-01 clarification (PROPOSED, ADR-019): Mode A MAY
+additionally perform explicitly authorized, anonymous, read-only
+public API reads for the model catalog and PUBLISHED aggregate
+cohorts — carrying no key, no private measurements, and no
+identity — while Meta requests stay direct phone-to-Meta. The
+read MUST NOT be represented as available while the backend is
+undeployed. Mode B (managed service) keeps the topology above
+with a server-side key and remains PROPOSED.
 
 GitHub holds source plus periodic approved JSON snapshots for
 transparency; it is never queried as a live database.
@@ -81,6 +92,20 @@ transparency; it is never queried as a live database.
 5. Backend validates, deduplicates, qualifies, and publishes.
 6. Future predictions retrieve the enlarged evidence set. Loop closes.
 
+## 3a. Cross-model candidate selection (EF-MODEL-ARCH-01, PROPOSED)
+
+A recommendation view, NOT an aggregate cohort: the host screens
+catalog artifacts for device/runtime compatibility (FR-MODEL-01),
+retrieves bounded PUBLISHED cohorts per candidate plus local
+measurements (FR-EVID-01/02), Muse predicts per-candidate
+throughput side by side with provenance and uncertainty
+(FR-MODEL-02), and the developer explicitly selects, stages, and
+benchmarks one artifact with prediction-before-measurement
+(FR-MODEL-03). Catalog metadata never proves compatibility;
+predictions never pool across model SHAs; no downloads, model
+switches, or runs happen without separate approval. Nothing in
+this section is implemented; no public cohort data exists.
+
 ## 4. Request initiation map
 
 | Request | Initiator | Target | Auth |
@@ -91,6 +116,7 @@ transparency; it is never queried as a live database.
 | Evidence retrieval for Muse | Backend tool dispatcher | Global DB | Internal only |
 | Muse prediction call | Backend API client | `api.meta.ai` | Server-side key |
 | BYOK prediction/follow-up (Mode A) | Phone app (explicit tap) | `api.meta.ai` | User key, device-held |
+| Public catalog/aggregates (Mode A, PROPOSED opt-in) | Phone app (explicit tap) | Backend public API | None; no key/measurements sent |
 | Snapshot publish | Owner workstation | GitHub | Maintainer push |
 
 The phone accepts no inbound connections. Browsers never call Meta.
@@ -121,8 +147,10 @@ backend (upload token / anonymous) — never any other host.
 
 Workstation prototype (private SQLite, EF-DATA-01/02, QUALIFIED):
 `device_profiles`, `experiments`, `predictions`, `benchmark_runs`,
-`physical_device_profiles`. A future on-device session table is NOT
-STARTED; the Android app currently persists nothing itself.
+`physical_device_profiles`. On-device sessions are IMPLEMENTED via
+EF-SESSION-01 (app-private atomic-file store, §17) — the earlier
+NOT STARTED statement is superseded; the phone persists local
+session records itself and still uploads nothing automatically.
 
 Global (one row per accepted submission, plus rollups):
 `submissions` (id, install id hash, model sha, config hash, workload
@@ -277,11 +305,15 @@ never stored. Revocation: consent withdrawal (or a fraud finding)
 moves any held state to `revoked`, tombstoned and excluded from
 aggregates; revoked rows never return to the pipeline.
 
-## 17. Android private session store (v2, PROPOSED)
+## 17. Android private session store (v2, IMPLEMENTED per EF-SESSION-01)
 
 Fulfills component 1b. One session per prediction → benchmark →
-recommendation loop, persisted in app-private storage (SQLite/Room
-or equivalent — implementation choice, EF-SESSION-01):
+recommendation loop, persisted in app-private storage. The
+SQLite/Room-vs-file choice is resolved: EF-SESSION-01 built a
+bounded atomic-file store (one JSON record per session, temp +
+fsync + atomic rename, quarantine, backup exclusions), HOST
+QUALIFIED with one owner-observed physical session; lifecycle
+edge cases remain deferred per the qualification record:
 
 - `session_id` (random, stable), `created_at_utc`, `mode` (byok).
 - `model_sha256`, `model_size_bytes`, `profile_sha256`
@@ -318,3 +350,23 @@ gates and a compatibility matrix; Play later on the same package.
 Requirements live in `edgefit-product-requirements.md`; the
 agentic loop in `edgefit-agentic-workflow.md`; traceability in
 `ef-arch-02-traceability.md`.
+
+EF-UX-REQ-01 product-surface amendment (PROPOSED /
+OWNER-REQUESTED, requirements only): the owner rates the
+current diagnostic-style main screen ~3/10 for polish and
+intuitiveness (subjective baseline) and requires a dedicated
+overhaul before hackathon submission. FR-UX-01 restates the
+journey above as a discoverable, progressively disclosed main
+experience; it changes presentation, never benchmark
+methodology, evidence rules, or explicit user controls, and
+mandates no toolkit or branding. FR-ONBOARD-01 adds a
+skippable, offline, three-topic introduction that retires
+after three durable session-backed completions (standalone
+runs leave no session record and do not count; Skip
+permanence is an open owner decision). FR-RPT-01 reserves
+report import/attachment as a separate milestone under
+ADR-011/ADR-013. None of this is designed or built; the
+pre-submission sequence (agent qualification → UX design →
+UX build → report milestone → device crawl → distribution
+gates → demo) is recorded in the traceability roadmap, with
+cloud, stats, web, and multi-model work retained long-term.

@@ -73,6 +73,26 @@ threshold the API returns the cohort definition, both counts, and:
 It MUST NOT return means, medians, or error bars for thin cohorts,
 and MUST NOT silently widen the cohort to reach threshold.
 
+## Cross-model recommendation reads (EF-MODEL-ARCH-01, PROPOSED)
+
+Candidate retrieval (`GET /v1/evidence/model-candidates`) serves
+per-candidate exact cohorts under the same rules: PUBLISHED rows
+only, full grouping keys, quorum enforced independently per
+cohort — a candidate without a quorum-passing cohort returns
+`insufficient-evidence`, never a borrowed or partial mean. The
+endpoint MUST NOT leak below-quorum means, ranges, run-level
+detail, revoked rows, or withheld records through candidate
+queries, related-cohort fallbacks, or ranking metadata.
+`related_cohort` classes (published but non-matching conditions)
+and `catalog_metadata` (artifact facts, not measurements) may
+appear labeled as contextual/heuristic input only; they are
+never averaged, never counted toward quorum, and never pooled
+across model SHAs. A comparison view is a recommendation
+surface, NOT a statistical cohort: side-by-side display is
+allowed, pooled aggregation is forbidden. Cohort definition,
+quorum (5 runs / 3 installs, provisional), tiers, and consent
+scopes above are unchanged by this section.
+
 ## Device-count privacy (open design)
 
 EdgeFit stores no stable hardware identifier by design. Counting

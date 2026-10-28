@@ -6,6 +6,15 @@ unbounded agent. This design extends workstation-qualified patterns
 deterministic errors) to Android BYOK operation. Conditioning Muse
 with evidence is not training; ADR-014 applies to every publication.
 
+Scope: the loop below governs **within-model configuration
+optimization** — one staged GGUF, varying host-approved config
+values (EF-AGENT-01 implements this on Android).
+**Alternative-model discovery and selection** is a separate
+PROPOSED scope (EF-MODEL-ARCH-01, FR-MODEL-01/02/03): same
+host-authority rules, but cross-model comparison is a
+recommendation view, never a pooled cohort — see
+"Alternative-model selection" below.
+
 ## Roles
 
 Muse MAY: inspect approved device/model evidence; retrieve
@@ -20,11 +29,14 @@ The Android host MUST: validate every model-proposed argument
 against pinned schemas; enforce configuration bounds (contract v1
 ranges, fixed greedy workload); preserve the original prediction
 immutably; compute all comparison numbers deterministically;
-restrict network access to the Meta endpoint and restrict local
-tool access to the allowlist; require explicit user approval
-before each benchmark execution; enforce a finite per-session
-experiment budget; label measured improvements vs speculative
-recommendations; never execute model-supplied code, shell, or SQL.
+restrict network access to the Meta endpoint — plus, only under
+EF-MODEL-ARCH-01 (PROPOSED, ADR-019), explicitly authorized
+anonymous public-evidence reads carrying no key and no private
+measurements — and restrict local tool access to the allowlist;
+require explicit user approval before each benchmark execution;
+enforce a finite per-session experiment budget; label measured
+improvements vs speculative recommendations; never execute
+model-supplied code, shell, or SQL.
 
 ## Session loop (one approval per experiment)
 
@@ -73,6 +85,27 @@ the reason recorded. Network failure: the call fails loud, the
 budget is not charged, the session stays resumable. Invalid model
 output: rejected with schema errors, one re-ask allowed per
 stage, then the stage fails with user-visible cause.
+
+## Alternative-model selection (EF-MODEL-ARCH-01, PROPOSED)
+
+Within-model optimization varies config for one staged artifact;
+alternative-model selection compares different artifacts and
+therefore needs catalog identity, per-candidate cohorts, and a
+model handoff the loop above never performs. The host's
+compatibility and approval authority extends unchanged: only
+host-screened candidates are actionable (FR-MODEL-01); Muse
+citations are validated against supplied ids and false
+`measured` claims are rejected (FR-MODEL-02); the developer
+selects, stages, and authorizes exactly one benchmark per
+approval with the prediction and its immutable evidence packet
+committed first (FR-MODEL-03). The host never automatically
+downloads, switches models, or runs an experiment. Cross-model
+evidence packs carry source-labeled local measurements plus
+PUBLISHED aggregates (or explicit insufficient-evidence); the
+bounded pack and 5-experiment budget rules apply per
+optimization session, and each newly staged model starts its
+own evidence chain — measurements never migrate across model
+SHAs. Nothing in this section is implemented.
 
 ## What this is not
 

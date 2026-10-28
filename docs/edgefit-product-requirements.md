@@ -39,6 +39,11 @@ with the user's key, only from explicit user actions, with per-action
 field and cost disclosure. Dependencies: FR-BYOK-01. Status:
 PROPOSED. Acceptance: airplane-mode refusal; proxy log shows only
 `api.meta.ai` with disclosed fields; no EdgeFit backend contact.
+Pending interaction (EF-MODEL-ARCH-01, PROPOSED): FR-EVID-01 would
+permit explicitly authorized anonymous public-evidence reads
+carrying no key and no private measurements; at implementation
+time this acceptance line MUST be revised to name that exception
+instead of contradicting it. Until then, no backend contact stands.
 
 ### FR-BYOK-03 Key removal and optional persistence
 
@@ -141,6 +146,177 @@ behavior, with every claim traceable to the matrix in
 qualifications. Status: PROPOSED (EF-DEMO-01 deferred).
 Acceptance: claim-by-claim trace review passes.
 
+### FR-MODEL-01 Compatible model discovery (EF-MODEL-ARCH-01, PROPOSED)
+
+The host SHALL assemble a shortlist of up to 3–5 candidate
+on-device model artifacts for the current Android device when
+credible candidates exist. Candidate screening SHALL use: exact
+artifact identity when available (GGUF SHA-256), model
+architecture/tokenizer, quantization, minimum supported
+runtime/backend, CPU ABI/architecture, device memory with
+realistic runtime headroom, storage requirements, context
+support, and artifact license/source. Compatibility statuses
+SHALL be `verified_compatible`, `likely_compatible_unverified`,
+`unsupported`, or `insufficient_evidence`; the UI must explain
+the specific basis. A Muse assertion alone is not compatibility
+proof. No automatic downloads or execution. Dependencies:
+EF-CLOUD-01 model catalog (PROPOSED), ADR-012. Status: PROPOSED;
+no multi-model on-device testing exists. Acceptance: unsupported
+architecture, incompatible quantization, insufficient RAM,
+unknown artifact hash, missing license, duplicate candidates,
+stale metadata, and no-candidate cases tested; only
+host-approved candidates are actionable.
+
+### FR-MODEL-02 Evidence-grounded comparative prediction (EF-MODEL-ARCH-01, PROPOSED)
+
+Muse MAY provide per-candidate predicted generation and prefill
+throughput and estimated RAM/storage only where supportable,
+plus confidence/uncertainty, prediction basis, matched/related
+cohort IDs, alternative explanations, and explicit data gaps.
+The host SHALL independently reject fabricated citation IDs,
+invalid model identities, non-finite values, and false
+`measured` claims. The UI SHALL distinguish `locally_measured`,
+`globally_aggregated`, `extrapolated_prediction`,
+`heuristic_prediction`, and `unavailable`. Predictions for
+different model SHA artifacts may be compared side by side,
+never pooled as one cohort or interpreted as a scientifically
+matched comparison. The standard workload text is fixed, but
+model tokenizer prompt-token counts may differ. Dependencies:
+FR-MODEL-01, FR-AGENT-01, EF-STATS-01. Status: PROPOSED; no
+public cohort data exists. Acceptance: valid mixed-evidence
+and no-evidence fixtures; provenance mismatch rejection;
+thin-cohort exclusion; verified prediction-versus-actual
+labels; user-visible confidence and limits; exact
+model/config/build identity in comparisons.
+
+### FR-MODEL-03 Explicit model selection and benchmark handoff (EF-MODEL-ARCH-01, PROPOSED)
+
+A developer MAY select a recommended model for a new benchmark
+only when the actual staged artifact passes SHA-256 identity,
+format/runtime support, local device/resource preflight, and
+license/usage requirements. Selection SHALL NOT silently
+download a GGUF, switch models, spend API quota, or start
+inference. The relevant prediction and its immutable evidence
+packet SHALL be durably recorded before an approved run; actual
+executed configuration and benchmark identity shall be linked
+to the selected artifact. If an artifact is absent or
+unverified, offer an informational recommendation without an
+executable Run control. Dependencies: FR-MODEL-02,
+EF-SESSION-01. Status: PROPOSED. Acceptance: one authorization
+→ one run; wrong-artifact and stale-evidence refusal; restart,
+cancellation, duplicate action, and mismatch tests; standalone
+offline benchmark unaffected.
+
+### FR-EVID-01 Bounded global evidence discovery for Mode A (EF-MODEL-ARCH-01, PROPOSED)
+
+The Android host SHALL be able to retrieve read-only published
+model catalog and comparable aggregate data from the EdgeFit
+public evidence API without passing a BYOK key or private local
+measurements to that API. The host SHALL enforce bounded
+query/results, exact source tags, response validation, no
+below-quorum leakage, independent opt-in/disclosure, and
+offline fallback. Host-to-Meta transmission remains separately
+authorized. Dependencies: EF-CLOUD-01 public API (PROPOSED),
+FR-BYOK-02 (acceptance interaction noted above). Status:
+PROPOSED; the backend is undeployed. Acceptance: fake API
+returns unpublished/revoked/thin cohorts, invalid model
+hashes, wrong version, oversized payload, redirect to an
+unapproved host, and unavailable service; all fail closed or
+degrade honestly without blocking offline inference. Network
+inspection shows the Meta key sent only to the official Meta
+service.
+
+### FR-EVID-02 Host-mediated internal evidence retrieval for Mode B (EF-MODEL-ARCH-01, PROPOSED)
+
+The backend SHALL provide narrow, purpose-scoped, audited
+internal retrieval operations for Muse, sharing only approved
+eligible aggregate data by default. Any access to nonpublic
+individual data requires separate explicit governance,
+authorization, and acceptance tests, and is not authorized by
+this amendment. No SQL, private database credentials, or
+arbitrary network access is exposed to Muse. Dependencies:
+EF-CLOUD-01, ADR-008. Status: PROPOSED. Acceptance: schema
+allowlists, parameter constraints, deterministic selection,
+limits, revoked/private-data exclusion, audit provenance, and
+injection tests pass.
+
+### FR-UX-01 Coherent main application experience (EF-UX-REQ-01, PROPOSED)
+
+The app SHALL present a coherent main experience in which
+existing functionality is easier to discover, understand, and
+use, without changing what that functionality does: current
+device capabilities and readiness; current staged model and
+compatibility status; the active or most recently relevant
+session; the next available workflow action; benchmark results
+and prior sessions; optional Meta connection state; Agent
+recommendations and approved experiment history; and
+report/evidence management once implemented (FR-RPT-01). The
+experience SHALL follow master architecture §18 and SHALL use
+progressive disclosure — plain workflow language first, with
+exact model SHA, benchmark config and workload, predicted-vs-
+measured values, measurement provenance, run/session ids,
+evidence limits, approval decisions, and truthful errors one
+step away, never replaced by paraphrase (FR-UI-01 and FR-UI-02
+detail surfaces are preserved, not superseded). Predictions
+SHALL never be presented as measured facts; disabled or
+unavailable capabilities SHALL NOT appear functional. No
+visual framework, toolkit, branding, or layout implementation
+is mandated here. The owner's 3/10 rating is a subjective
+design baseline, not a measured metric. Dependencies:
+FR-UI-01, FR-UI-02, EF-SESSION-01, EF-BYOK-01, EF-AGENT-01.
+Status: PROPOSED / OWNER-REQUESTED; NOT STARTED. Acceptance:
+scripted reachability walk of every §18 step on device;
+provenance spot-checks match artifacts; disabled states
+verified non-functional; accessibility spot-checks per
+NFR-A11Y-01.
+
+### FR-ONBOARD-01 Skippable first-run onboarding (EF-UX-REQ-01, PROPOSED)
+
+The app SHALL offer a concise, immediately skippable first-run
+introduction explaining only: (1) inspect the device and stage
+a compatible model; (2) run a real local benchmark and read
+its results; (3) optionally connect Meta Muse for predictions
+and developer-approved experiments. Onboarding SHALL require
+no account, no Meta credential, no downloads, no paid
+requests, no benchmarks, and no network. It SHALL retire
+automatically after three distinct qualifying completions,
+derived from durable session records: a record counts iff it
+is top-level (`parentSessionId == null`), has an attached
+`COMPLETED` benchmark and a `comparable` comparison (agent
+parents additionally require `finished` status with at least
+one qualifying child; agent children never count directly;
+failures, cancels, abandoned and prediction-only records
+never count). Standalone benchmark-only runs leave no session
+record and therefore do not count under this rule (see owner
+decision below). Relaunch or update SHALL NOT reset the
+count. Whether manual Skip permanently disables onboarding or
+dismisses only the current introduction is an OPEN OWNER
+DECISION — no behavior is specified here. A future Help/replay
+entry MAY be proposed separately. Dependencies: EF-SESSION-01
+(state semantics), FR-UX-01. Status: PROPOSED /
+OWNER-REQUESTED; NOT STARTED. Acceptance: offline first-run
+walk; skip path; three-completion retirement verified across
+relaunch; failure/abandon/duplicate cases verified
+non-counting; cloud/multi-model never described as
+operational.
+
+### FR-RPT-01 Report import and attachment (EF-UX-REQ-01, PROPOSED)
+
+Report import SHALL be a separate milestone from the UI
+overhaul, exposing: result export (exists), artifact import,
+contract validation, explicit attach/bind by model, workload,
+and configuration identity, duplicate/contradiction refusal,
+imported-vs-locally-measured labeling, and original hash +
+provenance preservation. ADR-011 (explicit gates) and ADR-013
+(no self-verification) govern: an imported report SHALL never
+automatically become physically verified, globally qualified,
+or published. The milestone depends on FR-UX-01 surfaces for
+exposure but SHALL NOT be absorbed into it. Dependencies:
+EF-BENCH-01 (contract v1), EF-SESSION-01, FR-UX-01. Status:
+PROPOSED; NOT STARTED. Acceptance: round-trip
+export→import→attach with hash equality; mismatch/duplicate
+refusal matrix; imported labeling verified in UI and store.
+
 ## Nonfunctional requirements
 
 ### NFR-PERF-01 Native inference performance
@@ -202,3 +378,57 @@ filename-only association. Status: HOST QUALIFIED.
 Offline Gradle + NDK builds from a clean checkout with pinned
 third-party instructions; no machine-local paths in docs. Status:
 HOST QUALIFIED (offline build verified).
+
+### NFR-MODEL-01 Evidence quality and ranking integrity (EF-MODEL-ARCH-01, PROPOSED)
+
+Ranking SHALL expose its decision factors (feasibility, measured
+evidence coverage, estimated performance, memory headroom,
+license, and uncertainty) and SHALL NOT fabricate a total
+ordering when evidence is insufficient. It shall be possible to
+return fewer than three candidates or "no justified
+recommendation." Measured compatible-cohort evidence ranks above
+extrapolations, but published measurements remain
+device-reported/rule-qualified, not independent
+hardware-attested proof. Dependencies: FR-MODEL-01,
+FR-MODEL-02. Status: PROPOSED.
+
+## Milestone governance rule (EF-UX-REQ-01, OWNER-REQUESTED)
+
+This rule covers ALL remaining engineering milestones. At the
+beginning of every milestone, the implementing agent SHALL:
+(1) read the current local master architecture; (2) read
+relevant product requirements; (3) read applicable
+architecture decisions; (4) read the traceability matrix and
+current qualification status; (5) identify the current
+approved implementation baseline; (6) identify the exact
+requirement IDs being addressed; (7) state the milestone's
+scope and exclusions; (8) identify preservation constraints
+and protected evidence. At the end of every milestone, the
+agent SHALL: (1) list all changed files; (2) map every
+material change to a requirement or approved defect; (3)
+verify continued compliance with accepted ADRs; (4) report
+tests and their exact outcomes; (5) distinguish host,
+emulator, physical, live API, and production qualification;
+(6) identify untested behavior and residual risks; (7)
+confirm preservation of protected data; (8) identify any new
+architecture conflicts or owner decisions; (9) recommend
+exactly one next engineering milestone; (10) stop without
+beginning that next milestone. No milestone may silently
+expand its scope. No code, evidence, or release claim becomes
+qualified solely because Muse describes it as complete.
+
+## Open owner decisions (EF-UX-REQ-01)
+
+1. Onboarding Skip semantics: whether manual Skip permanently
+   disables onboarding before three completions or dismisses
+   only the current introduction. No default is specified.
+2. Standalone benchmark-only runs leave no session record;
+   whether a future minimal run record should let them count
+   toward onboarding retirement, or they remain non-counting
+   (recommended for v1: non-counting, no schema change).
+3. Whether `historical_replay`-sourced completions qualify
+   toward onboarding retirement (recommended: excluded, since
+   replays do not demonstrate the live workflow).
+4. Relative ordering of UX implementation (roadmap step C) vs
+   report import/attachment (roadmap step D); neither may
+   absorb the other — see traceability roadmap.

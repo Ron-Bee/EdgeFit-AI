@@ -93,6 +93,33 @@ rows only. No install ids, no raw prompts beyond the workload id.
 Qualified model artifacts: `[{"sha256", "display_name",
 "size_bytes", "license_id", "run_count"}]`.
 
+EF-MODEL-ARCH-01 extension (PROPOSED): verified catalog with
+optional `architecture`, `gguf_type`, `quantization`,
+`tokenizer`, `runtime_support`, `min_runtime_version`,
+`size_bytes`, `estimated_working_set` (with derivation/status),
+`license_id`, `source_id`, `artifact_sha256`,
+`metadata_verified_at`, `catalog_status`. Illustrative proposed
+fields; final contract and verification rules need independent
+review. Run count MUST NOT be read as compatibility proof.
+
+### GET /v1/evidence/model-candidates (public, PROPOSED)
+
+Bounded catalog-plus-published-cohort retrieval for model
+discovery. Allowlisted versioned inputs: device class, ABI,
+runtime/backend, memory envelope, workload id / prompt hash,
+intended context, `limit` (max 5). Exact security/privacy rules
+govern which device fields may be sent; no private local
+measurements, user identity, API keys, or device serials are
+required or accepted. Response: compatibility metadata, cohort
+identities, and PUBLISHED stats (or explicit
+`insufficient_evidence`) — never raw community rows. Query
+scope is validated to prevent enumeration of unpublished
+groups or backdoor retrieval of below-quorum statistics. The
+model artifact catalog and the benchmark evidence/aggregate
+store remain distinct data domains even if deployed in one
+database; a family label is never a substitute for an exact
+artifact SHA-256.
+
 ### Internal: evidence_retrieve (not HTTP)
 
 Server dispatcher function for Muse tool calls. Fixed name,
@@ -101,6 +128,15 @@ sets extended by backend qualification, deterministic order, hard
 cap 3. The underlying query is fixed and parameterized; model
 input never becomes SQL. Returns aggregate cites only. Extends
 EF-META-05 behavior.
+
+EF-MODEL-ARCH-01 extension (PROPOSED): separately versioned
+fixed-schema operations such as
+`retrieve_published_model_candidates` and
+`retrieve_published_cohort_aggregates`. These tool names are
+proposals, not implemented functions. Public and internal
+interfaces share eligibility/policy enforcement; internal tool
+access MUST NOT become an alternate path around consent or
+quorum (FR-EVID-02).
 
 ## Quotas and provenance
 

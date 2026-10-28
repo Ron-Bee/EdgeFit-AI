@@ -175,3 +175,28 @@ both align on min_n=5 / min_installs=3 and install-based counting
 until attestation exists. Consequences: EF-STATS-01 implements
 against the reconciled contract; the two S22 Ultra rows stay
 unpublished (n=1 cohorts).
+
+## ADR-019 Optional anonymous public evidence reads in direct BYOK mode (PROPOSED / OWNER REVIEW REQUIRED)
+
+Context: EF-MODEL-ARCH-01 observes that direct BYOK Mode A cannot
+incorporate qualified global cohort data while "no EdgeFit
+backend is contacted in this mode" stands as a universal rule.
+Accepted custody (Amendment 002-A, ADR-015) already permits the
+phone to hold the user's key; the gap is read-only evidence, not
+credentials. Decision: Mode A MAY perform explicitly authorized,
+anonymous, read-only public API reads for the model catalog and
+PUBLISHED aggregate cohorts. Precise boundary: the request
+carries no Meta key, no private measurements, no install
+identity, no serials, and no user identity — a bounded
+device-class envelope only; the response carries catalog
+metadata plus quorum-passing aggregates, never raw rows,
+revoked data, or below-quorum statistics; Meta requests still
+travel directly phone-to-`api.meta.ai` on the user key; a read
+is never consent to upload; offline operation is unaffected;
+and the read MUST NOT be represented as available while the
+backend is undeployed. Mode B separation is unchanged: the
+service credential stays backend-only, and internal retrieval
+needs its own governance (FR-EVID-02). Consequences: master
+architecture Mode A text and FR-BYOK-02 acceptance gain a named
+exception at implementation time; FR-EVID-01 owns the client
+rules; nothing here authorizes uploads, sync, or managed mode.
