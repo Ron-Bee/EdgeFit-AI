@@ -30,6 +30,43 @@ measured execution, never estimated or inferred.
 
 Unknown top-level fields are rejected unless prefixed `x_`.
 
+Optional `x_` blocks (accepted, never required):
+
+- `x_native_build`: `{variant, native_opt, ...}` (EF-BENCH-02).
+- `x_mem_recheck` (EF-MEM-01): present only when a sole
+  near-threshold memory miss engaged admission rechecking.
+  `{required_bytes, initial_avail_bytes, initial_low_memory,
+  rechecks_attempted, admitted, recheck_ms, samples[]}`,
+  where each sample is `{avail_bytes, low_memory,
+  elapsed_realtime_ms}`. The recheck interval sits outside
+  the measurement window and never alters timings.
+- `x_mem_diag` (EF-MEM-02): present only when the developer
+  enabled memory diagnostics for that launch.
+  `{instrumented: true, build_variant, native_opt,
+  non_confirmatory, samples[]}`, where each sample is
+  `{checkpoint, elapsed_realtime_ms, avail_bytes,
+  low_memory, threshold_bytes, pss_kb, private_dirty_kb,
+  native_heap_bytes, java_heap_bytes}` with `null` for
+  unavailable signals. Instrumented runs are excluded
+  from confirmatory cohorts until an on/off overhead
+  assessment exists. Checkpoints: app_idle, home_shown,
+  sessions_opened/closed, model_staged, config_ready,
+  pre_admission, post_recheck, pre_native, post_native
+  (inference-complete + native cleanup merged: native
+  frees before returning, so no separate post-load
+  peak is observable), failure_handled.
+- `x_mem_conditions` (EF-MEM-03): recorded for EVERY
+  new run with default diagnostics disabled.
+  `{total_ram_bytes, avail_bytes_start, avail_pct_start,
+  warning_threshold_pct (=15.0), below_threshold_start,
+  low_memory_start, low_threshold_bytes, avail_bytes_end,
+  avail_pct_end, method}`. Absent only on pre-MEM-03
+  records, which readers display as Unknown (never 0%).
+- `x_failure` (EF-MEM-03): present only on
+  non-completed runs. `{stage, native_started}` names
+  where the run stopped and whether native code was
+  entered; it never fabricates a cause.
+
 ## device
 
 Snapshot of the platform at run start plus a reference hash of the full

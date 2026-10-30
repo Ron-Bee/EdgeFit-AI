@@ -362,8 +362,9 @@ methodology, evidence rules, or explicit user controls, and
 mandates no toolkit or branding. FR-ONBOARD-01 adds a
 skippable, offline, three-topic introduction that retires
 after three durable session-backed completions (standalone
-runs leave no session record and do not count; Skip
-permanence is an open owner decision). FR-RPT-01 reserves
+and replay counting plus Skip permanence decided by
+UX-D01…UX-D03; see `ef-ux-01-design.md` §E/§F).
+FR-RPT-01 reserves
 report import/attachment as a separate milestone under
 ADR-011/ADR-013. None of this is designed or built; the
 pre-submission sequence (agent qualification → UX design →

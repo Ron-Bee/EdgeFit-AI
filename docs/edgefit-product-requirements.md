@@ -77,6 +77,24 @@ Dependencies: FR-AGENT-01. Status: PROPOSED (workstation HOST
 QUALIFIED). Acceptance: error math matches artifacts; banned-claim
 scan passes on host text.
 
+### FR-AGENT-04 Authorized repeat measurements (EF-FOLLOWUP-02)
+
+The host SHALL support developer-authorized repeats of a
+previously measured configuration as NEW linked records: each
+repeat carries the source prediction with immutable original
+timestamp plus explicit carried-from provenance, executes exactly
+one new physical run under a new run ID, and becomes eligible
+for its own host comparison and explicitly authorized follow-up.
+Source records are never reopened or overwritten. Agent repeats
+require a `purpose: repeat` proposal citing an eligible run with
+exact config/model/workload match, and consume one of the five
+experiment attempts. Dependencies: FR-AGENT-01, FR-AGENT-02,
+FR-AGENT-03. Status: IMPLEMENTED (EF-FOLLOWUP-02, host
+qualification pending). Acceptance: repeat attaches only with
+new run ID + matching identity; source bytes unchanged;
+budget charged; unmarked no-change proposals still refused;
+follow-up context cites current + bounded priors.
+
 ### FR-STATS-01 Compatible cohort statistics
 
 Public statistics SHALL group only identical model bytes, build
@@ -160,8 +178,12 @@ SHALL be `verified_compatible`, `likely_compatible_unverified`,
 `unsupported`, or `insufficient_evidence`; the UI must explain
 the specific basis. A Muse assertion alone is not compatibility
 proof. No automatic downloads or execution. Dependencies:
-EF-CLOUD-01 model catalog (PROPOSED), ADR-012. Status: PROPOSED;
-no multi-model on-device testing exists. Acceptance: unsupported
+EF-CLOUD-01 model catalog (PROPOSED), ADR-012. Status:
+PARTIAL (EF-MODEL-01A, HOST QUALIFIED): the offline bundled
+catalog implements candidate screening + presentation with
+stated bases; the cloud catalog dependency and on-device
+multi-model testing remain open, and physical review is
+pending. Acceptance: unsupported
 architecture, incompatible quantization, insufficient RAM,
 unknown artifact hash, missing license, duplicate candidates,
 stale metadata, and no-candidate cases tested; only
@@ -289,10 +311,9 @@ failures, cancels, abandoned and prediction-only records
 never count). Standalone benchmark-only runs leave no session
 record and therefore do not count under this rule (see owner
 decision below). Relaunch or update SHALL NOT reset the
-count. Whether manual Skip permanently disables onboarding or
-dismisses only the current introduction is an OPEN OWNER
-DECISION — no behavior is specified here. A future Help/replay
-entry MAY be proposed separately. Dependencies: EF-SESSION-01
+count. Skip semantics are set by UX-D01 (dismiss-current
+only). A Help/replay entry is specified in
+`ef-ux-01-design.md` §E. Dependencies: EF-SESSION-01
 (state semantics), FR-UX-01. Status: PROPOSED /
 OWNER-REQUESTED; NOT STARTED. Acceptance: offline first-run
 walk; skip path; three-completion retirement verified across
@@ -323,7 +344,8 @@ refusal matrix; imported labeling verified in UI and store.
 
 Instrumentation overhead SHALL be measured (3-run A/B per
 `bench-ui.md`) and published with variance; material regression
-blocks release. Status: PROPOSED (protocol written, runs pending).
+blocks release. Status: PROPOSED (protocol + EF-SCIENCE-01A
+analysis tooling written, runs pending).
 
 ### NFR-SAFE-01 JNI and lifecycle safety
 
@@ -333,8 +355,16 @@ compile; device run pending).
 
 ### NFR-THERM-01 Thermal and memory behavior
 
-Guards refuse unsafe starts; thermal/PSS observations use honest
-method labels. Status: PHYSICALLY QUALIFIED (guards ran on device).
+Thermal guards refuse unsafe/unknown starts; thermal/PSS
+observations use honest method labels. Memory availability
+is ADVISORY under EF-MEM-03 (owner-approved revision of
+the pre-MEM-03 2 GiB blocking rule, which was an
+implementation policy, never an accepted ADR): below 15%
+available RAM the app warns but never blocks an explicit
+Run, and every run records its memory conditions.
+Status: HOST QUALIFIED for the advisory policy (462/462
+JVM); PHYSICAL REVIEW PENDING for on-device low-memory
+behavior.
 
 ### NFR-A11Y-01 Accessibility and responsive layouts
 
@@ -417,18 +447,28 @@ beginning that next milestone. No milestone may silently
 expand its scope. No code, evidence, or release claim becomes
 qualified solely because Muse describes it as complete.
 
-## Open owner decisions (EF-UX-REQ-01)
+## Owner decisions (EF-UX-REQ-01 proposed, EF-UX-01-DESIGN approved)
 
-1. Onboarding Skip semantics: whether manual Skip permanently
-   disables onboarding before three completions or dismisses
-   only the current introduction. No default is specified.
-2. Standalone benchmark-only runs leave no session record;
-   whether a future minimal run record should let them count
-   toward onboarding retirement, or they remain non-counting
-   (recommended for v1: non-counting, no schema change).
-3. Whether `historical_replay`-sourced completions qualify
-   toward onboarding retirement (recommended: excluded, since
-   replays do not demonstrate the live workflow).
-4. Relative ordering of UX implementation (roadmap step C) vs
-   report import/attachment (roadmap step D); neither may
-   absorb the other — see traceability roadmap.
+- **UX-D01 Onboarding Skip (OWNER APPROVED).** Skip dismisses
+  the current presentation only, never opts out; onboarding
+  may reappear on a subsequent appropriate entry until three
+  qualifying completions retire it; it must not interrupt an
+  active benchmark, paid authorization, or in-progress Agent
+  review. Specified in `ef-ux-01-design.md` §E.
+- **UX-D02 Standalone benchmarks (OWNER APPROVED).** A
+  standalone COMPLETED benchmark MAY count toward retirement
+  IFF durably recorded and uniquely identifiable; transient
+  screens never count. Design the smallest safe
+  persistence/identity extension (`standalone`-mode record,
+  run-id dedup, no parallel store, no native change) — see
+  `ef-ux-01-design.md` §F, owned by UX-01D.
+- **UX-D03 Replay completions (OWNER APPROVED).** Replay
+  sessions MAY count IFF satisfying the durable predicate,
+  labeled REPLAY, never as newly measured; dedup on
+  `replay_source_sha256` (defined + tested before
+  implementation); no publication/verification change. See
+  `ef-ux-01-design.md` §F; producer owned by FR-RPT-01.
+- **UX-D04 Milestone order (OWNER APPROVED).** UX foundation
+  + onboarding first (UX-01A…D), report import as a
+  separately controlled milestone integrated later; no
+  vaporware. Roadmap step C precedes step D.

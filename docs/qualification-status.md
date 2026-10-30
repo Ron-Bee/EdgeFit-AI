@@ -483,3 +483,799 @@ Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
   conditions differed between runs).
 - EF-AGENT-01: PHYSICAL SCOPED PASS. LIVE AGENT PROPOSAL
   PASS. END-TO-END AGENTIC LOOP PASS (scoped).
+
+## EF-UX-01-DESIGN (design only; owner review required)
+
+- Agent-executed, documentation only: closed the four
+  EF-UX-REQ-01 owner decisions as UX-D01 (Skip dismisses
+  current presentation only), UX-D02 (standalone counts
+  only if durably recorded + identifiable; smallest
+  `standalone`-record extension designed), UX-D03 (replay
+  counts with REPLAY label under `replay_source_sha256`
+  dedup; producer owned by FR-RPT-01), UX-D04 (UX-01A…D
+  before report milestone). Created `docs/ef-ux-01-design.md`
+  (inventory, 5-tab navigation, Home layout, tokens,
+  onboarding state model, completion/dedup predicate,
+  agent/benchmark/settings flows, empty/failure/offline
+  states, a11y, traceability, milestones UX-01A…D,
+  S22 acceptance checklist, limitations). Updated
+  requirements decisions, traceability Y/Z/AA + roadmap.
+  No ADR added or amended; no accepted text weakened.
+- Nothing designed here is implemented or qualified;
+  implementation awaits owner design review.
+- EF-UX-01-DESIGN: DESIGN COMPLETE, OWNER REVIEW REQUIRED.
+
+## EF-UX-01A (host qualified; physical NOT RUN)
+
+- Agent-executed: five-destination navigation shell (Home,
+  Benchmark, Sessions, Agent, Settings) with zero new
+  dependencies — platform Views, `onBackPressed` override,
+  and resource tokens (`#0866FF`/`#FFFFFF`/`#F2F4F7`/
+  `#DCE7F7`/`#172B4D` + spacing/shape). Same widget
+  instances re-homed; all handlers, dialogs, session
+  store, key custody, authorization, benchmark, and
+  agent logic untouched. Dark bench overlay preserved
+  full-screen; Back during a run stays put, otherwise
+  returns to Home; tab survives rotation. Advisory
+  next-action line from a pure tested function.
+- Host evidence: JVM `:app:testDebugUnitTest` 213/213 OK
+  (11 new: NavTab 5, NextAction 6); `:app:assembleBenchmark`
+  BUILD SUCCESSFUL; EF-META-04 12/12 PASS. Emulator crawl
+  (Pixel 9, NOT the S22): all tabs + dialogs open with
+  preserved data, Back/rotation verified, zero FATALs.
+  No benchmarks run, no Meta calls, no phone install.
+- Scope: shell + tokens only. Feature-screen redesign
+  (UX-01B/C), onboarding (UX-01D), report import, and
+  Material3 adoption (if ever) remain NOT STARTED.
+- EF-UX-01A: HOST QUALIFIED. PHYSICAL NOT RUN.
+
+## EF-UX-01BC (combined B+C presentation overhaul; host + S22 UI crawl)
+
+- Agent-executed: `launchTracked` + `RequestTracker` +
+  non-cancelable `ProgressUi` for live prediction /
+  follow-up / proposal (truthful in-flight states, no
+  fabricated %); `InsightCards` + `CardDialog` structured
+  ESTIMATE/MEASURED presentation with Details provenance;
+  Home dashboard (next action + Continue, device card +
+  full-profile Details, model card, last durable
+  measurement, Meta key state, session count); Sessions
+  type labels + pending actions + detail cards; Agent
+  Review Details + hypothesis-missed suffix; single-line
+  tab labels. Zero new dependencies; no contract, native,
+  threshold, or preflight changes.
+- Host evidence: `:app:testBenchmarkUnitTest` 231/231 PASS
+  (18 new: RequestTracker 4, InsightCards 8, HomeDashboard
+  6); `:app:assembleBenchmark` BUILD SUCCESSFUL
+  (app-benchmark.apk 8.4 MB, v0.2.0). One pre-existing
+  presentation assertion (`benchmark: not attached`) was
+  updated to the redesigned `measured:` vocabulary with
+  run-ID provenance restored to the summary line.
+- Physical evidence (S22 Ultra (owner device), NOT emulator):
+  non-destructive `install -r` Success; all 5 session
+  SHA-256 unchanged before install, after install, and
+  after crawl; all 5 tabs + Sessions dialog + session
+  Detail card + Agent dialog + Device Details opened via
+  uiautomator; single-line tab labels confirmed; Home
+  shows live device/model/last-run (`SES-dc327cae60cd8e6f`,
+  12.8/24.4 tok/s) content; landscape rotation keeps tabs,
+  auto-rotate restored; zero app FATALs. No benchmarks
+  run, no Meta calls, no data cleared, no credentials read.
+- Memory-failure diagnosis (read-only, UNVERIFIED root
+  cause): preflight needs avail >= max(2 GB, model + 1 GB);
+  807 MB staged model needs 2 GB; phone showed 2.2–2.3 GB
+  free at check time — borderline, consistent with an
+  expected guard refusal under transient pressure, not a
+  proven app defect. No threshold change made.
+- Deferred: loading-state live observation (needs a real
+  Meta call), onboarding (UX-01D), report import
+  (FR-RPT-01), AUD-04 deletion semantics, dark theme.
+- EF-UX-01BC: IMPLEMENTATION PASS. HOST PASS. S22 UI-CRAWL
+  PASS (navigation/presentation only). LIVE-REQUEST
+  FEEDBACK NOT OBSERVED (no paid calls authorized).
+
+## EF-UX-01BC-R2 (visual polish, semantic metrics, icon nav)
+
+- Agent-executed: semantic tokens (`edgefit_measured`
+  #147D92, `edgefit_predicted` #7655C7, `edgefit_error`
+  #D92D20, dark-safe error, inactive tab); five original
+  vector nav icons (house/gauge/folder/sparkle/gear) with
+  blue-selected/muted-unselected tinting, compact
+  single-line labels, content descriptions, 56dp targets;
+  `InsightCards.Accent` + `statusAccent` (COMPLETED-family
+  MEASURED at any speed, prediction states PREDICTED,
+  failures ERROR, comparison rows neutral); `SemanticUi`
+  primary-blue / destructive-red button styles; blue
+  Continue/Run/Predict/Follow-Up/Save/Request/Approve,
+  red Delete/Forget; state-word tints in Sessions/Agent
+  lists; bench result headline emphasis + red `Error:`
+  line and failed stage on the dark screen. Zero new
+  dependencies; no behavior, contract, or guard changes.
+- Host evidence: `:app:testBenchmarkUnitTest` 238/238 PASS
+  (7 new `SemanticAccentTest`); `:app:assembleBenchmark`
+  BUILD SUCCESSFUL (app-benchmark.apk 8.4 MB, v0.2.0).
+- Physical evidence (S22 Ultra (owner device), NOT emulator):
+  non-destructive `install -r` Success; all 5 session
+  SHA-256 unchanged across install + crawl; icon nav with
+  selected-state tint verified by hierarchy + screenshot;
+  Home/ Sessions list / Detail card / Agent dialog
+  screenshotted: teal measured + completed states, purple
+  estimates, red failures/destructive, blue primaries;
+  Back Benchmark→Home verified; zero app FATALs. No
+  benchmarks, Meta calls, clears, or credential reads.
+  Large-font layout NOT RUN (system setting untouched).
+- EF-UX-01BC-R2: IMPLEMENTATION PASS. HOST PASS. S22
+  UI-CRAWL PASS (visual/presentation only).
+
+## EF-UX-01E (live telemetry + session timeline; S22 verified)
+
+- Agent-executed: `DeviceTelemetry` (cheap
+  ActivityManager/PowerManager/sticky-battery sampling,
+  pure formatters, injectable-scheduler `Ticker`) and
+  `SessionTimeline` (UTC→local rendering, history-event
+  labels, UTC evidence block). Home shows static identity
+  + live battery/charging/temp/RAM/thermal/`Updated`
+  lines; Device Details is a live dialog (static identity
+  + auto-refreshing health + unavailable list). Session
+  rows gain `created:` local dates; Detail gains
+  Created/Last update, full Timeline from record history,
+  and UTC Technical evidence. Agent actions vertical
+  (Request Proposal no longer wraps); session buttons
+  single-line. Zero new dependencies/permissions; no
+  state, contract, guard, or threshold changes; no
+  timestamp backfill.
+- Cadence: battery event-driven via registered receiver;
+  Home poll 30 s (glanceable), Details poll 15 s (active
+  inspection). Sampling gated on activity-started AND
+  (Home visible OR Details open); receiver/tickers
+  stop on hide, tab switch, or onStop. No service, no
+  background work.
+- Host evidence: `:app:testBenchmarkUnitTest` 254/254 PASS
+  (16 new: DeviceTelemetry 8, SessionTimeline 6,
+  sessionSections timeline 2); `:app:assembleBenchmark`
+  BUILD SUCCESSFUL (8.4 MB, v0.2.0). `git diff --check`
+  clean.
+- Physical evidence (S22 Ultra (owner device), NOT emulator):
+  `install -r` Success; all pre-existing session hashes
+  unchanged across install + crawl (owner's experiment 4
+  SES-a84ee63d30dfbab3 predates this install); Home health
+  vs `dumpsys battery` (100%/Full/34.0 °C vs app
+  100%/Full/33–34 °C live fluctuation); Details
+  auto-refresh observed (2.2→1.6 GB, timestamp advanced);
+  Timeline dates match stored UTC (01:39:19Z = 8:39 PM
+  CDT); Agent buttons single-line vertical; logcat proves
+  ticker/receiver start on Home+Details and stop on hide;
+  zero app FATALs. No benchmarks, Meta calls, clears, or
+  credential reads.
+- EF-UX-01E: IMPLEMENTATION PASS. HOST PASS. S22
+  UI-CRAWL PASS (telemetry/timeline/presentation only).
+
+## EF-UX-REVIEW-03-R1 (acceptance review + limited polish; HOST ONLY, no ADB)
+
+- Agent-executed source review: EF-UX-01E claims verified
+  against source (`DeviceTelemetry`/`SessionTimeline`
+  present, 30 s/15 s cadence, battery-receiver wiring,
+  Timeline + UTC evidence sections, vertical Agent
+  actions) and host baseline re-run 254/254 PASS. No
+  inconsistencies found; no device crawl performed (new
+  owner policy: owner reviews on-device).
+- Agent-executed implementation (narrow, FR-UX-01): three
+  replacement nav icons (performance bars, assistant
+  speech-bubble waveform — Gemini sparkle removed, modern
+  8-tooth gear; Home/Sessions retained); session rows and
+  experiment entries wrapped in separated cards;
+  `InsightCards` session Detail gains Meta follow-up
+  section (Overview/Prediction/Measurement/Comparison/
+  Follow-up/Timeline/Technical evidence); Agent overview
+  gains best-comparable line; failed runs render
+  "measured: none (run FAILED — no observation)" and "no
+  measurement (run FAILED)" instead of 0.0 tok/s;
+  `BenchGuards.refusalDetail` appends measured-vs-required
+  MB to guard refusals (decision/thresholds unchanged).
+  Zero new dependencies; no state-machine, contract, or
+  native changes.
+- Memory-guard diagnosis: the observed refusal (512/2/64,
+  0 tokens, none/unknown/none) matches the expected
+  `failedNow` shape exactly — guard-consistent, no defect
+  evidenced. Limitation recorded: avail/required numbers
+  previously lost (now in the refusal string → bench
+  screen + exported JSON); session records still drop
+  `result.error` — minimal extension (optional
+  `failure_cause` in session measurements) proposed for
+  later approval, not implemented.
+- Model recommendations: design-only per EF-MODEL-ARCH-01
+  (FR-MODEL-01/02/03, FR-EVID-01, NFR-MODEL-01, ADR-019):
+  owner-reviewed curated offline catalog is the viable
+  pre-cloud step; live retrieval/downloads stay future.
+  Nothing implemented.
+- Host evidence: `:app:testBenchmarkUnitTest` 261/261 PASS
+  (7 new); `:app:assembleBenchmark` BUILD SUCCESSFUL
+  (ai.edgefit.diag.bench v0.2.0, 8.4 MB, 2026-10-28).
+  `git diff --check` clean. DB hash unchanged;
+  Microsoft/ untouched; ADR file unmodified.
+- EF-UX-REVIEW-03-R1: REVIEW COMPLETE. IMPLEMENTATION
+  PASS (limited scope). HOST PASS. PHYSICAL REVIEW
+  PENDING (owner-operated; checklist in milestone
+  report).
+
+## EF-FOLLOWUP-02 / EF-MODEL-01 (diagnosis + design; HOST ONLY, no ADB)
+
+- Agent-executed diagnosis (source-verified, no guessing):
+  repeated follow-up is unavailable because (1) one run
+  per session is enforced (`attachBenchmark` requires
+  BENCHMARK_RUNNING + `benchmark == null`), (2)
+  RECOMMENDATION_RECORDED transitions only to
+  SESSION_FINISHED, (3) `requestFollowup` requires
+  COMPARISON_READY, and (4) agent proposals that change
+  nothing are rejected (`AgentApi`: "proposal changes
+  nothing"). A repeat benchmark therefore lands
+  standalone (or fails to bind), produces no comparison,
+  and offers no follow-up; same-config repeats are
+  unreachable in every flow. Classification: missing
+  repeated-measurement workflow (E), via intended
+  one-follow-up-per-session mechanics (A+B).
+- Design boundary reached, NO source changes: the correct
+  fix (repeat child/session with carried-prediction
+  provenance, proposal `purpose: repeat` acceptance,
+  budget-charged repeats, cross-run host comparison)
+  touches prediction-integrity semantics, the agent
+  proposal schema, and budget policy — owner approval
+  required before implementation. Full amendment + GGUF
+  catalog architecture + EF-SCIENCE-01 plan + UX design
+  delivered in the milestone report; nothing built.
+- Host evidence: `:app:testBenchmarkUnitTest` 261/261 PASS
+  (baseline intact, zero new tests — nothing to cover);
+  no APK rebuild (source unchanged; R1 APK
+  ai.edgefit.diag.bench v0.2.0 current). `git diff
+  --check` clean. DB hash unchanged; Microsoft/ untouched.
+- EF-FOLLOWUP-02 / EF-MODEL-01: DIAGNOSIS COMPLETE.
+  DESIGN COMPLETE. IMPLEMENTATION NOT STARTED (owner
+  approval required).
+
+## EF-FOLLOWUP-02 (repeatable benchmark + follow-up loop; HOST ONLY, no ADB)
+
+- Agent-executed implementation (FR-AGENT-04, owner
+  decisions D1–D4): NEW linked repeat records via
+  `SessionManager.createRepeat` (carried prediction,
+  immutable original timestamp, `carried_from_*`
+  provenance, `repeat_of_*` links); run-ID format gate
+  (`BENCH-…`); Agent `purpose: repeat` validation
+  (eligible citation + exact config vs STORED executed
+  config, sampler included; ordinary no-change still
+  refused); budget-charged approval (`REPEAT_LINK` /
+  `REPEAT_CONFIG` fail-closed checks); host
+  `findSeriesRuns` + `SessionComparison.compareSeries`
+  (COMPLETED same-config only, current-minus-prior
+  deltas, descriptive range — never significance);
+  bounded follow-up priors (max 4, host deltas,
+  SERIES_PRIORS block, disclosure line added to the
+  authorization dialog); UI Repeat/Compare actions with
+  standalone-vs-agent eligibility; repeat-labeled Agent
+  proposal review. Native runner, workload, guards,
+  contracts, and budget size unchanged.
+- Host evidence: `:app:testBenchmarkUnitTest` 288/288
+  PASS (27 new `FollowUp02Test`); `:app:assembleBenchmark`
+  BUILD SUCCESSFUL (ai.edgefit.diag.bench, 8,810,317
+  bytes, 2026-10-28; manifest/Gradle untouched so
+  identity unchanged). `git diff --check` clean. DB
+  hash B36977AD…190FE9D unchanged; Microsoft/ untouched.
+  No Meta calls, no benchmarks, no DB writes, no ADB.
+- EF-FOLLOWUP-02: IMPLEMENTATION PASS. HOST PASS.
+  PHYSICAL REVIEW PENDING (owner-operated; procedure in
+  milestone report). Live repeat proposal + measured
+  repeat NOT RUN.
+
+## EF-MODEL-01A (vetted offline GGUF catalog; HOST ONLY, no ADB)
+
+- Agent-executed implementation (FR-MODEL-01 PARTIAL):
+  bundled `res/raw/model_catalog.json` v1 (5 entries,
+  `pending_owner_review`); strict pure-JVM parser
+  (version/size/count caps, https + host allowlist,
+  .gguf paths, source-in-repo, 64-hex hashes,
+  rationale speed-claim screen); conservative
+  `ModelSuitability` (FR-MODEL-01 statuses; guard
+  headroom rule; verified_compatible only via local
+  exact-hash COMPLETED run; memory-now as caveat);
+  five evidence classes (v1 renders estimate or
+  measured only); Recommended Models dialog (Home
+  Model section + Benchmark tab entries; cards,
+  Details, explicit-tap external View Source with
+  re-checked allowlist); presentation-only repeat
+  boundary clarification ("Continue experimenting …
+  preserved"). No network search, no downloads, no
+  auto Meta calls, no guard changes.
+- Source verification (agent, 2026-10-29, read-only
+  web): all 5 repos/files/sizes/licenses read from
+  huggingface.co (Qwen3-0.6B-Q8_0 639 MB apache-2.0;
+  gemma-3-1b-it-Q4_K_M 806 MB gemma; llama-3.2-1b
+  Q4_K_M bartowski 808 MB llama3.2; smollm2-360m Q8_0
+  386 MB apache-2.0; qwen2.5-0.5b Q4_K_M 491 MB
+  apache-2.0). Runtime arches (qwen3/gemma3/llama/
+  qwen2) confirmed present in pinned llama.cpp v0.7.0
+  @620d2225 source. SHA-256 unverified for all
+  (no downloads performed); exact bytes unverified
+  (listed sizes used as MiB upper bounds).
+- Host evidence: `:app:testBenchmarkUnitTest` 318/318
+  PASS (30 new `ModelCatalogTest`);
+  `:app:assembleBenchmark` BUILD SUCCESSFUL
+  (ai.edgefit.diag.bench, 8,829,355 bytes,
+  2026-10-28; manifest/Gradle untouched). `git diff
+  --check` clean. DB hash B36977AD…190FE9D unchanged;
+  Microsoft/ untouched. FR-MODEL-02/03, FR-EVID-01/02,
+  ADR-019 remain PROPOSED / NOT STARTED.
+- EF-MODEL-01A: IMPLEMENTATION PASS. HOST PASS.
+  PHYSICAL REVIEW PENDING (owner-operated).
+  FR-MODEL-01 PARTIAL (offline only).
+
+## EF-MODEL-01B (contextual recommendations; HOST ONLY, no ADB)
+
+- Agent-executed implementation (FR-MODEL-01 PARTIAL,
+  deepened): current-model context (staged ref + latest
+  valid COMPLETED measurement by collection time;
+  failed/non-finite excluded); host size differences
+  (absolute + %, approximate unless both sides exact;
+  staged baseline preferred, measurement fallback);
+  deterministic `ModelRecommend` (7 kinds; measured /
+  verdicts / size guidance; no scores, no speed
+  claims, no cross-artifact throughput ranking);
+  exact-hash `localEvidenceFor` (null catalog hash
+  never matches; latest COMPLETED run wins);
+  `memoryLimitedNow` flag (condition, verdict
+  unchanged) + avail snapshot on Assessment;
+  restructured details (Candidate / Recommendation /
+  Comparison / Compatibility / Memory / Local
+  evidence / Limits / Technical); dialog gains
+  current-model overview, per-card Evidence button
+  (exact matches only), Return to Model Selection
+  (working), and the different-model new-context
+  clarification. Catalog JSON unchanged (5 entries,
+  still pending review). No Meta changes, no guard
+  changes, no state-machine changes.
+- Association + Meta boundary (design only): staged↔
+  catalog joining by name/file/size rejected in
+  `docs/ef-model-01b-association.md`; owner-verified
+  SHA backfill proposed (no code); user-asserted link
+  contract sketched and STOPPED for approval. Meta
+  payload analysis: a bounded CANDIDATES block fits
+  the 32 KB transport pattern, but validated
+  candidate references need new optional response
+  fields + ID-allowlist validation + disclosure
+  update — owner approval required, NOT implemented.
+- Host evidence: `:app:testBenchmarkUnitTest` 338/338
+  PASS (20 new `ModelRecommendTest`; FOLLOWUP-02
+  regressions green); `:app:assembleBenchmark` BUILD
+  SUCCESSFUL (ai.edgefit.diag.bench, 8,845,589 bytes,
+  2026-10-28; manifest/Gradle untouched). `git diff
+  --check` clean. DB hash B36977AD…190FE9D unchanged;
+  Microsoft/ untouched. FR-MODEL-02/03, FR-EVID-01/02,
+  ADR-019 remain PROPOSED / NOT STARTED.
+- EF-MODEL-01B: IMPLEMENTATION PASS. HOST PASS.
+  PHYSICAL REVIEW PENDING (owner-operated).
+
+## EF-SCIENCE-01A (analysis infrastructure; HOST ONLY, no ADB)
+
+- Agent-executed implementation: deterministic
+  PowerShell 5.1 analysis tool
+  (`scripts/Invoke-EFScience01A.ps1` v1a-1, zero
+  deps): contract mirror of `ef_bench_result_01.py`
+  (incl. tps recomputation ±0.01), SHA-256 +
+  manifest checks, duplicate run/content refusal,
+  exact-cohort grouping (model+workload+runtime+
+  config+app+native-build key), mean/median/min/
+  max/sample-SD/CV/[min,max] descriptive interval,
+  same-model-only comparisons with differing-field
+  list + isolated flag, strictly-predating
+  prediction errors, machine-readable JSON.
+  Self-test `scripts/Test-EFScience01A.ps1`:
+  46/46 PASS (15 black-box cases incl. Decimal-
+  path, tamper, manifest, reproducibility).
+  Python was unavailable (no interpreter), so the
+  tool is PS1 by environment necessity, following
+  the Test-EF-META-04 precedent.
+- Evidence inventory (read-only, hashes verified):
+  4 benchmark JSONs + 3 profiles intact (all 7
+  SHA-256 match prior records); tool run yields 2
+  cohorts (debug n=1 @0.3828; benchmark n=3,
+  median 14.3820, mean 12.7913, SD 4.7909,
+  CV 0.3745) + 1 multi-field comparison. No host
+  predictions predate these runs; DB unreadable
+  without a driver (hash + qualified-record
+  citation only); logcat is context, not evidence.
+- Docs: protocol refined (H1–H3, endpoints,
+  exploratory/confirmatory split, §8 quorum);
+  report draft `docs/ef-science-01-report.md`
+  (14 sections; results exploratory-only, pending
+  sections marked); case study
+  `docs/ef-science-01-casestudy.md` (2 vignettes,
+  second sourced from the AGENT-01 qual record);
+  worksheet `docs/ef-science-01-worksheet.md`
+  (B/C×5 counterbalanced, none reusable).
+- Host evidence: PS self-test 46/46; JVM suite
+  338/338 (up-to-date, no Android changes);
+  EF-META-04 PS suite 12/12 PASS; Python suites
+  NOT RUN (no interpreter). `git diff --check`
+  clean. DB hash
+  B36977AD…190FE9D unchanged; evidence originals
+  re-hashed intact; Microsoft/ untouched.
+- EF-SCIENCE-01A: IMPLEMENTATION PASS. HOST PASS.
+  PHYSICAL TRIALS PENDING (owner worksheet).
+
+## EF-SCIENCE-01A-CORRECTION-01 (wording; HOST ONLY, no ADB)
+
+- Defect 1 (build comparison): the 37.57×/37.6×
+  debug-vs-benchmark figure now carries its full
+  field-diffed differing-conditions list (build
+  identity, collection time, terminal thermal,
+  observed memory, snapshot + unrecorded factors),
+  is labeled observational/multi-factor, and is
+  explicitly NOT attributed to Muse, flags alone,
+  context, or any proven intervention.
+- Defect 2 (thermal wording): "thermal-driven" /
+  "throttling dominates" replaced with association
+  language; report now distinguishes thermal status
+  vs battery temperature vs measured throttling
+  (only status labels exist in artifacts) and
+  requires controlled trials before causal claims.
+- Figures recomputed from originals: pair ratio
+  37.5697, spread 2.2389. Docs corrected: report,
+  case study, protocol (§4 note), worksheet.
+  Analysis tool labels already correct (no code
+  change). Historical milestone entries untouched.
+- Verification: PS self-test 46/46 re-run green
+  (tool untouched); evidence re-hashed intact; DB
+  B36977AD…190FE9D unchanged. JVM suite not re-run
+  (no Android changes).
+- CORRECTION-01: PASS. No new limitations beyond
+  the standing n≤3 / single-device / no-host-
+  prediction gaps.
+
+## EF-UX-02 (navigation/action continuity; HOST ONLY, no ADB)
+
+- Agent-executed implementation (FR-UX-01): new pure
+  `SessionListUi` (newest-first ordering w/ id
+  tie-break, 13 friendly states, 6 filters, Action
+  Needed eligibility, follow-up gate, row labels);
+  `SessionManager.listSessions` delegates ordering
+  (no schema change); `SessionView` rewritten as an
+  accordion (collapsed rows, lazy expanded bodies,
+  Latest highlight, 2-column action grid, delete
+  confirmation, filter spinner, fixed create/close
+  area, creation panel, repeat→prep transition
+  w/ double-tap guard); `CardDialog` gains
+  next-action buttons; `MainActivity` gains repeat-
+  prep screen (run/select-model), benchmark-result
+  comparison dialog w/ follow-up offer, prediction→
+  Open Benchmark, staging/picker return to prep,
+  follow-up next steps (Open Agent / Repeat /
+  Compare), export save-button disable;
+  `seriesSections` restructured (Reference row,
+  explicit difference definition, observed range,
+  short run tags); `pendingAction` corrected for
+  offline sessions. No native/guard/contract/state-
+  machine/budget changes.
+- Host evidence: `:app:testBenchmarkUnitTest`
+  360/360 PASS (22 new `SessionListUiTest`;
+  FOLLOWUP-02 series test updated to the new
+  structure); `:app:assembleBenchmark` BUILD
+  SUCCESSFUL (ai.edgefit.diag.bench, 8,865,886
+  bytes, 2026-10-29; manifest/Gradle untouched).
+  `git diff --check` clean (exit 0; LF/CRLF
+  notices pre-existing). DB hash
+  B36977AD…190FE9D unchanged; Microsoft/
+  untouched; no commits/pushes.
+- EF-UX-02: IMPLEMENTATION PASS. HOST PASS.
+  PHYSICAL REVIEW PENDING (owner-operated).
+
+## EF-MEM-01 (adaptive memory admission; HOST ONLY, no ADB)
+
+- Root causes (source-verified): the S22 refusal was a
+  pre-load guard miss (avail 2020 MB < required 2048 MB
+  floor), single-sampled, 0 tokens, 0 ms load — never
+  native execution. The 02:09 elapsed was a stale
+  `wallStartMs` (previous run's anchor reused on the
+  refusal path, then left untouched by `showResult`).
+  No native retention exists (model/ctx/sampler freed
+  on every path); no large EdgeFit-owned caches; one
+  worker enforced. Refusal reasons reached UI + export
+  JSON but were dropped from session records.
+- Agent-executed implementation: new pure `MemRecheck`
+  (64 MiB near window, 3 samples @ 500 ms, sole-memory-
+  miss eligibility, SAME requirement re-evaluated,
+  cancellable worker-thread loop, `x_mem_recheck`
+  evidence incl. monotonic stamps + recheck_ms kept
+  outside the measurement window); `wallStartMs`
+  anchored at run entry; durable `failure_cause` in
+  session benchmark maps (schema v1 additive) +
+  Cause row in Session Details; bench-screen refusal
+  headline + Recheck Memory (evaluation only, never
+  runs) / Smaller Model (catalog) / Details actions.
+  Guard formula, thresholds, workload, native code,
+  and budgets unchanged; per-model lowering STOPPED
+  at the proof boundary (no ADR pins the numbers,
+  but no safe lower bound is evidenced).
+- Host evidence: `:app:testBenchmarkUnitTest`
+  377/377 PASS (17 new `MemRecheckTest`);
+  `:app:assembleBenchmark` BUILD SUCCESSFUL
+  (ai.edgefit.diag.bench, 8,876,080 bytes,
+  2026-10-29; manifest/Gradle untouched). `git diff
+  --check` clean (exit 0; LF/CRLF notices
+  pre-existing). Python validator NOT RUN (no
+  interpreter); `x_` acceptance verified by reading
+  the validator skip rule + importer `.get()` use.
+  DB hash B36977AD…190FE9D unchanged; Microsoft/
+  untouched; no commits/pushes.
+- EF-MEM-01: IMPLEMENTATION PASS. HOST PASS.
+  PHYSICAL REVIEW PENDING (owner-operated).
+
+## EF-UX-01D (onboarding + acceptance polish; HOST ONLY, no ADB)
+
+- Agent-executed implementation (FR-ONBOARD-01,
+  UX-D01..D04): new pure `Onboarding` (SHOW gate,
+  retirement count over durable records per design
+  F, 3-page content model); `OnboardingView`
+  3-screen guide (Next/Back/Skip/Start, Back-key
+  paging, rotation restore, no network/key/paid
+  work); cold-start + gated foreground evaluation
+  (quota/dismiss/run/modal ordering, picker-return
+  suppression); Settings → Help with completion
+  count + replay entry; UX-D02 standalone branch
+  (`MODE_STANDALONE`, standalone-only
+  CREATED→AUTHORIZED machine edge, authorize/
+  attachStandalone with full identity + run-sweep,
+  bridge recordStandalone, COMPLETED-only persist
+  on unbound runs); standalone labels; UX-D03
+  replay source-key dedup (producer dormant until
+  FR-RPT-01). Correction A: recovery row
+  center-vertical gravity (device-verified pending).
+  Correction B: `tpsHeadline` — non-completed
+  zero-output runs read "Not measured", genuine
+  partials still measured. No threshold, workload,
+  native, budget, custody, or consent changes.
+- Host evidence: `:app:testBenchmarkUnitTest`
+  395/395 PASS (18 new `OnboardingTest`);
+  `:app:assembleBenchmark` BUILD SUCCESSFUL
+  (ai.edgefit.diag.bench, 8,888,541 bytes,
+  2026-10-30; manifest/Gradle untouched).
+  `git diff --check` clean (exit 0; LF/CRLF
+  notices pre-existing). DB hash
+  B36977AD…190FE9D unchanged; Microsoft/
+  untouched; no commits/pushes.
+- EF-UX-01D: IMPLEMENTATION PASS. HOST PASS.
+  PHYSICAL REVIEW PENDING (owner-operated).
+
+## EF-MEM-02 (diagnostics + readiness; HOST ONLY, no ADB)
+
+- Agent-executed implementation (NFR-THERM-01,
+  NFR-SAFE-01, NFR-PERF-01, NFR-EVID-01,
+  NFR-REPRO-01, NFR-OFF-01; master arch 17-18;
+  future evidence arch 3, 5, 10-15 untouched, no
+  upload): new pure `MemDiag` (11 checkpoints,
+  validated samples, 64-cap store, MB formatting);
+  `MemReadiness` (READY/CLOSE/INSUFFICIENT/UNKNOWN
+  mirroring the enforced guard; CLOSE = MEM-01 near
+  window); `MemBudget` shadow estimator (no admit
+  field by construction; conclusion stays
+  insufficient_data); opt-in Settings toggle
+  (default off, in-memory, resets each launch; no
+  background polling, no uploads, process-local
+  signals only); Benchmark-tab readiness line +
+  Check Memory Readiness dialog (Recheck / Memory
+  Details / Recommended Models; read-only, never
+  starts inference); informational readiness note
+  on the prediction-auth dialog (appended after,
+  never inside, the transmitted field list;
+  non-blocking); run checkpoints G/H/I/K+L/M in
+  `BenchRunner` with `x_mem_diag` export (null
+  unless enabled; marks run instrumented +
+  non-confirmatory); `SessionView.onClose` hook.
+  Guard formula UNCHANGED
+  (`max(modelBytes + 1 GiB, 2 GiB)`); no
+  threshold/native/workload/budget/custody/consent
+  changes; no cleanup corrections (review found no
+  material avoidable retention: staging streams
+  closed, native frees on all paths, single
+  1 MiB copy buffer).
+- Pinned-source finding (on-disk checkout, no .git
+  so commit hash unverifiable): default params use
+  LLAMA_LOAD_MODE_AUTO resolving to mmap on CPU
+  (llama-model.cpp:3338, llama-model-loader.cpp:560,
+  llama-model.cpp:1576-1585); no mlock. Weights are
+  file-backed/lazily paged, NOT fully resident —
+  the guard's modelBytes term is therefore
+  conservative by construction, but NO reduction
+  is approved: resident KV/compute/touched-page
+  needs remain unmeasured (see owner Q below).
+- Host evidence: `:app:testBenchmarkUnitTest`
+  423/423 PASS (28 new `MemDiagTest`);
+  `:app:assembleBenchmark` BUILD SUCCESSFUL
+  (ai.edgefit.diag.bench, 8,907,069 bytes,
+  2026-10-30; manifest/Gradle untouched).
+  `git diff --check` clean. DB hash
+  B36977AD…190FE9D unchanged; Microsoft/
+  untouched; no commits/pushes.
+- EF-MEM-02: IMPLEMENTATION PASS. HOST PASS.
+  PHYSICAL REVIEW PENDING (owner-operated).
+
+## EF-MEM-03 (advisory memory + recovery; HOST ONLY, no ADB)
+
+- Owner directive (revised): the 2 GiB blocking rule is
+  RETIRED as an admission gate; memory is advisory (warn
+  below 15% available, stronger wording below 5%), Run
+  never blocked by memory alone. No accepted ADR
+  enshrined the old formula; NFR-THERM-01 revised
+  accordingly (thermal/ABI/model guards retained).
+- Root causes (Problems A-D): A = `BenchGuards`
+  memory refusal (by design, now revoked). B/C/D share
+  one systemic cause, NOT a click-handler defect (chain
+  verified wired with feedback): `proposalGate`
+  required non-empty comparable evidence, which needs
+  a COMPLETED child — after failed/refused runs the
+  gate closed, Request Proposal disabled, and FAILED
+  states offered no next action: a dead end.
+- Agent-executed implementation: new `MemPolicy`
+  (15%/5%/unknown assessment) + `MemConditions` /
+  `FailureEvidence` recorded on EVERY run
+  (`x_mem_conditions`, `x_failure`); runner recheck
+  path removed (MEM-01 `MemRecheck` kept for reading
+  historical records); `MemReadiness`/`MemBudget`
+  reframed advisory; benchmark line/dialog show
+  percentage + warn-only Run; result screen shows
+  memory-at-start + native-started/stage; recovery
+  row (Recover/Models/Details) on every uncompleted
+  run; typed `purpose=recovery` agent path (gate
+  RECOVERY mode, `recovery_of_run_id` validation +
+  host verification, prompt forbidding invented
+  throughput, approval via `createRecovery` with
+  fresh expected values, budget still charged);
+  `SessionRecord` recovery_of_* link (schema v1);
+  offline recovery assistant (local-labeled: bound
+  retry same/smaller-ctx via new linked session +
+  authorize + bind; unbound via standalone config
+  override; agent children route to Agent Recovery,
+  never an offline budget bypass); Sessions
+  Recover action; batch-size control declined
+  (JNI hardcodes n_batch=512 — needs a native
+  change, owner decision); no process isolation
+  (wholesale rewrite, out of scope).
+- Host evidence: `:app:testBenchmarkUnitTest`
+  462/462 PASS (21 new `MemPolicyTest`, 21 new
+  `MemRecoveryTest`; MEM-01/02/UX regressions
+  green); `:app:assembleBenchmark` BUILD SUCCESSFUL
+  (ai.edgefit.diag.bench, 8,929,132 bytes,
+  2026-10-30; manifest/Gradle untouched).
+  `git diff --check` clean. DB hash
+  B36977AD…190FE9D unchanged; Microsoft/
+  untouched; no commits/pushes.
+- EF-MEM-03: IMPLEMENTATION PASS. HOST PASS.
+  PHYSICAL REVIEW PENDING (owner-operated).
+
+## EF-SESSION-SCALE-01 (no count ceiling; HOST ONLY, no ADB)
+
+- Owner physical evidence (MEM-03 build): 64/64
+  tokens at ~11.9 tok/s, 24.7% RAM at start, old
+  2 GiB block gone, result comparison-ready — but
+  Agent approval AND recovery both failed with
+  "session store full (50)" at 50 local sessions.
+- Root cause: `SessionStore.save()` threw
+  `StoreFull` for any new id once 50 files existed
+  (`MAX_SESSIONS = 50`, code-only defensive bound
+  from SESSION-01's generic "bounded count" rule;
+  never an accepted ADR, never documented). Both
+  approval and recovery create a new session, so
+  both died on the same check.
+- Agent-executed implementation: count ceiling
+  REMOVED (no replacement cap); safety rests on
+  retained per-record bounds (64 KiB records,
+  256 KiB reads, 32 history entries, quarantine
+  for corrupt files only) + explicit write-failure
+  errors naming the record and recovery steps.
+  Sessions list renders windowed (100 rows +
+  Show-more; order/filter/Latest still global).
+  Header shows free app-private bytes. Fixed the
+  init tmp-sweep pattern (`.tmp` never matched
+  real `<id>.json.tmp-<nanos>` names).
+- Host evidence: `:app:testBenchmarkUnitTest`
+  478/478 PASS (16 new `SessionScaleTest`: 51st
+  creation, 100/500/1000 scale, approval +
+  budget, recovery, repeat, standalone, no-auto-
+  delete, collision, hash stability, quarantine,
+  tmp sweep, explicit exhaustion error;
+  listSessions(1000) probe 493 ms host);
+  `:app:assembleBenchmark` BUILD SUCCESSFUL
+  (ai.edgefit.diag.bench, 8,930,572 bytes,
+  2026-10-30; manifest/Gradle untouched).
+  `git diff --check` clean. DB hash
+  B36977AD…190FE9D unchanged; Microsoft/
+  untouched; no commits/pushes.
+- EF-SESSION-SCALE-01: IMPLEMENTATION PASS.
+  HOST PASS. PHYSICAL REVIEW PENDING
+  (owner-operated).
+
+## EF-AGENT-REVIEW-01 (fast recommendation review; HOST ONLY, no ADB)
+
+- Owner product requirement: every Muse proposal
+  and follow-up is challenged, validated, and
+  presented BEFORE approval, with NO mandatory
+  second Meta request. One authorized call carries
+  bounded self-critique; EdgeFit reviews locally.
+- Agent-executed implementation: proposal contract
+  v2 adds optional bounded self-critique
+  (counterargument, alternative_explanation,
+  next_benchmark_establishes; v1 replies still
+  validate); follow-ups gain an optional
+  counterargument. New pure `AgentReview` engine
+  returns SUPPORTED / CAUTION / INVALID from
+  deterministic host checks (identity, bounds,
+  purpose rules, citations, budget, evidence
+  depth, contradictions, expected-value
+  plausibility, memory pressure, modification
+  staleness). Model self-critique displays
+  labeled and never verifies. Review leads the
+  proposal card; INVALID disables Approve in the
+  UI and blocks fail-closed in the approve path
+  (no budget charge on block); CAUTION stays
+  explicitly approvable. Developer Modify edits
+  pending optimize/recovery configs with host
+  validation (repeats fixed; expected values
+  flagged stale); no Meta call, no budget charge.
+- Host evidence: `:app:testBenchmarkUnitTest`
+  515/515 PASS (37 new `AgentReviewTest`: v2
+  parse/reject matrix, verdict matrix incl.
+  repeat/recovery/budget/config edges,
+  modify rules, cards, determinism, review
+  overhead probe avg < 10 ms);
+  `:app:assembleBenchmark` BUILD SUCCESSFUL
+  (ai.edgefit.diag.bench, 8,950,017 bytes,
+  2026-10-30; manifest/Gradle untouched).
+  EF-META-04 12/12 PASS. `git diff --check`
+  clean. DB hash B36977AD…190FE9D unchanged;
+  Microsoft/ untouched; no ADB, no Meta calls,
+  no benchmarks, no commits/pushes.
+- EF-AGENT-REVIEW-01: IMPLEMENTATION PASS.
+  HOST PASS. PHYSICAL REVIEW PENDING
+  (owner-operated).
+
+## EF-CLOUD-01A (global evidence foundation; HOST ONLY, no deploys)
+
+- Agent-executed implementation (`cloud/`,
+  zero dependencies, Node 24): versioned backend
+  foundation per ef-cloud-01 / ef-stats-01 —
+  strict submission validation with itemized
+  rejections, per-install token auth, explicit
+  per-submission consent (aggregates scope only;
+  runs scope rejected), content-hash dedup,
+  quota + velocity guards, rule-driven
+  SUBMITTED→VALIDATED→QUALIFIED→PUBLISHED→
+  REVOKED eligibility with history, consent
+  withdrawal tombstones, quorum-gated public
+  aggregates (provisional 5 runs / 3 installs;
+  thin cohorts return insufficient-evidence),
+  observed-artifact models + candidate endpoints
+  (no ranking implied), runs listing explicitly
+  disabled (404 + reason), and a fixed
+  allowlisted Muse retrieval query over
+  quorum-passing PUBLISHED cohorts only (no raw
+  rows, no install identities, no SQL
+  passthrough). Plain SQLite/D1-compatible DDL;
+  deployment swaps only `db.js`.
+- Host evidence: `node --test` 38/38 PASS
+  (isolated :memory: databases; synthetic
+  fixtures only — never community data):
+  submit/auth/quota/dedup/consent/owner-read/
+  revoke, eligibility + anomaly holds
+  (implausible tps, zero-token COMPLETED,
+  tps/timing inconsistency, run_id collision,
+  velocity flood), quorum + cohort separation
+  (config/build/opt-status/device/workload),
+  stats reconciliation, revocation/failed
+  exclusion, determinism, allowlist + limit
+  enforcement, SQL-injection inertness, type
+  confusion, oversized input.
+- NOT deployed: no Cloudflare resources, DNS,
+  accounts, tokens, or community data. Open
+  gates: deployment choice (ADR-009),
+  D1 binding, token issuance ops, consent
+  policy publication, quorum confirmation,
+  runs-disclosure policy, device taxonomy.
+- EF-CLOUD-01A: IMPLEMENTATION PASS.
+  HOST PASS. DEPLOYMENT NOT STARTED
+  (owner-gated).

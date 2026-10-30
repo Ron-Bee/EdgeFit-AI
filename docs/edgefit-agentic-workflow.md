@@ -61,6 +61,22 @@ runs closes the loop. Owner-approved provisional budget: max 5
 experiments per session, one benchmark per approval, no
 auto-approval mode.
 
+## Repeat measurements (EF-FOLLOWUP-02, FR-AGENT-04)
+
+A repeat re-measures an already-measured configuration to assess
+variability or confirm an observation. It is a NEW authorized
+measurement, never a replay: the host creates a new linked record
+carrying the source prediction (original timestamp immutable,
+plus carried-from provenance and a new authorization timestamp),
+executes exactly one new physical run under a new run ID, and
+runs the standard attach → compare → follow-up path. Source
+records are never reopened. Agent repeats require a
+`purpose: repeat` proposal citing an eligible run with exact
+config/model/workload match, consume one budget attempt, and are
+the only proposals allowed to change nothing. Follow-up context
+carries the current run plus at most three host-validated prior
+comparable runs; all arithmetic stays host-side.
+
 ## Tool surface (host-enforced)
 
 - `predict_performance(profile_ref, model_sha, config)` — returns

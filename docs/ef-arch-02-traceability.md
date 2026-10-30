@@ -247,12 +247,29 @@ status reflects the strongest evidence actually recorded in
 - Acceptance test: every claim traces to this matrix.
 - Dependency: all physical qualifications above.
 
-## V. Compatible model discovery (EF-MODEL-ARCH-01, PROPOSED)
+## V. Compatible model discovery (EF-MODEL-ARCH-01, PROPOSED; EF-MODEL-01A PARTIAL)
 
 - Requirement/doc: FR-MODEL-01; master arch §3a, §5a.
-- Implementation: none. No catalog client, no screening logic.
-- Qualified evidence: none. No multi-model on-device testing exists.
-- Missing: catalog contract implementation, host screener, UI.
+- Implementation: EF-MODEL-01A offline bundled catalog
+  (HOST QUALIFIED): versioned JSON, strict parser,
+  host screener (ABI/runtime/context/size/license),
+  Recommended Models UI. No catalog client (cloud
+  catalog still PROPOSED); no downloads.
+  EF-MODEL-01B (HOST QUALIFIED): current-model
+  context, host size comparison, deterministic
+  recommendations, exact-hash evidence matching,
+  memory-limited flag, contextual dialog. Catalog
+  JSON unchanged.
+- Qualified evidence: host only — 30 catalog + 20
+  recommendation tests, full-suite 338/338; 5 entries
+  source-verified 2026-10-29 (repos/files/sizes/
+  licenses read; hashes unverified — no downloads).
+  No multi-model on-device testing exists; physical
+  review pending (owner).
+- Missing: cloud catalog + client (FR-EVID-01),
+  verified artifact hashes (see
+  docs/ef-model-01b-association.md), on-device
+  execution proof.
 - v2 requirement: 3–5 host-screened candidates with stated basis.
 - Acceptance test: FR-MODEL-01 matrix (unsupported quant/arch,
   RAM, hash, license, duplicates, stale, no-candidate).
@@ -310,12 +327,13 @@ status reflects the strongest evidence actually recorded in
   agent parents once, children never; standalone runs have no
   record and do not count), retirement + relaunch persistence.
 - v2 requirement: offline, no account/key/downloads/calls/runs;
-  auto-retire at three qualifying completions; Skip permanence
-  is an OPEN OWNER DECISION (product requirements §Open owner
-  decisions); replay counting likewise open.
+  auto-retire at three qualifying completions; Skip (UX-D01),
+  standalone (UX-D02), replay (UX-D03) decided — see
+  `ef-ux-01-design.md` §E/§F for the specified predicate.
 - Acceptance test: offline walk, skip path, retirement across
   relaunch, non-counting matrix (FR-ONBOARD-01).
-- Dependency: Y (surfaces); EF-SESSION-01 (semantics exist).
+- Dependency: Y (surfaces); EF-SESSION-01 (semantics exist);
+  UX-01D owns predicate + standalone path.
 
 ## AA. Report import and attachment (EF-UX-REQ-01, PROPOSED)
 
@@ -333,9 +351,8 @@ status reflects the strongest evidence actually recorded in
   self-qualify, or self-publish.
 - Acceptance test: export→import→attach round trip with hash
   equality; refusal matrix (FR-RPT-01).
-- Dependency: Y (exposure surfaces) — ordering of Y-build vs
-  AA-build is an OPEN OWNER DECISION; neither absorbs the
-  other.
+- Dependency: Y (exposure surfaces) — ordering decided by
+  UX-D04 (Y-build first); neither absorbs the other.
 
 ## Pre-submission roadmap (EF-UX-REQ-01, PROPOSED sequence)
 
@@ -353,7 +370,7 @@ C. EF-UX-01 implementation (Y: main experience; Z: onboarding
    + retirement; provenance retained) → unblocks E.
 D. Report import/attachment milestone (AA: validation, explicit
    attach/bind, integrity tests, UI integration) → unblocks E.
-   C-vs-D order is dependency-reviewed and owner-decided.
+   C precedes D per UX-D04; neither absorbs the other.
 E. Full physical-device functional crawl + usability acceptance
    (S22 Ultra via ADB preferred; emulator for isolated/
    destructive cases): reachability, onboarding persistence +
