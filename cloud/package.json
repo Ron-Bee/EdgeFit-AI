@@ -1,0 +1,10 @@
+{
+  "name": "edgefit-cloud-01a",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "EF-CLOUD-01A global evidence foundation: versioned submission API, eligibility, aggregation. Isolated test databases only; no deployment in this milestone.",
+  "scripts": {
+    "test": "node --test \"test/*.test.js\""
+  }
+}
