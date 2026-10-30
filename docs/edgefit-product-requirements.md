@@ -12,8 +12,9 @@ then the stated qualification.
 
 The app SHALL display loading, prefill, generation, and finalization
 stages with real token counts, provisional throughput, and elapsed
-time from native execution. Dependencies: EF-BENCH-01. Status: HOST
-QUALIFIED (implementation complete, physical run pending).
+time from native execution. Dependencies: EF-BENCH-01. Status:
+PHYSICALLY QUALIFIED (scoped: completion screen + live
+generation observed on S22 Ultra; lifecycle/overhead deferred).
 Acceptance: ordered stages observed on S22 Ultra; VALID export; no
 number shown that the sampler did not measure.
 
@@ -21,24 +22,29 @@ number shown that the sampler did not measure.
 
 The app SHALL show the persisted prediction beside measured results
 with host-computed absolute and percentage errors. Dependencies:
-EF-SESSION-01, FR-AGENT-03. Status: PROPOSED. Acceptance: errors
+EF-SESSION-01, FR-AGENT-03. Status: PHYSICALLY QUALIFIED
+(scoped: shown in live S22 Ultra sessions). Acceptance: errors
 recomputed by hand from the two artifacts match the display.
 
 ### FR-BYOK-01 Secure API-key input
 
 The app SHALL accept a developer Meta Model API key through an
 explicit credential screen with masked entry, no logging, and no
-inclusion in exports. Dependencies: none. Status: PROPOSED.
-Acceptance: key works for one call; grep of app-private files,
-logcat capture, exports, and JSON finds no key substring.
+inclusion in exports. Dependencies: none. Status: IMPLEMENTED +
+LIVE + PHYSICALLY QUALIFIED (scoped: EF-BYOK-01 S22 Ultra
+session). Acceptance: key works for one call; grep of
+app-private files, logcat capture, exports, and JSON finds
+no key substring.
 
 ### FR-BYOK-02 Direct authorized Meta access
 
 The app SHALL call the official Meta Model API over HTTPS directly
 with the user's key, only from explicit user actions, with per-action
 field and cost disclosure. Dependencies: FR-BYOK-01. Status:
-PROPOSED. Acceptance: airplane-mode refusal; proxy log shows only
-`api.meta.ai` with disclosed fields; no EdgeFit backend contact.
+IMPLEMENTED + LIVE + PHYSICALLY QUALIFIED (scoped: EF-BYOK-01
+S22 Ultra session). Acceptance: airplane-mode refusal; proxy
+log shows only `api.meta.ai` with disclosed fields; no
+EdgeFit backend contact.
 Pending interaction (EF-MODEL-ARCH-01, PROPOSED): FR-EVID-01 would
 permit explicitly authorized anonymous public-evidence reads
 carrying no key and no private measurements; at implementation
@@ -49,16 +55,20 @@ instead of contradicting it. Until then, no backend contact stands.
 
 Default SHALL be session-only custody; optional persistence SHALL use
 Keystore-backed encryption; a Forget Key control SHALL remove every
-local copy. Dependencies: FR-BYOK-01. Status: PROPOSED. Acceptance:
-restart drops session keys; forensic file check after Forget finds
-no recoverable key material.
+local copy. Dependencies: FR-BYOK-01. Status: IMPLEMENTED +
+PHYSICALLY QUALIFIED (scoped: Forget Key cleared user-visible
+state on S22 Ultra; forensic key-material check still open).
+Acceptance: restart drops session keys; forensic file check
+after Forget finds no recoverable key material.
 
 ### FR-AGENT-01 Evidence-grounded prediction
 
 Muse SHALL receive approved device/model evidence plus public stats
 and return an evidence-labeled prediction citing only supplied ids.
 Dependencies: EF-SESSION-01, EF-STATS-01 (stats optional until
-available). Status: PROPOSED (workstation prototype HOST QUALIFIED).
+available). Status: IMPLEMENTED + LIVE + PHYSICALLY QUALIFIED
+(scoped: EF-BYOK-01/EF-AGENT-01 S22 Ultra sessions; contract
+v2 + independent host review added, host-qualified).
 Acceptance: mocked + live schema tests; uncited ids rejected.
 
 ### FR-AGENT-02 Bounded experiment recommendation
@@ -66,16 +76,20 @@ Acceptance: mocked + live schema tests; uncited ids rejected.
 Muse MAY recommend the next measurable experiment within host bounds
 (config ranges, fixed workload, finite budget); the host SHALL refuse
 out-of-bounds proposals. Dependencies: FR-AGENT-01. Status:
-PROPOSED. Acceptance: adversarial proposal matrix all refused or
-clamped; budget exhaustion stops the loop with a report.
+IMPLEMENTED + PHYSICALLY QUALIFIED (scoped: approved
+experiment executed on S22 Ultra; budget-exhaustion path
+host-tested only). Acceptance: adversarial proposal matrix
+all refused or clamped; budget exhaustion stops the loop
+with a report.
 
 ### FR-AGENT-03 Prediction error and follow-up
 
 The host SHALL compute errors deterministically and obtain a
 grounded follow-up citing evidence, uncertainty, and limits.
-Dependencies: FR-AGENT-01. Status: PROPOSED (workstation HOST
-QUALIFIED). Acceptance: error math matches artifacts; banned-claim
-scan passes on host text.
+Dependencies: FR-AGENT-01. Status: IMPLEMENTED + LIVE +
+PHYSICALLY QUALIFIED (scoped: live follow-ups recorded in
+S22 Ultra sessions). Acceptance: error math matches
+artifacts; banned-claim scan passes on host text.
 
 ### FR-AGENT-04 Authorized repeat measurements (EF-FOLLOWUP-02)
 
@@ -89,8 +103,9 @@ Source records are never reopened or overwritten. Agent repeats
 require a `purpose: repeat` proposal citing an eligible run with
 exact config/model/workload match, and consume one of the five
 experiment attempts. Dependencies: FR-AGENT-01, FR-AGENT-02,
-FR-AGENT-03. Status: IMPLEMENTED (EF-FOLLOWUP-02, host
-qualification pending). Acceptance: repeat attaches only with
+FR-AGENT-03. Status: IMPLEMENTED + HOST QUALIFIED
+(EF-FOLLOWUP-02; physical repeat pending). Acceptance:
+repeat attaches only with
 new run ID + matching identity; source bytes unchanged;
 budget charged; unmarked no-change proposals still refused;
 follow-up context cites current + bounded priors.
@@ -179,11 +194,12 @@ SHALL be `verified_compatible`, `likely_compatible_unverified`,
 the specific basis. A Muse assertion alone is not compatibility
 proof. No automatic downloads or execution. Dependencies:
 EF-CLOUD-01 model catalog (PROPOSED), ADR-012. Status:
-PARTIAL (EF-MODEL-01A, HOST QUALIFIED): the offline bundled
-catalog implements candidate screening + presentation with
-stated bases; the cloud catalog dependency and on-device
-multi-model testing remain open, and physical review is
-pending. Acceptance: unsupported
+PARTIAL (EF-MODEL-01A/01B, HOST QUALIFIED): the offline
+bundled catalog + contextual comparison implement candidate
+screening + presentation with stated bases; no SHA-verified
+artifacts or measured cross-model evidence yet; cloud
+catalog, on-device multi-model testing, and physical review
+remain open. Acceptance: unsupported
 architecture, incompatible quantization, insufficient RAM,
 unknown artifact hash, missing license, duplicate candidates,
 stale metadata, and no-candidate cases tested; only
@@ -286,7 +302,8 @@ visual framework, toolkit, branding, or layout implementation
 is mandated here. The owner's 3/10 rating is a subjective
 design baseline, not a measured metric. Dependencies:
 FR-UI-01, FR-UI-02, EF-SESSION-01, EF-BYOK-01, EF-AGENT-01.
-Status: PROPOSED / OWNER-REQUESTED; NOT STARTED. Acceptance:
+Status: IMPLEMENTED + HOST QUALIFIED (UX-01A/BC/R2/E +
+UX-02; newest screens await physical review). Acceptance:
 scripted reachability walk of every §18 step on device;
 provenance spot-checks match artifacts; disabled states
 verified non-functional; accessibility spot-checks per
@@ -315,8 +332,10 @@ count. Skip semantics are set by UX-D01 (dismiss-current
 only). A Help/replay entry is specified in
 `ef-ux-01-design.md` §E. Dependencies: EF-SESSION-01
 (state semantics), FR-UX-01. Status: PROPOSED /
-OWNER-REQUESTED; NOT STARTED. Acceptance: offline first-run
-walk; skip path; three-completion retirement verified across
+OWNER-REQUESTED; IMPLEMENTED + HOST QUALIFIED
+(UX-01D; on-device show/retirement pending). Acceptance:
+offline first-run walk; skip path; three-completion
+retirement verified across
 relaunch; failure/abandon/duplicate cases verified
 non-counting; cloud/multi-model never described as
 operational.
@@ -362,9 +381,10 @@ the pre-MEM-03 2 GiB blocking rule, which was an
 implementation policy, never an accepted ADR): below 15%
 available RAM the app warns but never blocks an explicit
 Run, and every run records its memory conditions.
-Status: HOST QUALIFIED for the advisory policy (462/462
-JVM); PHYSICAL REVIEW PENDING for on-device low-memory
-behavior.
+Status: HOST QUALIFIED for the advisory policy (543/543
+JVM); advisory physically observed once (11.9 tok/s at
+24.7% RAM); low-memory edge behavior PHYSICAL REVIEW
+PENDING.
 
 ### NFR-A11Y-01 Accessibility and responsive layouts
 
@@ -375,13 +395,16 @@ PROPOSED (design values set; device check pending).
 ### NFR-OFF-01 Offline operation
 
 Profiling, staging, benchmarking, export, and session review
-SHALL work fully offline. Status: PHYSICALLY QUALIFIED (bench
-path ran offline; session store pending).
+SHALL work fully offline. Status: PHYSICALLY QUALIFIED
+(scoped: bench path ran offline; session relaunch
+persistence observed on S22 Ultra).
 
 ### NFR-NET-01 Network failure recovery
 
 Meta calls SHALL time out, retry never automatically, and leave
-sessions resumable with clear errors. Status: PROPOSED.
+sessions resumable with clear errors. Status: IMPLEMENTED +
+HOST QUALIFIED (connect/read timeouts, bounded sizes,
+single-shot client with no auto-retry loop, typed errors).
 
 ### NFR-SEC-01 Credential security
 
@@ -391,7 +414,10 @@ dumps where platform-supported. Status: PROPOSED.
 ### NFR-COST-01 Request budgets and cost controls
 
 Per-action token/timeout caps and per-session experiment budgets
-with pre-action disclosure. Status: PROPOSED.
+with pre-action disclosure. Status: IMPLEMENTED + HOST
+QUALIFIED (MetaView per-action gate with cost disclosure;
+5-attempt budget enforced + tested; physical review of
+newest review UI pending).
 
 ### NFR-REPRO-01 Reproducible experiments
 

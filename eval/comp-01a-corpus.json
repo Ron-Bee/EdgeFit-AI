@@ -1,0 +1,102 @@
+{
+  "manifest_version": 1,
+  "description": "EF-COMP-01A Stage A evaluation corpus. File-backed entries resolve ${EDGEFIT_EVIDENCE} to the owner's local evidence directory; hashes are verified. Phone-resident session records that were never exported are documented-observation entries: usable as documented context, never as artifact-verified corpus files.",
+  "evidence_root_env": "EDGEFIT_EVIDENCE",
+  "entries": [
+    {
+      "id": "run-a-debug",
+      "role": "measurement",
+      "path": "${EDGEFIT_EVIDENCE}/edgefit-bench-20261026-233319.json",
+      "sha256": "4C02B3CFC9B4DF1B59D098CF35101AB88128F20CF1A417B5B8C8119289A09105",
+      "note": "Unoptimized Debug build; multi-factor historical reference only."
+    },
+    {
+      "id": "run-b-benchmark",
+      "role": "measurement",
+      "path": "${EDGEFIT_EVIDENCE}/edgefit-bench-20261027-120145.json",
+      "sha256": "D720CF20856A4E2A41C4CEC5B607FB5FD3C6638FA7C60BF4E74B45CB592609E5",
+      "note": "Benchmark variant, requested -O3 -g, effective -O2 operator-attested."
+    },
+    {
+      "id": "run-c-benchmark",
+      "role": "measurement",
+      "path": "${EDGEFIT_EVIDENCE}/edgefit-bench-20261027-153531.json",
+      "sha256": "E1058F76E137BA6699523B4F587D108DE2AF95A20317448B402CFF8FF8A7815D",
+      "note": "Benchmark variant repeat."
+    },
+    {
+      "id": "run-d-benchmark",
+      "role": "measurement",
+      "path": "${EDGEFIT_EVIDENCE}/edgefit-bench-20261027-171127.json",
+      "sha256": "52A1FE26F882E4FBFEAF0DAF1928BE4C6F8CC51BB01285A11260A78EAC9441BB",
+      "note": "Benchmark variant; elevated thermal throughout."
+    },
+    {
+      "id": "profile-original",
+      "role": "device-context",
+      "path": "${EDGEFIT_EVIDENCE}/edgefit-profile-20261026-210006.json",
+      "sha256": "9C27FBBB2AB74BD73822F552FEEBFC5C473C7CFC9A4DA59B26E0EB6E73DB2D42"
+    },
+    {
+      "id": "profile-post-debug",
+      "role": "device-context",
+      "path": "${EDGEFIT_EVIDENCE}/edgefit-profile-20261026-233322.json",
+      "sha256": "A375D8A2591DE100CFEE0C610FCEB046F4384A66AB7FC3C3C8A21B44C0399C22"
+    },
+    {
+      "id": "profile-post-optimized",
+      "role": "device-context",
+      "path": "${EDGEFIT_EVIDENCE}/edgefit-profile-20261027-120150.json",
+      "sha256": "838B9FD26612349E7DAF34994AA39843869632DDE2C352907E0954055C899864"
+    },
+    {
+      "id": "pred-byok-live",
+      "role": "documented-observation",
+      "session_ref": "SES-aa255b757ace13cd",
+      "predicted_gen_tps": 12.0,
+      "predicted_prefill_tps": 45.0,
+      "provenance": "live_meta muse-spark-1.3",
+      "note": "Phone-resident BYOK session; owner-observed scoped acceptance. Prediction timestamp unrecorded in repo-available evidence; signed error +6.417 tok/s documented from owner screenshots."
+    },
+    {
+      "id": "pred-agent-exp1",
+      "role": "documented-observation",
+      "session_ref": "parent SES-a77eaa6f4cd92641 experiment 1",
+      "predicted_gen_tps": 11.0,
+      "observed_run_id": "BENCH-20261028T211141Z-8cdc4efe",
+      "observed_gen_tps": 16.07232546459066,
+      "provenance": "live_meta muse-spark-1.3",
+      "note": "Phone-resident Agent child; verified by read-only ADB session inspection 2026-10-28 (EF-AGENT-01-DIAG). Benchmark artifact never exported; prediction timestamp unrecorded in repo-available evidence."
+    },
+    {
+      "id": "pred-agent-exp4",
+      "role": "documented-observation",
+      "session_ref": "SES-63a4ace2c6d85778",
+      "predicted_gen_tps": 17.5,
+      "predicted_prefill_tps": 27.0,
+      "observed_run_id": "BENCH-20261028T224503Z-38ccf1f5",
+      "observed_gen_tps": 17.738359201773836,
+      "observed_config": "ctx=256 threads=4 predict=64",
+      "provenance": "live_meta muse-spark-1.3",
+      "note": "Phone-resident Agent child; verified by read-only ADB session inspection 2026-10-28 (EF-AGENT-01-PHYS-QUAL) incl. prediction-before-execution chain. Benchmark artifact never exported; prediction timestamp unrecorded in repo-available evidence."
+    }
+  ],
+  "pairs": [
+    {
+      "id": "pair-exp1",
+      "prediction": "pred-agent-exp1",
+      "observed_run_id": "BENCH-20261028T211141Z-8cdc4efe",
+      "predicted_at_utc": null,
+      "collected_at_utc": "2026-10-28T21:11:41Z",
+      "collected_at_source": "run-id"
+    },
+    {
+      "id": "pair-exp4",
+      "prediction": "pred-agent-exp4",
+      "observed_run_id": "BENCH-20261028T224503Z-38ccf1f5",
+      "predicted_at_utc": null,
+      "collected_at_utc": "2026-10-28T22:45:03Z",
+      "collected_at_source": "run-id"
+    }
+  ]
+}

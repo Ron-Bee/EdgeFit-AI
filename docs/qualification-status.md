@@ -1279,3 +1279,44 @@ Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
 - EF-CLOUD-01A: IMPLEMENTATION PASS.
   HOST PASS. DEPLOYMENT NOT STARTED
   (owner-gated).
+
+## EF-COMP-01A Stage A (offline baseline + harness; HOST ONLY)
+
+- Owner directive: CONDITIONAL APPROVAL, OFFLINE
+  IMPLEMENTATION ONLY. No live calls, no
+  benchmarks, no deploys, no main merge.
+- Agent-executed implementation on
+  `implement/ef-comp-01a-stage-a-2026-10-30`
+  from 3999a84: `EvalBaseline` (deterministic
+  rules-only arm R: host-validated ranking,
+  exposed factors, insufficient-evidence
+  abstention, null predictions when unmeasured),
+  `EvalMetrics` (shared R/M0/M1 metrics with
+  NOT_EVALUABLE + reason, strict
+  prediction-before-outcome ordering, no
+  zero-fill), `EvalArms` (M0/M1 evidence
+  contracts, shared-candidate enforcement,
+  production-gate validation, cost ledger;
+  no live request constructed).
+- Corpus inventory (verified read-only
+  2026-10-30): 4 SHA-verified bench JSONs,
+  all COMPLETED 512/4/64, same model +
+  workload (Runs A/B/C/D); 3 SHA-verified
+  profiles; DB integrity ok (1 profile,
+  2 rows), hash unchanged; 3 live predictions
+  documented phone-resident without exported
+  artifacts or repo-recorded prediction
+  timestamps. `eval/comp-01a-corpus.json` +
+  `scripts/ef-comp-01a-manifest.mjs` validate
+  this: 4 verified, 0 evaluable pairs, no
+  config variation — regret/superiority
+  NOT_EVALUABLE on history, by tool output.
+- Host evidence: JVM suite green incl. 28 new
+  eval tests; manifest validator 5/5
+  (node:test fixtures); corpus run exit 0
+  with the honest report. Reuses BenchConfig,
+  BenchContract, AgentApi gate, SessionJson
+  hashing; no parallel systems, no native
+  changes, no cloud deps.
+- EF-COMP-01A Stage A: IMPLEMENTATION PASS.
+  HOST PASS. STAGE B NOT AUTHORIZED.
