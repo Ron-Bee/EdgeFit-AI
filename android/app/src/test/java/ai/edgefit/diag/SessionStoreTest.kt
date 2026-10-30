@@ -246,14 +246,13 @@ class SessionStoreTest {
     }
 
     @Test
-    fun storeFullEnforced() {
+    fun noCountCeilingPastFifty() {
+        // EF-SESSION-SCALE-01 replaces storeFullEnforced:
+        // the 51st session is ordinary supported behavior.
         val mgr = manager()
-        repeat(SessionStore.MAX_SESSIONS) { mgr.newSession() }
-        try {
-            mgr.newSession()
-            fail("over capacity accepted")
-        } catch (_: SessionStore.StoreFull) {
-        }
+        repeat(50) { mgr.newSession() }
+        mgr.newSession()
+        assertEquals(51, mgr.listSessions().size)
     }
 
     @Test
@@ -606,10 +605,11 @@ class SessionStoreTest {
         val pending = SessionView.buildSummary(mgr.get(id))
         assertTrue(pending.contains("15.0 tok/s"))
         assertTrue(pending.contains("[offline_test]"))
-        assertTrue(pending.contains("benchmark: not attached"))
+        assertTrue(pending.contains("measured: not attached"))
         val attached = SessionBenchBridge.attach(mgr, id, completedResult())
         val done = SessionView.buildSummary(attached)
-        assertTrue(done.contains("BENCH-20261027T010000Z-abcdef12 COMPLETED"))
+        assertTrue(done.contains("BENCH-20261027T010000Z-abcdef12"))
+        assertTrue(done.contains("(COMPLETED)"))
         assertTrue(done.contains("comparison: gen -5.8 tok/s (-38.67%)"))
     }
 

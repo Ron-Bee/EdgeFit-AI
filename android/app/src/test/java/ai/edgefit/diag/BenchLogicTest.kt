@@ -87,19 +87,26 @@ class BenchLogicTest {
 
     @Test
     fun guardsRefuse() {
+        // EF-MEM-03: memory NEVER refuses (see
+        // MemPolicyTest.no2GiBHardGate). Only ABI, model
+        // bounds, and thermal refuse.
         val gb = 1024L * 1024 * 1024
         val cases = listOf(
             Triple(listOf("x86_64"), 6 * gb, "light"), // unsupported ABI
             Triple(listOf("arm64-v8a"), 6 * gb, null), // unknown thermal
-            Triple(listOf("arm64-v8a"), 6 * gb, "severe"), // unsafe thermal
-            Triple(listOf("arm64-v8a"), 0L, "light"), // unknown memory
-            Triple(listOf("arm64-v8a"), 1 * gb, "light") // insufficient memory
+            Triple(listOf("arm64-v8a"), 6 * gb, "severe") // unsafe thermal
         )
         for ((abis, avail, thermal) in cases) {
             assertFalse(BenchGuards.preflight(abis, avail, 807694464L, thermal).isEmpty())
         }
         assertFalse(BenchGuards.preflight(
             listOf("arm64-v8a"), 6 * gb, 3 * gb, "light").isEmpty())
+        // Memory extremes proceed to an explicit run.
+        for (avail in listOf(0L, -1L, 1 * gb)) {
+            assertTrue(BenchGuards.preflight(
+                listOf("arm64-v8a"), avail, 807694464L,
+                "light").isEmpty())
+        }
     }
 
     @Test
@@ -108,6 +115,16 @@ class BenchLogicTest {
         assertEquals(2 * gb, BenchGuards.requiredAvailBytes(100L))
         assertEquals(2 * gb, BenchGuards.requiredAvailBytes(807694464L))
         assertEquals(1610612736L + gb, BenchGuards.requiredAvailBytes(1610612736L))
+    }
+
+    @Test
+    fun refusalDetailStatesMeasuredVsRequired() {
+        val mb = 1024L * 1024L
+        assertEquals("available 1500 MB, required 2048 MB",
+            BenchGuards.refusalDetail(1500 * mb, 807694464L))
+        // Rounds down: never overstates headroom.
+        assertEquals("available 1500 MB, required 2048 MB",
+            BenchGuards.refusalDetail(1500 * mb + 999_999, 807694464L))
     }
 
     @Test

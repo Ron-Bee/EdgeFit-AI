@@ -144,4 +144,21 @@ class SessionViewTest {
         assertNull(child.prediction)
         assertNull(child.benchmark)
     }
+
+    @Test
+    fun failedSummaryShowsNoMeasurement() {
+        // A failed run must not read as a 0.0 tok/s
+        // performance observation.
+        val failed = agentChild(manager()).copy(
+            state = SessionState.BENCHMARK_FAILED,
+            benchmark = mapOf(
+                "run_id" to "BENCH-f",
+                "status" to BenchContract.STATUS_FAILED,
+                "measurements" to mapOf(
+                    "tps_gen" to 0.0, "tps_prefill" to 0.0)))
+        val summary = SessionView.buildSummary(failed)
+        assertTrue(summary.contains("measured: none"))
+        assertTrue(summary.contains("BENCH-f"))
+        assertTrue(!summary.contains("0.0 tok/s"))
+    }
 }

@@ -131,4 +131,73 @@ class AgentViewTest {
             AgentView.resolveNotice("Agent list failed: store unreadable",
                 "Proposal preserved as rejected."))
     }
+
+    private fun evidence(
+        runId: String,
+        genTps: Double
+    ): AgentEvidence.RunEvidence = AgentEvidence.RunEvidence(
+        seq = 1, childId = "SES-x", runId = runId, nCtx = 512,
+        nThreads = 4, nPredict = 64, genTps = genTps,
+        prefillTps = 30.0, predictedGen = null, genPct = null,
+        thermal = "none", comparable = true, contextReason = null
+    )
+
+    @Test
+    fun statusTextShowsBestComparable() {
+        val detail = AgentView.AgentDetail(
+            parent = parent(), children = emptyList(),
+            pack = AgentEvidence.EvidencePack(
+                comparable = listOf(
+                    evidence("BENCH-slow", 12.5),
+                    evidence("BENCH-fast", 17.7)),
+                contextual = emptyList(), packHash = ""),
+            gateOk = true, gateReason = "")
+        val text = AgentView.statusText(detail)
+        assertTrue(text.contains("best comparable: BENCH-fast 17.7"))
+    }
+
+    @Test
+    fun statusTextShowsNoBestWithoutComparable() {
+        val detail = AgentView.AgentDetail(
+            parent = parent(), children = emptyList(),
+            pack = AgentEvidence.EvidencePack(
+                comparable = emptyList(), contextual = emptyList(),
+                packHash = ""),
+            gateOk = true, gateReason = "")
+        assertTrue(AgentView.statusText(detail)
+            .contains("best comparable: none yet"))
+    }
+
+    @Test
+    fun failedExperimentShowsNoMeasurement() {
+        val manager = SessionManager(temp.newFolder()) {
+            "2026-10-28T00:00:00Z"
+        }
+        val agent = AgentManager(manager) { "2026-10-28T00:00:00Z" }
+        val created = agent.createAgent(
+            deviceModel = "SM-S908U", profileSha256 = null,
+            modelSha256 = "0".repeat(64), modelSizeBytes = 100L,
+            modelDisplay = "mock.gguf", workloadId = BenchContract.WORKLOAD_ID,
+            promptSha256 = "1".repeat(64), baseConfig = BenchConfig.default())
+        val child = agent.childrenOf(created.sessionId).single()
+        val failed = child.copy(
+            benchmark = mapOf(
+                "run_id" to "BENCH-f",
+                "status" to BenchContract.STATUS_FAILED,
+                "measurements" to mapOf(
+                    "tps_gen" to 0.0, "tps_prefill" to 0.0)))
+        val bad = evidence("BENCH-f", 0.0).copy(
+            childId = failed.sessionId, comparable = false,
+            contextReason = "not COMPLETED")
+        val detail = AgentView.AgentDetail(
+            parent = agent.getParent(created.sessionId),
+            children = listOf(failed),
+            pack = AgentEvidence.EvidencePack(
+                comparable = emptyList(), contextual = listOf(bad),
+                packHash = ""),
+            gateOk = true, gateReason = "")
+        val line = AgentView.experimentLines(detail).single()
+        assertTrue(line.contains("no measurement (run FAILED)"))
+        assertTrue(!line.contains("0.0 tok/s"))
+    }
 }
