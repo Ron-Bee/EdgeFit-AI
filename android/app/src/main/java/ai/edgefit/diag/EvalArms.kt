@@ -14,14 +14,20 @@ package ai.edgefit.diag
  * - M0 packs carry constraints + candidates and NOTHING
  *   measured. `measurements` is null, and `exclusions`
  *   records the withheld evidence.
- * - M1 packs admit only evidence the caller marks
- *   comparable AND identity-matched (model SHA, workload,
- *   runtime/build). Anything else is refused, never
- *   silently dropped: refusals land in `exclusions`.
+ * - M1 packs admit only evidence passing
+ *   [verifyProof] against a [MeasurementProof]
+ *   transcribed from the validated artifact. Caller flag
+ *   assertions are ignored, never trusted. Anything else
+ *   is refused, never silently dropped: refusals land in
+ *   `exclusions` naming the failed check.
  * - Target-decision outcomes NEVER enter either pack:
  *   callers supply prior evidence only. The pack hash
  *   commits to the exact bytes, so post-hoc leakage is
- *   detectable by rehashing.
+ *   detectable by rehashing — but a hash alone does NOT
+ *   prove the pack was frozen before measurement. Stage B
+ *   MUST record each pack hash in its session record with
+ *   a timestamp predating the first run, and the
+ *   evaluation MUST compare those timestamps.
  */
 object EvalArms {
 
@@ -44,16 +50,42 @@ object EvalArms {
         val memLowMemory: Boolean?
     )
 
-    /** One measurement offered to an M1 pack. */
+    /**
+     * R1: source-verified provenance for one measurement,
+     * transcribed from the validated artifact (bench JSON
+     * + corpus manifest hash check), never from recall.
+     */
+    data class MeasurementProof(
+        val artifactSha256: String,
+        val runId: String,
+        val modelSha256: String,
+        val workloadId: String,
+        val promptSha256: String,
+        val runtimeVersion: String,
+        val runtimeAbi: String,
+        val nativeVariant: String,
+        val status: String,
+        val collectedAtUtc: String,
+        val nCtx: Int,
+        val nThreads: Int,
+        val nPredict: Int
+    )
+
+    /**
+     * One measurement offered to an M1 pack.
+     *
+     * R1: `identityMatched` and `comparable` are GATE
+     * OUTPUTS, set by [m1Pack] from [MeasurementProof]
+     * verification — never trusted caller inputs. Any
+     * values a caller supplies are ignored and recomputed.
+     */
     data class ArmMeasurement(
         val runId: String,
         val config: BenchConfigData,
         val genTps: Double,
         val prefillTps: Double,
         val thermalAfter: String,
-        /** Caller asserts same model/workload/build. */
         val identityMatched: Boolean,
-        /** Caller asserts COMPLETED + comparable. */
         val comparable: Boolean
     )
 
@@ -102,10 +134,19 @@ object EvalArms {
         )
     }
 
+    /**
+     * R1: every offered measurement MUST arrive with its
+     * source proof; the gate verifies model, workload,
+     * prompt, runtime, ABI, native variant, COMPLETED
+     * status, collection timestamp, run id, and config
+     * triple against the arm constraints. Caller flag
+     * assertions are ignored. Refusals name the exact
+     * failed check.
+     */
     fun m1Pack(
         constraints: ArmConstraints,
         candidates: List<BenchConfigData>,
-        offered: List<ArmMeasurement>
+        offered: List<Pair<ArmMeasurement, MeasurementProof>>
     ): ArmPack {
         require(candidates.isNotEmpty()) { "candidate set must be non-empty" }
         for (candidate in candidates) {
@@ -119,17 +160,15 @@ object EvalArms {
         }
         val admitted = mutableListOf<ArmMeasurement>()
         val exclusions = mutableListOf<String>()
-        for (m in offered) {
-            val reason = when {
-                !m.identityMatched ->
-                    "identity mismatch (model/workload/build)"
-                !m.comparable -> "not COMPLETED/comparable"
-                !m.genTps.isFinite() || m.genTps <= 0 ->
-                    "unusable throughput"
-                else -> null
+        for ((m, proof) in offered) {
+            val failures = verifyProof(proof, constraints, m)
+            if (failures.isEmpty()) {
+                admitted.add(m.copy(
+                    identityMatched = true, comparable = true))
+            } else {
+                exclusions.add("refused ${m.runId}: " +
+                    failures.joinToString("; "))
             }
-            if (reason == null) admitted.add(m)
-            else exclusions.add("refused ${m.runId}: $reason")
         }
         return assemble(
             arm = ARM_M1,
@@ -138,6 +177,64 @@ object EvalArms {
             measurements = admitted,
             exclusions = exclusions
         )
+    }
+
+    /**
+     * R1: proof verification. Returns the failed checks;
+     * empty means admitted. Every field is compared, so a
+     * proof for a different run, config, or build cannot
+     * pass, and an empty artifact SHA never verifies.
+     */
+    fun verifyProof(
+        proof: MeasurementProof,
+        constraints: ArmConstraints,
+        measurement: ArmMeasurement
+    ): List<String> {
+        val failures = mutableListOf<String>()
+        if (proof.artifactSha256.isBlank()) {
+            failures.add("missing artifact SHA-256")
+        }
+        if (!proof.runId.equals(measurement.runId)) {
+            failures.add("proof run id does not match measurement")
+        }
+        if (!proof.modelSha256.equals(constraints.modelSha256,
+                ignoreCase = true)
+        ) {
+            failures.add("model SHA-256 mismatch")
+        }
+        if (proof.workloadId != constraints.workloadId) {
+            failures.add("workload mismatch")
+        }
+        if (!proof.promptSha256.equals(constraints.promptSha256,
+                ignoreCase = true)
+        ) {
+            failures.add("prompt SHA-256 mismatch")
+        }
+        if (proof.runtimeVersion != constraints.runtimeVersion) {
+            failures.add("runtime version mismatch")
+        }
+        if (proof.runtimeAbi != constraints.runtimeAbi) {
+            failures.add("runtime ABI mismatch")
+        }
+        if (proof.nativeVariant != constraints.nativeVariant) {
+            failures.add("native variant mismatch")
+        }
+        if (proof.status != BenchContract.STATUS_COMPLETED) {
+            failures.add("status is ${proof.status}, not COMPLETED")
+        }
+        if (proof.collectedAtUtc.isBlank()) {
+            failures.add("missing collection timestamp")
+        }
+        if (proof.nCtx != measurement.config.nCtx ||
+            proof.nThreads != measurement.config.nThreads ||
+            proof.nPredict != measurement.config.nPredict
+        ) {
+            failures.add("proof config triple does not match measurement")
+        }
+        if (!measurement.genTps.isFinite() || measurement.genTps <= 0) {
+            failures.add("unusable throughput")
+        }
+        return failures
     }
 
     /**

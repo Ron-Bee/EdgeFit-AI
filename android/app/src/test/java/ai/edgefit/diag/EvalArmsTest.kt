@@ -35,6 +35,7 @@ class EvalArmsTest {
         runId: String,
         threads: Int = 4,
         gen: Double = 16.0,
+        // Caller flag assertions; the gate ignores these.
         identity: Boolean = true,
         comparable: Boolean = true
     ) = EvalArms.ArmMeasurement(
@@ -47,6 +48,37 @@ class EvalArmsTest {
         comparable = comparable
     )
 
+    private fun proof(
+        runId: String,
+        threads: Int = 4,
+        modelSha: String = constraints().modelSha256,
+        workloadId: String = BenchContract.WORKLOAD_ID,
+        variant: String = "benchmark",
+        status: String = BenchContract.STATUS_COMPLETED,
+        collectedAt: String = "2026-10-28T01:00:00Z",
+        sha: String = "ab".repeat(32)
+    ) = EvalArms.MeasurementProof(
+        artifactSha256 = sha,
+        runId = runId,
+        modelSha256 = modelSha,
+        workloadId = workloadId,
+        promptSha256 = constraints().promptSha256,
+        runtimeVersion = "0.7.0-dev",
+        runtimeAbi = "arm64-v8a",
+        nativeVariant = variant,
+        status = status,
+        collectedAtUtc = collectedAt,
+        nCtx = 512,
+        nThreads = threads,
+        nPredict = 64
+    )
+
+    private fun offered(
+        runId: String,
+        threads: Int = 4,
+        gen: Double = 16.0
+    ) = measurement(runId, threads, gen) to proof(runId, threads)
+
     @Test
     fun m0WithholdsAllMeasurementsByDesign() {
         val pack = EvalArms.m0Pack(constraints(), candidates(),
@@ -58,20 +90,69 @@ class EvalArmsTest {
     }
 
     @Test
-    fun m1AdmitsOnlyIdentityMatchedComparable() {
+    fun m1AdmitsOnlyProofVerifiedMeasurements() {
         val pack = EvalArms.m1Pack(
             constraints(), candidates(),
             offered = listOf(
-                measurement("BENCH-GOOD"),
-                measurement("BENCH-WRONG-BUILD", identity = false),
-                measurement("BENCH-FAILED", comparable = false),
-                measurement("BENCH-BAD-TPS", gen = Double.NaN)
+                offered("BENCH-GOOD"),
+                measurement("BENCH-WRONG-MODEL") to
+                    proof("BENCH-WRONG-MODEL",
+                        modelSha = "00".repeat(32)),
+                measurement("BENCH-FAILED") to
+                    proof("BENCH-FAILED", status = "FAILED"),
+                measurement("BENCH-BAD-TPS", gen = Double.NaN) to
+                    proof("BENCH-BAD-TPS")
             )
         )
         assertEquals(listOf("BENCH-GOOD"),
             pack.measurements!!.map { it.runId })
+        assertTrue(pack.measurements.single().identityMatched)
+        assertTrue(pack.measurements.single().comparable)
         assertEquals(3, pack.exclusions.size)
-        assertTrue(pack.exclusions.any { it.contains("BENCH-WRONG-BUILD") })
+        assertTrue(pack.exclusions.any {
+            it.contains("BENCH-WRONG-MODEL") && it.contains("model SHA")
+        })
+        assertTrue(pack.exclusions.any {
+            it.contains("BENCH-FAILED") && it.contains("not COMPLETED")
+        })
+    }
+
+    @Test
+    fun callerFlagAssertionsNeverSubstituteForProofs() {
+        // Flags claim validity; the proof disagrees (wrong
+        // variant + blank artifact SHA). The gate refuses.
+        val pack = EvalArms.m1Pack(
+            constraints(), candidates(),
+            offered = listOf(
+                measurement("BENCH-LYING-FLAGS",
+                    identity = true, comparable = true) to
+                    proof("BENCH-LYING-FLAGS", variant = "debug", sha = "")
+            )
+        )
+        assertTrue(pack.measurements!!.isEmpty())
+        assertEquals(1, pack.exclusions.size)
+        assertTrue(pack.exclusions.single().contains("variant mismatch"))
+        assertTrue(pack.exclusions.single().contains("artifact SHA"))
+    }
+
+    @Test
+    fun proofFieldMismatchesRefuse() {
+        val m = measurement("BENCH-X", threads = 8)
+        val base = proof("BENCH-X", threads = 8)
+        assertTrue(EvalArms.verifyProof(base, constraints(), m).isEmpty())
+        val cases = listOf(
+            base.copy(runId = "BENCH-OTHER") to "run id",
+            base.copy(nThreads = 4) to "triple",
+            base.copy(workloadId = "other") to "workload",
+            base.copy(runtimeAbi = "x86_64") to "ABI",
+            base.copy(collectedAtUtc = "") to "timestamp",
+            base.copy(promptSha256 = "00".repeat(32)) to "prompt"
+        )
+        for ((bad, fragment) in cases) {
+            val failures = EvalArms.verifyProof(bad, constraints(), m)
+            assertTrue("expected $fragment refusal, got $failures",
+                failures.any { it.contains(fragment) })
+        }
     }
 
     @Test
@@ -79,7 +160,7 @@ class EvalArmsTest {
         val m0 = EvalArms.m0Pack(constraints(), candidates(),
             withheldCount = 1)
         val m1 = EvalArms.m1Pack(constraints(), candidates(),
-            offered = listOf(measurement("BENCH-GOOD")))
+            offered = listOf(offered("BENCH-GOOD")))
         EvalArms.requireSharedCandidates(m0, m1)
         val other = EvalArms.m0Pack(constraints(),
             listOf(BenchConfig.default()), withheldCount = 1)
@@ -95,9 +176,9 @@ class EvalArmsTest {
     fun packsAreDeterministic() {
         val reversed = candidates().reversed()
         val first = EvalArms.m1Pack(constraints(), candidates(),
-            offered = listOf(measurement("BENCH-GOOD")))
+            offered = listOf(offered("BENCH-GOOD")))
         val second = EvalArms.m1Pack(constraints(), reversed,
-            offered = listOf(measurement("BENCH-GOOD")))
+            offered = listOf(offered("BENCH-GOOD")))
         assertEquals(first.packHash, second.packHash)
         assertEquals(first.candidateHash, second.candidateHash)
     }

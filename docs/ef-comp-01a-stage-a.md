@@ -41,7 +41,7 @@ NOT_EVALUABLE. The manifest tool reports this itself:
 `measurements_verified: 4, evaluable_pairs: 0,
 config_variation: false`.
 
-## 2. Baseline R (`EvalBaseline`)
+## 2. Baseline R (`EvalBaseline`, R1-corrected)
 
 Decision rules (documented in code): host-validate
 candidates against `BenchConfig.validate` + device thread
@@ -49,26 +49,42 @@ max; rank measured candidates by sample median (ties by
 ascending triple); unmeasured rank below with null
 predictions; abstain when nothing is measured
 (`insufficient-evidence`) or nothing is valid; memory is
-advisory-only and never excludes. Deterministic by
-construction (tested: input permutation → identical output).
+advisory-only and never excludes. R1 correction:
+same-triple records AGGREGATE (samples concatenate,
+thermal counts sum) under one cohort key instead of
+last-wins overwrite; mixed cohorts throw. Deterministic by
+construction (tested: evidence permutation → identical
+decision).
 
-## 3. Metrics (`EvalMetrics`)
+## 3. Metrics (`EvalMetrics`, R1-corrected)
 
 Shared by R/M0/M1: valid proposal rate, invalid rejection
 rate, fabricated citation rate, abstention + appropriateness
 rates, signed/abs prediction error (strict `predicted_at <
 collected_at`), selection regret among tested options,
 observed-throughput passthrough, latency, cost, sample
-counts. Unsupported metrics return NOT_EVALUABLE with a
-reason; missing data is never zero-filled.
+counts. R1 corrections: citations check against each
+case's OWN authorized ids (never pooled);
+`invalidProposalRate` (submission share) is split from
+`hostRejectionRate`, which counts only invalid submissions
+with recorded refusal evidence — fixture-only invalid
+flags stay NOT_EVALUABLE. Unsupported metrics return
+NOT_EVALUABLE with a reason; missing data is never
+zero-filled.
 
-## 4. Arms (`EvalArms`)
+## 4. Arms (`EvalArms`, R1-corrected)
 
 - M0: constraints + the shared candidate set, measurements
   withheld (null + recorded exclusions).
-- M1: same set + only identity-matched, comparable,
-  positive-throughput measurements; refusals recorded, never
-  silent.
+- M1: same set + only measurements passing
+  `verifyProof` against a `MeasurementProof` transcribed
+  from the validated artifact (model, workload, prompt,
+  runtime, ABI, variant, COMPLETED status, timestamp, run
+  id, config triple). Caller flag assertions are ignored;
+  refusals name the failed check.
+- Pack hashes prove pack integrity, NOT pre-measurement
+  freezing: Stage B records each hash with a timestamp
+  predating run 1 (see `ef-comp-01b-stage-b.md`).
 - `requireSharedCandidates` throws when arms diverge.
 - Responses validate through production
   `AgentApi.validateProposal` (no drift).
@@ -111,4 +127,7 @@ No new cloud dependencies. No native changes.
 - Stage B needs: prediction timestamps in session records
   (already durable on-device for new runs), exported
   benchmark artifacts for every trial, and the run manifest
-  below frozen before execution.
+  frozen before execution. Pre-registered in
+  `docs/ef-comp-01b-stage-b.md` (A/B, A-B-B-A-A-B, two
+  sessions × 3 approvals, 2 paid calls); NOT authorized
+  to run.

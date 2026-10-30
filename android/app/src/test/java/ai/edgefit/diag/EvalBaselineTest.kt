@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.fail
 import org.junit.Test
 
 /** EF-COMP-01A Stage A: Baseline R decision rules. */
@@ -16,10 +17,11 @@ class EvalBaselineTest {
     private fun evidence(
         config: BenchConfigData,
         vararg samples: Double,
-        elevated: Int = 0
+        elevated: Int = 0,
+        cohort: String = "cohort-a"
     ) = EvalBaseline.CandidateEvidence(
         config = config, genSamples = samples.toList(),
-        elevatedThermal = elevated)
+        elevatedThermal = elevated, cohortKey = cohort)
 
     @Test
     fun selectsBestObservedMedian() {
@@ -170,6 +172,64 @@ class EvalBaselineTest {
         assertTrue(decision.ranked.single().factors.any {
             it.contains("elevated thermal")
         })
+    }
+
+    @Test
+    fun sameTripleRecordsAggregateInsteadOfOverwriting() {
+        val candidate = config(512, 4, 64)
+        val decision = EvalBaseline.decide(
+            candidates = listOf(candidate),
+            evidence = listOf(
+                evidence(candidate, 12.0, elevated = 1),
+                evidence(candidate, 16.0, 20.0)
+            ),
+            deviceMaxThreads = 8
+        )
+        assertFalse(decision.abstained)
+        val ranked = decision.ranked.single()
+        // Median of {12, 16, 20}, not last-wins median of {16, 20}.
+        assertEquals(16.0, ranked.medianGen!!, 1e-9)
+        assertEquals(3, ranked.n)
+        assertTrue(ranked.factors.any { it.contains("elevated thermal") })
+    }
+
+    @Test
+    fun evidencePermutationCannotChangeDecision() {
+        val two = config(512, 2, 64)
+        val four = config(512, 4, 64)
+        val records = listOf(
+            evidence(two, 12.0),
+            evidence(four, 16.0),
+            evidence(two, 14.0, elevated = 1),
+            evidence(four, 15.0)
+        )
+        val forward = EvalBaseline.decide(
+            candidates = listOf(two, four),
+            evidence = records, deviceMaxThreads = 8)
+        val reversed = EvalBaseline.decide(
+            candidates = listOf(two, four),
+            evidence = records.reversed(), deviceMaxThreads = 8)
+        assertEquals(forward, reversed)
+        assertEquals(four, forward.selected)
+        assertEquals(15.5, forward.ranked[0].medianGen!!, 1e-9)
+    }
+
+    @Test
+    fun mixedCohortsAtOneTripleThrow() {
+        val candidate = config(512, 4, 64)
+        try {
+            EvalBaseline.decide(
+                candidates = listOf(candidate),
+                evidence = listOf(
+                    evidence(candidate, 12.0, cohort = "cohort-a"),
+                    evidence(candidate, 16.0, cohort = "cohort-b")
+                ),
+                deviceMaxThreads = 8
+            )
+            fail("mixed cohorts pooled silently")
+        } catch (e: IllegalArgumentException) {
+            assertTrue(e.message!!.contains("refusing to pool"))
+        }
     }
 
     @Test

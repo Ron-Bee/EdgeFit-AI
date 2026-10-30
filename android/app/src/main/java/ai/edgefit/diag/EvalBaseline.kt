@@ -19,7 +19,14 @@ package ai.edgefit.diag
  * 2. No survivors -> abstain ("no host-valid candidate").
  * 3. A candidate is MEASURED iff it has >= 1 usable
  *    (finite, positive) comparable sample at its exact
- *    (n_ctx, n_threads, n_predict) triple.
+ *    (n_ctx, n_threads, n_predict) triple. Multiple
+ *    records at one triple AGGREGATE (samples
+ *    concatenate, thermal counts sum) so input order
+ *    cannot change the result — but only within one
+ *    cohort: records sharing a triple MUST share one
+ *    `cohortKey` (model + workload + runtime/build
+ *    identity), and mixed cohorts throw rather than
+ *    merge. Distinct cohorts are never pooled.
  * 4. Rank measured candidates by sample median,
  *    descending; ties break by ascending triple, so
  *    identical input always yields identical output.
@@ -34,13 +41,20 @@ package ai.edgefit.diag
  */
 object EvalBaseline {
 
-    /** Comparable observations at one exact config triple. */
+    /**
+     * Comparable observations at one exact config triple.
+     * @param cohortKey identity of the model + workload +
+     * runtime/build cohort (e.g. SHA over those fields).
+     * Same-triple records aggregate ONLY when their keys
+     * match; a mismatch throws instead of merging.
+     */
     data class CandidateEvidence(
         val config: BenchConfigData,
         /** COMPLETED comparable samples; usability filtered. */
         val genSamples: List<Double>,
         /** Samples collected under elevated thermal. */
-        val elevatedThermal: Int = 0
+        val elevatedThermal: Int = 0,
+        val cohortKey: String
     )
 
     data class RankedCandidate(
@@ -106,7 +120,10 @@ object EvalBaseline {
                 factors = factors
             )
         }
-        val byTriple = evidence.associateBy { triple(it.config) }
+        // R1: aggregate same-triple records (never last-wins)
+        // and refuse to pool distinct cohorts.
+        val byTriple = evidence.groupBy { triple(it.config) }
+            .mapValues { (_, records) -> aggregate(records) }
         val ranked = valid.map { candidate ->
             rankOne(candidate, byTriple[triple(candidate)])
         }.sortedWith(
@@ -138,6 +155,24 @@ object EvalBaseline {
             abstained = false,
             abstainReason = null,
             factors = factors
+        )
+    }
+
+    /**
+     * Combines same-triple records order-invariantly.
+     * @throws IllegalArgumentException on mixed cohorts.
+     */
+    private fun aggregate(records: List<CandidateEvidence>): CandidateEvidence {
+        val keys = records.map { it.cohortKey }.toSet()
+        require(keys.size == 1) {
+            "refusing to pool ${keys.size} cohorts at one config: " +
+                keys.sorted().joinToString(",")
+        }
+        return CandidateEvidence(
+            config = records.first().config,
+            genSamples = records.flatMap { it.genSamples },
+            elevatedThermal = records.sumOf { it.elevatedThermal },
+            cohortKey = keys.single()
         )
     }
 

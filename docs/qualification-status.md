@@ -1320,3 +1320,35 @@ Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
   changes, no cloud deps.
 - EF-COMP-01A Stage A: IMPLEMENTATION PASS.
   HOST PASS. STAGE B NOT AUTHORIZED.
+
+## EF-COMP-01A-R1 (evaluation correctness; HOST ONLY)
+
+- Independent-review corrections on
+  `implement/ef-comp-01a-r1-2026-10-30` from
+  f7c90d3, offline only: (1) same-triple
+  evidence AGGREGATES under one cohort key
+  (was silent last-wins); mixed cohorts throw;
+  permutation-invariant. (2) Citations check
+  per-case authorized ids (was cross-case
+  union). (3) `invalidProposalRate` split from
+  `hostRejectionRate`, which needs recorded
+  refusal evidence (fixture-only invalids stay
+  NOT_EVALUABLE). (4) M1 admission requires
+  `MeasurementProof` transcribed from the
+  validated artifact; all 12 identity/status/
+  temporal/triple checks verified, caller
+  flags ignored. (5) Pack-hash freeze-timing
+  caveat documented: Stage B must record pack
+  hashes with pre-run timestamps.
+- Stage B pre-registered in
+  `docs/ef-comp-01b-stage-b.md` (A=512/4/64,
+  B=512/8/64, order A-B-B-A-A-B, 2 sessions x
+  3 approvals, 2 paid calls, go/no-go gates).
+  NOT AUTHORIZED TO RUN.
+- Host evidence: JVM suite green incl. 7 new
+  R1 tests (aggregation, permutation,
+  mixed-cohort, citation isolation,
+  rejection evidence, proof matrix); no
+  historical evidence mutated; no live calls.
+- EF-COMP-01A-R1: IMPLEMENTATION PASS.
+  HOST PASS. STAGE B STILL NOT AUTHORIZED.

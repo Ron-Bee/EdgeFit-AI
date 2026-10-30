@@ -12,6 +12,7 @@ class EvalMetricsTest {
         arm: String = "M1",
         proposed: Boolean = true,
         valid: Boolean? = true,
+        rejectedByHost: Boolean? = null,
         abstained: Boolean = false,
         abstainAppropriate: Boolean? = null,
         citedIds: List<String> = emptyList(),
@@ -26,6 +27,7 @@ class EvalMetricsTest {
         costUsd: Double? = null
     ) = EvalMetrics.ProposalCase(
         arm = arm, proposed = proposed, valid = valid,
+        rejectedByHost = rejectedByHost,
         abstained = abstained, abstainAppropriate = abstainAppropriate,
         citedIds = citedIds, knownIds = knownIds,
         predictedGen = predictedGen, predictedAtUtc = predictedAtUtc,
@@ -46,7 +48,11 @@ class EvalMetricsTest {
         assertEquals(4, report.n)
         assertEquals(2.0 / 3.0, report.validProposalRate.value!!, 1e-9)
         assertEquals(3, report.validProposalRate.n)
-        assertEquals(1.0 / 3.0, report.invalidRejectionRate.value!!, 1e-9)
+        assertEquals(1.0 / 3.0, report.invalidProposalRate.value!!, 1e-9)
+        // The invalid case carries no rejection evidence, so
+        // enforcement stays NOT_EVALUABLE instead of 100%.
+        assertEquals(EvalMetrics.NOT_EVALUABLE,
+            report.hostRejectionRate.status)
         assertEquals(0.25, report.abstentionRate.value!!, 1e-9)
         assertEquals(1.0, report.appropriateAbstentionRate.value!!, 1e-9)
     }
@@ -190,6 +196,44 @@ class EvalMetricsTest {
             case()
         ), "M1")
         assertEquals(listOf(16.0), report.observedThroughputs)
+    }
+
+    @Test
+    fun crossCaseCitationIsolation() {
+        // BENCH-X is cited in case A but authorized only in
+        // case B: case A's citation is unsupported. Pooling
+        // known ids across cases would wrongly clear it.
+        val report = EvalMetrics.summarize(listOf(
+            case(citedIds = listOf("BENCH-X"),
+                knownIds = setOf("BENCH-A")),
+            case(citedIds = listOf("BENCH-X"),
+                knownIds = setOf("BENCH-X"))
+        ), "M1")
+        assertEquals(0.5, report.fabricatedCitationRate.value!!, 1e-9)
+        assertEquals(2, report.fabricatedCitationRate.n)
+    }
+
+    @Test
+    fun hostRejectionNeedsRecordedEvidence() {
+        val enforced = EvalMetrics.summarize(listOf(
+            case(valid = false, rejectedByHost = true),
+            case(valid = false, rejectedByHost = true)
+        ), "M1")
+        assertEquals(1.0, enforced.invalidProposalRate.value!!, 1e-9)
+        assertEquals(1.0, enforced.hostRejectionRate.value!!, 1e-9)
+        // An invalid submission the host did NOT refuse is a
+        // visible safety failure (0.0), not missing data.
+        val escaped = EvalMetrics.summarize(listOf(
+            case(valid = false, rejectedByHost = false)
+        ), "M1")
+        assertEquals(0.0, escaped.hostRejectionRate.value!!, 1e-9)
+        // Fixture-only invalid flags prove no enforcement.
+        val unknown = EvalMetrics.summarize(listOf(
+            case(valid = false, rejectedByHost = null)
+        ), "M1")
+        assertEquals(1.0, unknown.invalidProposalRate.value!!, 1e-9)
+        assertEquals(EvalMetrics.NOT_EVALUABLE,
+            unknown.hostRejectionRate.status)
     }
 
     @Test
