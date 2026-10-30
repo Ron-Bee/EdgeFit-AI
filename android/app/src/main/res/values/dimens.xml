@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- EdgeFit UX-01A spacing/shape tokens (8dp grid). -->
+<resources>
+    <dimen name="edgefit_gutter">16dp</dimen>
+    <dimen name="edgefit_card_padding">12dp</dimen>
+    <dimen name="edgefit_radius_card">16dp</dimen>
+    <dimen name="edgefit_radius_control">12dp</dimen>
+    <dimen name="edgefit_touch_min">48dp</dimen>
+    <dimen name="edgefit_tab_height">56dp</dimen>
+</resources>

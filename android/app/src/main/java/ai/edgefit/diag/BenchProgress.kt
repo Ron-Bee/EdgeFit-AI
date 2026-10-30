@@ -212,6 +212,27 @@ object BenchUiText {
     fun tpsLabel(tps: Double): String = "%.1f tok/s".format(tps)
 
     /**
+     * EF-UX-01D result headline. Completed runs — and runs
+     * cancelled or timed out AFTER generating tokens, whose
+     * partial rates are genuine measurements — show measured
+     * throughput. Anything else (refusals, pre-execution
+     * cancels, failures with zero output) is honestly "not
+     * measured", never a zero dressed as data.
+     */
+    fun tpsHeadline(
+        status: String,
+        tpsGen: Double,
+        generatedTokens: Int
+    ): String =
+        if (status == BenchContract.STATUS_COMPLETED ||
+            generatedTokens > 0
+        ) {
+            "Measured ${tpsLabel(tpsGen)}"
+        } else {
+            "Not measured — benchmark did not complete."
+        }
+
+    /**
      * User-facing error text. Fixed guard/native strings pass through;
      * loader and JVM exception details are replaced so internal paths
      * can never reach the screen.

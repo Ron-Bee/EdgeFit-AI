@@ -68,4 +68,93 @@ object SessionComparison {
 
     private fun round2(value: Double): Double =
         round(value * 100.0) / 100.0
+
+    // ---- EF-FOLLOWUP-02 series comparison ----
+
+    /**
+     * One row of a same-configuration repeat series.
+     * Deltas are current-minus-row; NaN when either side
+     * is missing or non-finite (pct also needs row > 0).
+     */
+    data class SeriesRow(
+        val runId: String,
+        val collectedAtUtc: String,
+        val genTps: Double,
+        val prefillTps: Double,
+        val thermalAfter: String,
+        val deltaGen: Double,
+        val deltaPct: Double,
+        val isCurrent: Boolean
+    )
+
+    /**
+     * Host-computed series summary. Descriptive values
+     * only — never a statistical significance claim.
+     */
+    data class SeriesResult(
+        val currentRunId: String,
+        val rows: List<SeriesRow>,
+        /** Finite gen values only; NaN when none. */
+        val minGen: Double,
+        val maxGen: Double
+    )
+
+    /**
+     * Compares [current] against its same-configuration
+     * [series] (from `SessionManager.findSeriesRuns`, oldest
+     * first). Pure: reads stored maps, computes deltas.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun compareSeries(
+        current: SessionRecord,
+        series: List<SessionRecord>
+    ): SeriesResult {
+        val currentBench = current.benchmark as? Map<String, Any?>?
+        val currentMeas =
+            currentBench?.get("measurements") as? Map<String, Any?>?
+        val currentRun = currentBench?.get("run_id") as? String ?: "?"
+        val currentGen = (currentMeas?.get("tps_gen") as? Number)
+            ?.toDouble() ?: Double.NaN
+        val rows = series.mapNotNull { other ->
+            val bench = other.benchmark as? Map<String, Any?>
+                ?: return@mapNotNull null
+            val runId = bench["run_id"] as? String
+                ?: return@mapNotNull null
+            val meas = bench["measurements"] as? Map<String, Any?>
+                ?: return@mapNotNull null
+            val gen = (meas["tps_gen"] as? Number)?.toDouble()
+                ?: Double.NaN
+            val prefill = (meas["tps_prefill"] as? Number)?.toDouble()
+                ?: Double.NaN
+            val delta = if (gen.isFinite() && currentGen.isFinite()) {
+                round3(currentGen - gen)
+            } else {
+                Double.NaN
+            }
+            val pct = if (delta.isFinite() && gen > 0) {
+                round2(100.0 * delta / gen)
+            } else {
+                Double.NaN
+            }
+            SeriesRow(
+                runId = runId,
+                collectedAtUtc =
+                    bench["collected_at_utc"] as? String ?: "unknown",
+                genTps = gen,
+                prefillTps = prefill,
+                thermalAfter = meas["thermal_after"] as? String
+                    ?: "unknown",
+                deltaGen = delta,
+                deltaPct = pct,
+                isCurrent = runId == currentRun
+            )
+        }
+        val finite = rows.map { it.genTps }.filter { it.isFinite() }
+        return SeriesResult(
+            currentRunId = currentRun,
+            rows = rows,
+            minGen = finite.minOrNull() ?: Double.NaN,
+            maxGen = finite.maxOrNull() ?: Double.NaN
+        )
+    }
 }

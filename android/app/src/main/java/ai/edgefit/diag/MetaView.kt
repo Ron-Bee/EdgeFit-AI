@@ -145,6 +145,7 @@ object MetaView {
         }
         val save = Button(activity).apply {
             text = "Save Key"
+            SemanticUi.stylePrimary(activity, this)
             setOnClickListener {
                 val key = keyInput.text.toString()
                 keyInput.setText("")
@@ -155,6 +156,7 @@ object MetaView {
         }
         val forget = Button(activity).apply {
             text = "Forget Key"
+            SemanticUi.styleDestructive(activity, this)
             setOnClickListener {
                 notice.text = onForget()
                 statusView.text = status()
@@ -162,6 +164,7 @@ object MetaView {
         }
         val predict = Button(activity).apply {
             text = "Predict with Meta"
+            SemanticUi.stylePrimary(activity, this)
             setOnClickListener {
                 dialog?.dismiss()
                 onPredict()

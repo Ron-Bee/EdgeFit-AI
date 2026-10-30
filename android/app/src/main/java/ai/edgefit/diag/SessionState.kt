@@ -30,12 +30,17 @@ object SessionState {
     )
 
     /** BENCHMARK_TIMEOUT mirrors the contract status so timeouts are
-     * never misreported; justification recorded in ef-session-01. */
-    fun can(from: String, to: String): Boolean {
+     * never misreported; justification recorded in ef-session-01.
+     * The CREATED->AUTHORIZED edge exists ONLY for standalone
+     * mode (UX-D02: no prediction to record); two-arg callers
+     * keep the historic refusal. */
+    fun can(from: String, to: String, mode: String? = null): Boolean {
         if (from == to) return true
         return when (from) {
             SESSION_CREATED -> to == PREDICTION_PENDING ||
-                to == SESSION_FINISHED
+                to == SESSION_FINISHED ||
+                (to == BENCHMARK_AUTHORIZED &&
+                    mode == SessionStore.MODE_STANDALONE)
             PREDICTION_PENDING -> to == PREDICTION_RECORDED ||
                 to == SESSION_CREATED || to == SESSION_FINISHED
             PREDICTION_RECORDED -> to == BENCHMARK_AUTHORIZED ||

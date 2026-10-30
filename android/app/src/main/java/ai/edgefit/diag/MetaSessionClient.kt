@@ -21,6 +21,11 @@ class MetaSessionClient(
 ) {
     class ClientError(val code: String, message: String) : Exception(message)
 
+    companion object {
+        /** EF-FOLLOWUP-02 D4: max prior runs per follow-up. */
+        const val MAX_SERIES_PRIORS = 4
+    }
+
     data class ProposalSpec(
         val parentId: String,
         val packText: String,
@@ -31,7 +36,20 @@ class MetaSessionClient(
         val attemptsUsed: Int,
         val attemptsMax: Int,
         val allowedRunIds: Set<String>,
-        val deviceMaxThreads: Int
+        val deviceMaxThreads: Int,
+        /**
+         * EF-FOLLOWUP-02: executed config per cited run,
+         * for repeat verification. Empty offers no repeats.
+         */
+        val repeatConfigs: Map<String, BenchConfigData> = emptyMap(),
+        /**
+         * EF-MEM-03 recovery: failed-run ids eligible for
+         * citation, their rendered evidence, and the prompt
+         * mode. Empty ids refuse recovery proposals.
+         */
+        val recoveryRunIds: Set<String> = emptySet(),
+        val failureText: String = "",
+        val recoveryMode: Boolean = false
     )
 
     data class PredictionSpec(
@@ -162,11 +180,12 @@ class MetaSessionClient(
             val apiKey = keys.getKey()
                 ?: throw ClientError("NO_KEY", "no API key configured")
             val body = MetaApi.requestBody(
-                AgentApi.proposalSystem(spec.deviceMaxThreads),
+                AgentApi.proposalSystem(
+                    spec.deviceMaxThreads, spec.recoveryMode),
                 AgentApi.proposalUser(
                     spec.packText, spec.currentConfig, spec.nextSeq,
                     spec.modelSha, spec.workloadId, spec.attemptsUsed,
-                    spec.attemptsMax
+                    spec.attemptsMax, spec.failureText
                 )
             )
             val text = postForText(apiKey, body)
@@ -191,7 +210,9 @@ class MetaSessionClient(
                         currentConfig = spec.currentConfig,
                         nextSeq = spec.nextSeq,
                         allowedRunIds = spec.allowedRunIds,
-                        deviceMaxThreads = spec.deviceMaxThreads
+                        deviceMaxThreads = spec.deviceMaxThreads,
+                        repeatConfigs = spec.repeatConfigs,
+                        recoveryRunIds = spec.recoveryRunIds
                     )
                 )
             } catch (e: AgentApi.AgentError) {
@@ -226,6 +247,7 @@ class MetaSessionClient(
                 ?: throw ClientError("NO_COMPARISON", "bad stored errors")
             val runId = bench["run_id"] as? String
                 ?: throw ClientError("NO_COMPARISON", "run id missing")
+            val measuredGen = num(measurements, "tps_gen")
             val body = MetaApi.requestBody(
                 MetaApi.followUpSystem(),
                 MetaApi.followUpUser(
@@ -235,7 +257,7 @@ class MetaSessionClient(
                     config = storedConfig(record),
                     predictedGen = num(prediction, "predicted_gen_tps"),
                     predictedPrefill = num(prediction, "predicted_prefill_tps"),
-                    measuredGen = num(measurements, "tps_gen"),
+                    measuredGen = measuredGen,
                     measuredPrefill = num(measurements, "tps_prefill"),
                     genSigned = genSigned,
                     genPct = genPct,
@@ -246,7 +268,9 @@ class MetaSessionClient(
                     thermalBefore = str(measurements, "thermal_before"),
                     thermalMid = str(measurements, "thermal_mid"),
                     thermalAfter = str(measurements, "thermal_after"),
-                    memMethod = BenchRunner.MEM_METHOD
+                    memMethod = BenchRunner.MEM_METHOD,
+                    seriesPriors = seriesPriors(
+                        sessionId, runId, measuredGen)
                 )
             )
             val text = postForText(apiKey, body)
@@ -272,6 +296,7 @@ class MetaSessionClient(
                     "next_experiment" to valid.nextExperiment,
                     "proposal_valid" to valid.proposalValid,
                     "proposal_rejection" to valid.proposalRejection,
+                    "counterargument" to valid.counterargument,
                     "run_id" to runId,
                     "raw_json" to valid.rawJson
                 ),
@@ -285,6 +310,64 @@ class MetaSessionClient(
 
     private fun str(map: Map<String, Any?>, key: String): String =
         map[key] as? String ?: "unknown"
+
+    /**
+     * EF-FOLLOWUP-02 D4: bounded prior same-configuration
+     * runs for this follow-up, oldest first, current run
+     * excluded. Host-computed current-minus-prior deltas;
+     * NaN when the prior value is missing or non-positive.
+     */
+    private fun seriesPriors(
+        sessionId: String,
+        currentRunId: String,
+        measuredGen: Double
+    ): List<MetaApi.SeriesPrior> {
+        return try {
+            manager.findSeriesRuns(sessionId)
+        } catch (_: Exception) {
+            return emptyList()
+        }.mapNotNull { other ->
+            @Suppress("UNCHECKED_CAST")
+            val bench = other.benchmark as? Map<String, Any?>
+                ?: return@mapNotNull null
+            val otherRun = bench["run_id"] as? String
+                ?: return@mapNotNull null
+            if (otherRun == currentRunId) return@mapNotNull null
+            @Suppress("UNCHECKED_CAST")
+            val meas = bench["measurements"] as? Map<String, Any?>
+                ?: return@mapNotNull null
+            val priorGen = (meas["tps_gen"] as? Number)?.toDouble()
+                ?: return@mapNotNull null
+            val priorPrefill =
+                (meas["tps_prefill"] as? Number)?.toDouble()
+                    ?: return@mapNotNull null
+            val delta = if (priorGen.isFinite() &&
+                measuredGen.isFinite()
+            ) {
+                measuredGen - priorGen
+            } else {
+                Double.NaN
+            }
+            val pct = if (priorGen.isFinite() && priorGen > 0 &&
+                delta.isFinite()
+            ) {
+                delta / priorGen * 100.0
+            } else {
+                Double.NaN
+            }
+            MetaApi.SeriesPrior(
+                runId = otherRun,
+                collectedAtUtc =
+                    bench["collected_at_utc"] as? String ?: "unknown",
+                genTps = priorGen,
+                prefillTps = priorPrefill,
+                thermalAfter = meas["thermal_after"] as? String
+                    ?: "unknown",
+                deltaGen = delta,
+                deltaPct = pct
+            )
+        }.takeLast(MAX_SERIES_PRIORS)
+    }
 
     private fun storedConfig(record: SessionRecord): BenchConfigData {
         val config = record.config

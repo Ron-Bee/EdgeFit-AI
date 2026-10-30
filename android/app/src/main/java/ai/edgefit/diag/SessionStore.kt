@@ -40,7 +40,18 @@ data class SessionRecord(
     // schema version stays 1 because every reader tolerates absence.
     val parentSessionId: String? = null,
     val experimentSeq: Int? = null,
-    val agent: Map<String, Any?>? = null
+    val agent: Map<String, Any?>? = null,
+    // EF-FOLLOWUP-02 repeat link. Absent (null) on non-repeat
+    // records; the carried prediction inside `prediction` keeps
+    // the source timestamp plus carried-from provenance.
+    val repeatOfSessionId: String? = null,
+    val repeatOfRunId: String? = null,
+    // EF-MEM-03 recovery link: a NEW authorized attempt
+    // after a FAILED/TIMEOUT/CANCELLED run. Absent (null)
+    // on ordinary records; schema stays 1 (tolerated
+    // absence, same as the repeat link above).
+    val recoveryOfSessionId: String? = null,
+    val recoveryOfRunId: String? = null
 ) {
     fun toMap(): Map<String, Any?> = linkedMapOf(
         "schema_version" to schemaVersion,
@@ -68,7 +79,11 @@ data class SessionRecord(
         "outcome" to outcome,
         "parent_session_id" to parentSessionId,
         "experiment_seq" to experimentSeq,
-        "agent" to agent
+        "agent" to agent,
+        "repeat_of_session_id" to repeatOfSessionId,
+        "repeat_of_run_id" to repeatOfRunId,
+        "recovery_of_session_id" to recoveryOfSessionId,
+        "recovery_of_run_id" to recoveryOfRunId
     )
 
     companion object {
@@ -132,6 +147,30 @@ data class SessionRecord(
             if (parent != null && !SessionStore.isValidId(parent)) {
                 bad("parent_session_id malformed")
             }
+            val repeatOfSession = optStr("repeat_of_session_id")
+            if (repeatOfSession != null &&
+                !SessionStore.isValidId(repeatOfSession)
+            ) {
+                bad("repeat_of_session_id malformed")
+            }
+            val repeatOfRun = optStr("repeat_of_run_id")
+            if (repeatOfRun != null &&
+                !SessionStore.isValidRunId(repeatOfRun)
+            ) {
+                bad("repeat_of_run_id malformed")
+            }
+            val recoveryOfSession = optStr("recovery_of_session_id")
+            if (recoveryOfSession != null &&
+                !SessionStore.isValidId(recoveryOfSession)
+            ) {
+                bad("recovery_of_session_id malformed")
+            }
+            val recoveryOfRun = optStr("recovery_of_run_id")
+            if (recoveryOfRun != null &&
+                !SessionStore.isValidRunId(recoveryOfRun)
+            ) {
+                bad("recovery_of_run_id malformed")
+            }
             return SessionRecord(
                 sessionId = str("session_id").also {
                     if (it != id) bad("session_id/filename mismatch")
@@ -160,7 +199,11 @@ data class SessionRecord(
                 outcome = optStr("outcome"),
                 parentSessionId = parent,
                 experimentSeq = (map["experiment_seq"] as? Number)?.toInt(),
-                agent = strMap("agent")
+                agent = strMap("agent"),
+                repeatOfSessionId = repeatOfSession,
+                repeatOfRunId = repeatOfRun,
+                recoveryOfSessionId = recoveryOfSession,
+                recoveryOfRunId = recoveryOfRun
             )
         }
     }
@@ -181,13 +224,27 @@ data class SessionRecord(
 class SessionStore(rootDir: File) {
     companion object {
         const val SCHEMA_VERSION = 1
-        const val MAX_SESSIONS = 50
+        // EF-SESSION-SCALE-01: no global session-count
+        // ceiling. The pre-scale MAX_SESSIONS = 50 bound
+        // blocked legitimate Agent approvals and recovery
+        // once a developer accumulated 50 experiments; a
+        // count cap is the wrong tool because records are
+        // small, independent files and evidence must never
+        // be auto-deleted to make room. Storage safety now
+        // rests on justified per-record bounds below plus
+        // explicit write-failure errors — never a count.
         const val MAX_RECORD_BYTES = 65536
         const val MAX_READ_BYTES = 262144
         const val MAX_HISTORY = 32
+        // Retained: corrupt/unreadable files (only) rotate
+        // here so a wedged writer cannot fill storage with
+        // garbage. Valid evidence is never quarantined.
         const val MAX_QUARANTINE = 50
         val ID_PATTERN = Regex("^SES-[0-9a-f]{16}$")
-        val MODES = setOf("byok", "replay", "offline_test", "agent")
+        /** UX-D02 standalone measurement record (no prediction). */
+        const val MODE_STANDALONE = "standalone"
+        val MODES = setOf("byok", "replay", "offline_test", "agent",
+            MODE_STANDALONE)
         private val HEX64 = Regex("^[0-9a-f]{64}$")
 
         fun newSessionId(random: SecureRandom = SecureRandom()): String {
@@ -198,6 +255,11 @@ class SessionStore(rootDir: File) {
 
         fun isValidId(id: String): Boolean = ID_PATTERN.matches(id)
 
+        private val RUN_ID_PATTERN =
+            Regex("^BENCH-[0-9]{8}T[0-9]{6}Z-[0-9a-f]{8}$")
+
+        fun isValidRunId(id: String): Boolean = RUN_ID_PATTERN.matches(id)
+
         fun isHex64(value: String?): Boolean =
             value != null && HEX64.matches(value.lowercase())
     }
@@ -207,7 +269,6 @@ class SessionStore(rootDir: File) {
         StoreError("corrupt record $id: $why")
     class UnsupportedVersion(val id: String, val version: Int) :
         StoreError("unsupported schema $version in $id")
-    class StoreFull : StoreError("session store full ($MAX_SESSIONS)")
     class NotFound(val id: String) : StoreError("no session $id")
     class BadId(val id: String) : StoreError("illegal session id")
     class TooLarge(val id: String) : StoreError("record too large: $id")
@@ -218,9 +279,12 @@ class SessionStore(rootDir: File) {
     init {
         dir.mkdirs()
         quarantineDir.mkdirs()
-        // Interrupted writes leave temp files only; sweep them so they
-        // can never be mistaken for records.
-        dir.listFiles { file -> file.name.endsWith(".tmp") }
+        // Interrupted writes leave "<id>.json.tmp-<nanos>"
+        // files only; sweep them so they can neither
+        // accumulate nor (defensively) be mistaken for
+        // records. tmp files never match the ".json"
+        // record filter, so the sweep is purely hygiene.
+        dir.listFiles { file -> file.name.contains(".json.tmp-") }
             ?.forEach { it.delete() }
     }
 
@@ -251,12 +315,17 @@ class SessionStore(rootDir: File) {
         (quarantineDir.listFiles { file -> file.name.endsWith(".json") }
             ?: emptyArray()).map { it.name }.sorted()
 
-    /** Persists a record atomically. New ids respect the store bound. */
+    /**
+     * Persists a record atomically (tmp + fsync + atomic
+     * rename). No count ceiling: new ids always persist
+     * when the filesystem accepts them. Genuine storage
+     * failures surface as explicit errors naming the
+     * record — never silent loss, never auto-deletion.
+     */
     @Synchronized
     fun save(record: SessionRecord): SessionRecord {
         if (!isValidId(record.sessionId)) throw BadId(record.sessionId)
         val target = File(dir, "${record.sessionId}.json")
-        if (!target.isFile && count() >= MAX_SESSIONS) throw StoreFull()
         val text: String
         try {
             text = SessionJson.stringify(record.toMap())
@@ -267,20 +336,27 @@ class SessionStore(rootDir: File) {
         if (bytes.size > MAX_RECORD_BYTES) throw TooLarge(record.sessionId)
         val tmp = File(dir, "${record.sessionId}.json.tmp-${System.nanoTime()}")
         try {
-            FileOutputStream(tmp).use { out ->
-                out.write(bytes)
-                out.fd.sync()
-            }
-            // File.renameTo cannot replace an existing target on Windows;
-            // NIO move with REPLACE_EXISTING works everywhere, atomically
-            // for same-directory renames on NTFS/ext4/f2fs/APFS.
             try {
-                Files.move(tmp.toPath(), target.toPath(),
-                    StandardCopyOption.ATOMIC_MOVE,
-                    StandardCopyOption.REPLACE_EXISTING)
-            } catch (_: AtomicMoveNotSupportedException) {
-                Files.move(tmp.toPath(), target.toPath(),
-                    StandardCopyOption.REPLACE_EXISTING)
+                FileOutputStream(tmp).use { out ->
+                    out.write(bytes)
+                    out.fd.sync()
+                }
+                // File.renameTo cannot replace an existing target on Windows;
+                // NIO move with REPLACE_EXISTING works everywhere, atomically
+                // for same-directory renames on NTFS/ext4/f2fs/APFS.
+                try {
+                    Files.move(tmp.toPath(), target.toPath(),
+                        StandardCopyOption.ATOMIC_MOVE,
+                        StandardCopyOption.REPLACE_EXISTING)
+                } catch (_: AtomicMoveNotSupportedException) {
+                    Files.move(tmp.toPath(), target.toPath(),
+                        StandardCopyOption.REPLACE_EXISTING)
+                }
+            } catch (e: Exception) {
+                throw StoreError(
+                    "session write failed for ${record.sessionId}: " +
+                        "${e.message}. Free device storage or export " +
+                        "sessions, then retry; no record was changed.")
             }
         } finally {
             tmp.delete()

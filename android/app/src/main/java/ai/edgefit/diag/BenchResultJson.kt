@@ -101,6 +101,10 @@ object BenchResultJson {
             "collected_at_utc" to result.collectedAtUtc
         )
         result.xNativeBuild?.let { root["x_native_build"] = it.toSortedMap() }
+        result.xMemRecheck?.let { root["x_mem_recheck"] = MemRecheck.toMap(it) }
+        result.xMemDiag?.let { root["x_mem_diag"] = MemDiag.exportToMap(it) }
+        result.xMemConditions?.let { root["x_mem_conditions"] = it.toMap() }
+        result.xFailure?.let { root["x_failure"] = it.toMap() }
         return render(root)
     }
 

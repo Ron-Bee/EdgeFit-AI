@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- EdgeFit UX-01A visual tokens (ef-ux-01-design.md §D).
+     No hardcoded colors in layout code. -->
+<resources>
+    <color name="edgefit_primary">#0866FF</color>
+    <color name="edgefit_on_primary">#FFFFFF</color>
+    <color name="edgefit_background">#FFFFFF</color>
+    <color name="edgefit_surface">#F2F4F7</color>
+    <color name="edgefit_surface_border">#DCE7F7</color>
+    <color name="edgefit_text">#172B4D</color>
+    <color name="edgefit_text_secondary">#42526E</color>
+    <!-- UX-01BC-R2 semantic accents: measured (native observation)
+         vs predicted (Muse estimate) vs error/destructive. -->
+    <color name="edgefit_measured">#147D92</color>
+    <color name="edgefit_predicted">#7655C7</color>
+    <color name="edgefit_error">#D92D20</color>
+    <color name="edgefit_error_on_dark">#FF8A80</color>
+    <color name="edgefit_tab_inactive">#5E6C84</color>
+</resources>

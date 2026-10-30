@@ -85,6 +85,29 @@ data class BenchMeasurements(
     val thermal: BenchThermal
 )
 
+/** One fresh memory sample during admission recheck. */
+data class MemRecheckSample(
+    val availBytes: Long,
+    val lowMemory: Boolean,
+    val elapsedRealtimeMs: Long
+)
+
+/**
+ * EF-MEM-01 admission-recheck evidence. Present only when a
+ * near-threshold memory refusal triggered fresh sampling;
+ * null on clean passes and non-memory outcomes. The recheck
+ * interval sits OUTSIDE the measurement window (wall0 starts
+ * after admission), so inference timings stay pure.
+ */
+data class MemRecheckEvidence(
+    val requiredBytes: Long,
+    val initialAvailBytes: Long,
+    val initialLowMemory: Boolean,
+    val samples: List<MemRecheckSample>,
+    val admitted: Boolean,
+    val recheckMs: Long
+)
+
 data class BenchResult(
     val runId: String,
     val device: BenchDeviceSnapshot,
@@ -100,5 +123,23 @@ data class BenchResult(
     val collectedAtUtc: String,
     // Optional native-build provenance, serialized as x_native_build.
     // Null on results predating EF-BENCH-02; never backfilled.
-    val xNativeBuild: Map<String, String>? = null
+    val xNativeBuild: Map<String, String>? = null,
+    // Optional recheck evidence, serialized as x_mem_recheck
+    // (x_-prefixed, so contract validators accept it). Null
+    // unless a near-threshold refusal engaged rechecking.
+    val xMemRecheck: MemRecheckEvidence? = null,
+    // Optional diagnostic samples, serialized as x_mem_diag.
+    // Null unless the developer enabled memory diagnostics
+    // for this launch. Marks the run instrumented and
+    // non-confirmatory for EF-SCIENCE-01 until an on/off
+    // overhead assessment exists.
+    val xMemDiag: MemDiag.RunExport? = null,
+    // EF-MEM-03 per-run memory conditions, serialized as
+    // x_mem_conditions. Populated for EVERY new run with
+    // default diagnostics disabled; absent only on
+    // pre-MEM-03 records (read as Unknown, never 0%).
+    val xMemConditions: MemConditions? = null,
+    // EF-MEM-03 failure-stage evidence, serialized as
+    // x_failure. Present only on non-completed runs.
+    val xFailure: FailureEvidence? = null
 )

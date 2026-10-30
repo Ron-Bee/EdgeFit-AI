@@ -62,13 +62,16 @@ object SessionBenchBridge {
 
     /**
      * Full variant: runtime + native-build provenance for agent
-     * comparability. Pre-agent records omit the runtime_* keys.
+     * comparability, plus EF-MEM-03 memory conditions. Pre-agent
+     * records omit the runtime_* keys; pre-MEM-03 records omit
+     * the mem_* keys (readers treat absence as Unknown).
      */
     fun measurementsMap(
         measurements: BenchMeasurements,
         runtimeVersion: String?,
         runtimeAbi: String?,
-        nativeBuild: Map<String, String>?
+        nativeBuild: Map<String, String>?,
+        mem: MemConditions? = null
     ): Map<String, Any?> = linkedMapOf(
         "load_ms" to measurements.loadMs,
         "prefill_ms" to measurements.prefillMs,
@@ -83,7 +86,12 @@ object SessionBenchBridge {
         "runtime_version" to runtimeVersion,
         "runtime_abi" to runtimeAbi,
         "native_variant" to nativeBuild?.get("variant"),
-        "native_opt" to nativeBuild?.get("native_opt")
+        "native_opt" to nativeBuild?.get("native_opt"),
+        "mem_avail_pct_start" to mem?.availPctStart,
+        "mem_avail_bytes_start" to mem?.availBytesStart,
+        "mem_total_bytes" to mem?.totalRamBytes,
+        "mem_below_advisory" to mem?.belowThresholdStart,
+        "mem_low_memory" to mem?.lowMemoryStart
     )
 
     fun sourceHash(result: BenchResult): String =
@@ -108,12 +116,14 @@ object SessionBenchBridge {
                 status = result.status,
                 measurements = measurementsMap(
                     result.measurements, result.runtimeVersion,
-                    result.runtimeAbi, result.xNativeBuild),
+                    result.runtimeAbi, result.xNativeBuild,
+                    result.xMemConditions),
                 collectedAtUtc = result.collectedAtUtc,
                 modelSha256 = result.model.sha256,
                 workloadId = result.workload.id,
                 config = configMap(result.config),
-                deviceModel = result.device.model
+                deviceModel = result.device.model,
+                failureCause = result.error
             )
         } catch (e: SessionManager.SessionError) {
             // Same run already attached (repeat delivery after a state
@@ -144,6 +154,64 @@ object SessionBenchBridge {
             onDone(
                 try {
                     Result.success(attach(manager, sessionId, result))
+                } catch (e: Exception) {
+                    Result.failure(e)
+                }
+            )
+        }
+    }
+
+    /**
+     * UX-D02: persists one COMPLETED unbound run as a
+     * standalone measurement record. Throws on anything
+     * but COMPLETED — failures leave no record, exactly
+     * as before. No prediction is invented.
+     */
+    fun recordStandalone(
+        manager: SessionManager,
+        result: BenchResult
+    ): SessionRecord {
+        require(result.status == BenchContract.STATUS_COMPLETED) {
+            "standalone records only COMPLETED runs"
+        }
+        val created = manager.createSession(
+            mode = SessionStore.MODE_STANDALONE,
+            deviceModel = result.device.model,
+            profileSha256 = null,
+            modelSha256 = result.model.sha256,
+            modelSizeBytes = result.model.sizeBytes,
+            modelDisplay = result.model.displayName,
+            workloadId = result.workload.id,
+            promptSha256 = result.workload.promptSha256,
+            config = configMap(result.config))
+        manager.authorizeStandalone(created.sessionId,
+            "standalone run recorded")
+        manager.noteRunStarted(created.sessionId)
+        return manager.attachStandalone(
+            id = created.sessionId,
+            runId = result.runId,
+            sourceSha256 = sourceHash(result),
+            measurements = measurementsMap(
+                result.measurements, result.runtimeVersion,
+                result.runtimeAbi, result.xNativeBuild,
+                result.xMemConditions),
+            collectedAtUtc = result.collectedAtUtc,
+            modelSha256 = result.model.sha256,
+            workloadId = result.workload.id,
+            config = configMap(result.config),
+            deviceModel = result.device.model)
+    }
+
+    /** Standalone persist off the UI thread; see [attachAsync]. */
+    fun recordStandaloneAsync(
+        manager: SessionManager,
+        result: BenchResult,
+        onDone: (Result<SessionRecord>) -> Unit
+    ) {
+        io.execute {
+            onDone(
+                try {
+                    Result.success(recordStandalone(manager, result))
                 } catch (e: Exception) {
                     Result.failure(e)
                 }

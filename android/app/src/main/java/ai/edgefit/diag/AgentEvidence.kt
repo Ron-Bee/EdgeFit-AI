@@ -164,6 +164,62 @@ object AgentEvidence {
     }
 
     /** Bounded prompt rendering of a pack. */
+    /**
+     * EF-MEM-03 failure evidence: a typed, bounded
+     * description of one uncompleted child attempt. Names
+     * config, stage, cause, and memory conditions — never
+     * a throughput, which does not exist for this run.
+     * Null when the child has no usable failure record.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun describeFailure(child: SessionRecord): String? {
+        val seq = child.experimentSeq ?: return null
+        val bench = child.benchmark as? Map<String, Any?>
+            ?: return null
+        val status = bench["status"] as? String ?: return null
+        if (status != BenchContract.STATUS_FAILED &&
+            status != BenchContract.STATUS_TIMEOUT &&
+            status != BenchContract.STATUS_CANCELLED
+        ) {
+            return null
+        }
+        val runId = bench["run_id"] as? String ?: return null
+        if (!SessionStore.isValidRunId(runId)) return null
+        val exec = bench["executed_config"] as? Map<String, Any?>
+        val cfg = SessionBenchBridge.configData(exec ?: child.config)
+        val cause = (bench["failure_cause"] as? String)
+            ?.take(280) ?: "no recorded cause"
+        val measurements = bench["measurements"] as? Map<String, Any?>
+        val memPct = measurements?.get("mem_avail_pct_start")
+            as? Number
+        val memLow = measurements?.get("mem_low_memory")
+        val memText = if (memPct != null) {
+            "mem_avail_pct=${"%.1f".format(memPct.toDouble())} " +
+                "mem_low=${memLow ?: "?"}"
+        } else {
+            "mem_avail_pct=unknown"
+        }
+        return "$runId seq=$seq status=$status " +
+            "ctx=${cfg?.nCtx ?: "?"} " +
+            "threads=${cfg?.nThreads ?: "?"} " +
+            "predict=${cfg?.nPredict ?: "?"} $memText " +
+            "cause=[$cause]"
+    }
+
+    /**
+     * Bounded failure section for proposal prompts (newest
+     * three). Empty string when no failure evidence exists.
+     */
+    fun renderFailures(children: List<SessionRecord>): String {
+        val lines = children.sortedBy {
+            it.experimentSeq ?: Int.MAX_VALUE
+        }.takeLast(3).mapNotNull(::describeFailure)
+        if (lines.isEmpty()) return ""
+        return "FAILED_ATTEMPTS (no throughput exists for " +
+            "these runs; never invent one):\n" +
+            lines.joinToString("\n")
+    }
+
     fun renderPack(pack: EvidencePack): String {
         if (pack.comparable.isEmpty() && pack.contextual.isEmpty()) {
             return "no on-device measurements yet"

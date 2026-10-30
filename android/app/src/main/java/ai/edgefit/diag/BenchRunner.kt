@@ -48,6 +48,8 @@ class BenchRunner(private val context: Context) {
     private var progressBox: ByteBuffer? = null
     private val finished = AtomicBoolean(false)
     private val timedOut = AtomicBoolean(false)
+    /** User/lifecycle cancellation; also aborts admission recheck. */
+    @Volatile private var cancelRequested = false
     @Volatile private var midThermal: String? = null
     @Volatile private var liveThermal: String? = null
     @Volatile private var livePssKb: Int = -1
@@ -91,6 +93,7 @@ class BenchRunner(private val context: Context) {
         }
         finished.set(false)
         timedOut.set(false)
+        cancelRequested = false
         midThermal = null
         liveThermal = null
         livePssKb = -1
@@ -112,6 +115,7 @@ class BenchRunner(private val context: Context) {
     }
 
     fun cancel() {
+        cancelRequested = true
         try {
             mailbox?.let { LlamaBridge.cancel(it) }
         } catch (_: Exception) {
@@ -183,26 +187,75 @@ class BenchRunner(private val context: Context) {
         )
         val config = BenchConfig.resolveExecutionConfig(
             configOverride, device.logicalProcessors)
-        val thermalBefore = sampleThermal()
+        // EF-MEM-01: anchor elapsed time at THIS run's entry so
+        // early-return paths (refusals) never display a stale
+        // previous-run start (the observed 02:09 artifact).
+        wallStartMs = SystemClock.elapsedRealtime()
+        var thermalBefore = sampleThermal()
         val pssBefore = processPssKb()
         val modelBytes = modelFile.length()
         val memInfo = ActivityManager.MemoryInfo()
         (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager)
             .getMemoryInfo(memInfo)
+        // EF-MEM-03: start conditions recorded for EVERY
+        // run, diagnostics or not. End fields fill after
+        // the watchdog joins; failures keep start-only.
+        var nativeStarted = false
+        var memConditions = MemConditions.startOf(
+            memInfo.totalMem, memInfo.availMem,
+            memInfo.lowMemory, memInfo.threshold)
 
-        fun failedNow(reason: String): BenchResult = BenchResult(
-            runId = runId, device = snapshot,
-            model = BenchModelIdentity(displayName, modelBytes, modelSha256,
-                "unknown", emptyMap()),
-            runtimeVersion = llamaVersionOrUnknown(),
-            runtimeAbi = device.supportedAbis.firstOrNull() ?: "unknown",
-            config = config, workload = BenchConfig.workload(),
-            measurements = zeroMeasurements(thermalBefore, null, thermalBefore,
-                pssBefore, pssBefore),
-            status = BenchContract.STATUS_FAILED, error = reason,
-            appVersion = BuildConfig.VERSION_NAME, collectedAtUtc = collectedAt,
-            xNativeBuild = nativeBuildMap()
-        )
+        // EF-MEM-02 run-scoped diagnostics. Each note is
+        // one cheap platform sample (~sub-ms), gated on the
+        // developer toggle; default-off cost is one boolean.
+        // POST_NATIVE_INIT is intentionally unobservable
+        // (native frees before returning); POST_NATIVE
+        // bounds retention instead. No hot-path sampling.
+        val diagSamples = mutableListOf<MemDiag.Sample>()
+        fun diagNote(checkpoint: MemDiag.Checkpoint) {
+            if (!MemDiag.Store.isEnabled()) return
+            try {
+                val sample = MemDiag.sampleNow(context, checkpoint)
+                MemDiag.Store.note(sample)
+                diagSamples.add(sample)
+            } catch (_: Exception) {
+            }
+        }
+        fun diagExport(): MemDiag.RunExport? {
+            if (diagSamples.isEmpty()) return null
+            val build = nativeBuildMap()
+            return MemDiag.RunExport(
+                diagSamples.toList(),
+                build["variant"] ?: "unknown",
+                build["native_opt"] ?: "unknown")
+        }
+
+        fun failedNow(
+            reason: String,
+            status: String = BenchContract.STATUS_FAILED,
+            recheck: MemRecheckEvidence? = null,
+            stage: String? = null
+        ): BenchResult {
+            diagNote(MemDiag.Checkpoint.FAILURE_HANDLED)
+            return BenchResult(
+                runId = runId, device = snapshot,
+                model = BenchModelIdentity(displayName, modelBytes, modelSha256,
+                    "unknown", emptyMap()),
+                runtimeVersion = llamaVersionOrUnknown(),
+                runtimeAbi = device.supportedAbis.firstOrNull() ?: "unknown",
+                config = config, workload = BenchConfig.workload(),
+                measurements = zeroMeasurements(thermalBefore, null, thermalBefore,
+                    pssBefore, pssBefore),
+                status = status, error = reason,
+                appVersion = BuildConfig.VERSION_NAME, collectedAtUtc = collectedAt,
+                xNativeBuild = nativeBuildMap(),
+                xMemRecheck = recheck,
+                xMemDiag = diagExport(),
+                xMemConditions = memConditions,
+                xFailure = FailureEvidence(
+                    stage ?: execState, nativeStarted)
+            )
+        }
 
         val configErrors = BenchConfig.validate(config)
         if (configErrors.isNotEmpty()) return failedNow(configErrors.joinToString("; "))
@@ -210,9 +263,20 @@ class BenchRunner(private val context: Context) {
             return failedNow("runtime unavailable: ${LlamaBridge.loadError}")
         }
         if (!modelFile.isFile) return failedNow("model file missing")
+        diagNote(MemDiag.Checkpoint.PRE_ADMISSION)
         val guardErrors = BenchGuards.preflight(
             device.supportedAbis, memInfo.availMem, modelBytes, thermalBefore)
-        if (guardErrors.isNotEmpty()) return failedNow(guardErrors.joinToString("; "))
+        // EF-MEM-03: memory never refuses (see
+        // BenchGuards) — no recheck gate exists anymore.
+        // Remaining guard errors (ABI/model/thermal)
+        // refuse immediately with measured detail.
+        val recheck: MemRecheckEvidence? = null
+        if (guardErrors.isNotEmpty()) {
+            val detail = BenchGuards.refusalDetail(
+                memInfo.availMem, modelBytes)
+            return failedNow(
+                "${guardErrors.joinToString("; ")} ($detail)")
+        }
 
         val wall0 = SystemClock.elapsedRealtime()
         wallStartMs = wall0
@@ -258,6 +322,8 @@ class BenchRunner(private val context: Context) {
             // config's args, in JNI order; the recorded result keeps
             // the same instance's values (see nativeArgs tests).
             val args = BenchConfig.nativeArgs(config)
+            diagNote(MemDiag.Checkpoint.PRE_NATIVE)
+            nativeStarted = true
             val raw = LlamaBridge.nativeRun(
                 modelFile.absolutePath, BenchContract.WORKLOAD_PROMPT,
                 args[0], args[1], args[2], box, prog)
@@ -271,6 +337,15 @@ class BenchRunner(private val context: Context) {
             } catch (_: InterruptedException) {
             }
         }
+        // Native freed model/context/sampler before
+        // returning: this single point covers inference
+        // completion AND native cleanup (K+L merged).
+        diagNote(MemDiag.Checkpoint.POST_NATIVE)
+        // Last genuine stage before FINALIZING: failure
+        // evidence must name where work stopped, not the
+        // teardown label.
+        val nativeStage = execState
+        memConditions = memEnd(memConditions)
         if (BenchExecutionState.can(execState, BenchExecutionState.FINALIZING)) {
             execState = BenchExecutionState.FINALIZING
         }
@@ -279,10 +354,13 @@ class BenchRunner(private val context: Context) {
         val pssAfter = processPssKb()
         val thermalAfter = sampleThermal()
 
-        if (nativeError != null) return failedNow(nativeError)
+        if (nativeError != null) {
+            return failedNow(nativeError, stage = nativeStage)
+        }
         val out = native!!
         if (!out.optBoolean("ok", false)) {
-            return failedNow(out.optString("error", "native error"))
+            return failedNow(out.optString("error", "native error"),
+                stage = nativeStage)
         }
         val cancelled = out.optBoolean("cancelled", false)
         val prefillMs = out.optLong("prefill_ms", 0)
@@ -327,8 +405,46 @@ class BenchRunner(private val context: Context) {
             config = config, workload = BenchConfig.workload(),
             measurements = measurements, status = status, error = error,
             appVersion = BuildConfig.VERSION_NAME, collectedAtUtc = collectedAt,
-            xNativeBuild = nativeBuildMap())
+            xNativeBuild = nativeBuildMap(),
+            xMemRecheck = recheck,
+            xMemDiag = diagExport(),
+            xMemConditions = memConditions,
+            xFailure = if (status == BenchContract.STATUS_COMPLETED) {
+                null
+            } else {
+                FailureEvidence(nativeStage, nativeStarted)
+            })
     }
+
+    /**
+     * EF-MEM-03 cheap end-of-run re-read: one
+     * getMemoryInfo, outside all timing windows.
+     */
+    private fun memEnd(start: MemConditions): MemConditions {
+        val info = try {
+            ActivityManager.MemoryInfo().also {
+                (context.getSystemService(Context.ACTIVITY_SERVICE)
+                    as ActivityManager).getMemoryInfo(it)
+            }
+        } catch (_: Exception) {
+            return start
+        }
+        val avail = info.availMem.takeIf { it >= 0 }
+        val total = info.totalMem.takeIf { it > 0 }
+        val pct = if (avail != null && total != null &&
+            avail <= total
+        ) {
+            100.0 * avail / total
+        } else {
+            null
+        }
+        return start.copy(availBytesEnd = avail, availPctEnd = pct)
+    }
+
+    // EF-MEM-03: the MEM-01 admission-recheck path is
+    // retired with the blocking gate (memory never
+    // refuses, so nothing rechecks). [MemRecheck] itself
+    // stays for reading historical refusal evidence.
 
     private fun zeroMeasurements(
         before: String?, mid: String?, after: String?, pssBefore: Int, pssAfter: Int

@@ -57,7 +57,13 @@ object MetaApi {
         val nextExperiment: Map<String, Any?>?,
         val proposalValid: Boolean,
         val proposalRejection: String?,
-        val rawJson: String
+        val rawJson: String,
+        /**
+         * EF-AGENT-REVIEW-01: optional bounded self-critique
+         * (strongest case against the assessment's own
+         * reading). Null when absent; never invented.
+         */
+        val counterargument: String? = null
     )
 
     // ---- requests ----
@@ -171,11 +177,34 @@ object MetaApi {
             "null), run_id (string). Echo run_id EXACTLY as given. Quote " +
             "the host-computed errors; do not recompute them. direction " +
             "must agree with the signed error (negative means " +
-            "overestimated). Never claim a cause from this single " +
-            "measurement. next_experiment, when present, has description " +
+            "overestimated). Never claim a cause from one " +
+            "measurement; with SERIES_PRIORS, describe observed " +
+            "variability only. next_experiment, when present, has " +
+            "description " +
             "(string), config_changes (object with only n_ctx, " +
             "n_threads, n_predict, seed), rationale (string), and stays " +
-            "within n_ctx 128..4096, n_threads 1..16, n_predict 1..256."
+            "within n_ctx 128..4096, n_threads 1..16, n_predict 1..256. " +
+            "Optional self-critique (string of at most 500 chars, or " +
+            "null): counterargument (strongest case AGAINST your own " +
+            "reading of this run). It is shown labeled and never " +
+            "substitutes for EdgeFit's independent checks."
+
+    /**
+     * EF-FOLLOWUP-02: one prior same-configuration run sent
+     * with a follow-up. Deltas are host-computed; the model
+     * quotes them, never recomputes them.
+     */
+    data class SeriesPrior(
+        val runId: String,
+        val collectedAtUtc: String,
+        val genTps: Double,
+        val prefillTps: Double,
+        val thermalAfter: String,
+        /** Current minus prior, in tok/s. NaN when undefined. */
+        val deltaGen: Double,
+        /** Percentage vs prior. NaN when undefined. */
+        val deltaPct: Double
+    )
 
     fun followUpUser(
         runId: String,
@@ -193,20 +222,43 @@ object MetaApi {
         thermalBefore: String,
         thermalMid: String,
         thermalAfter: String,
-        memMethod: String
-    ): String = listOf(
-        "RUN:",
-        "run_id=$runId model=$modelDisplay workload=$workloadId",
-        "n_ctx=${config.nCtx} n_threads=${config.nThreads} " +
-            "n_predict=${config.nPredict} sampler=${config.sampler}",
-        "PREDICTED_TPS: gen=$predictedGen prefill=$predictedPrefill",
-        "OBSERVED_TPS: gen=$measuredGen prefill=$measuredPrefill",
-        "HOST_ERRORS: gen_signed=$genSigned gen_pct=$genPct " +
-            "prefill_signed=$prefillSigned prefill_pct=$prefillPct",
-        "CONDITIONS: thermal=$thermalBefore/$thermalMid/$thermalAfter " +
-            "memory_method=$memMethod",
-        "Assess this single paired prediction against measurement."
-    ).joinToString("\n")
+        memMethod: String,
+        /** Bounded prior same-config runs, oldest first. */
+        seriesPriors: List<SeriesPrior> = emptyList()
+    ): String {
+        val lines = mutableListOf(
+            "RUN:",
+            "run_id=$runId model=$modelDisplay workload=$workloadId",
+            "n_ctx=${config.nCtx} n_threads=${config.nThreads} " +
+                "n_predict=${config.nPredict} sampler=${config.sampler}",
+            "PREDICTED_TPS: gen=$predictedGen prefill=$predictedPrefill",
+            "OBSERVED_TPS: gen=$measuredGen prefill=$measuredPrefill",
+            "HOST_ERRORS: gen_signed=$genSigned gen_pct=$genPct " +
+                "prefill_signed=$prefillSigned prefill_pct=$prefillPct",
+            "CONDITIONS: thermal=$thermalBefore/$thermalMid/$thermalAfter " +
+                "memory_method=$memMethod"
+        )
+        if (seriesPriors.isNotEmpty()) {
+            lines.add("SERIES_PRIORS " +
+                "(same model/workload/config/runtime, host deltas " +
+                "current-minus-prior):")
+            for (prior in seriesPriors) {
+                lines.add("run_id=${prior.runId} " +
+                    "at=${prior.collectedAtUtc} gen=${prior.genTps} " +
+                    "prefill=${prior.prefillTps} " +
+                    "thermal_after=${prior.thermalAfter} " +
+                    "delta_gen=${prior.deltaGen} " +
+                    "delta_pct=${prior.deltaPct}")
+            }
+            lines.add("Assess this paired prediction against " +
+                "measurement in light of ${seriesPriors.size} prior " +
+                "same-configuration runs; quote host deltas, do not " +
+                "recompute them.")
+        } else {
+            lines.add("Assess this single paired prediction against measurement.")
+        }
+        return lines.joinToString("\n")
+    }
 
     // ---- responses ----
 
@@ -426,8 +478,27 @@ object MetaApi {
             nextExperiment = experiment,
             proposalValid = proposalValid,
             proposalRejection = proposalRejection,
-            rawJson = rawJson
+            rawJson = rawJson,
+            counterargument = optionalCritique(payload, "counterargument")
         )
+    }
+
+    /**
+     * EF-AGENT-REVIEW-01: optional bounded self-critique.
+     * Absent or null stays null (never invented); blank
+     * normalizes to null; wrong type or oversized fails
+     * closed like other follow-up fields.
+     */
+    private fun optionalCritique(payload: Map<String, Any?>, key: String): String? {
+        if (!payload.containsKey(key)) return null
+        val raw = payload[key] ?: return null
+        if (raw !is String) {
+            throw MetaError("BAD_FOLLOWUP", "$key must be a string or null")
+        }
+        if (raw.length > MAX_NOTE_FIELD) {
+            throw MetaError("BAD_FOLLOWUP", "$key must be 0..500 chars")
+        }
+        return raw.ifBlank { null }
     }
 
     /** Null when the proposal is in-bounds, else the rejection reason. */

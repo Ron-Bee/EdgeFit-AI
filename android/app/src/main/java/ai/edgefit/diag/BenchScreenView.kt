@@ -21,6 +21,10 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
     var onSave: (() -> Unit)? = null
     var onBack: (() -> Unit)? = null
     var onWorkload: (() -> Unit)? = null
+    /** EF-MEM-03 failure recovery; no auto-run. */
+    var onRecover: (() -> Unit)? = null
+    var onModels: (() -> Unit)? = null
+    var onFailureDetails: (() -> Unit)? = null
 
     private val samples = BenchTpsSamples()
     private var lastState: String = BenchExecutionState.IDLE
@@ -40,6 +44,7 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
     private val workloadButton: Button
     private val backButton: Button
     private var resultRowRef: LinearLayout? = null
+    private var recoveryRowRef: LinearLayout? = null
 
     init {
         orientation = VERTICAL
@@ -96,6 +101,38 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
         row.addView(saveButton, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
         row.addView(workloadButton, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
         row.addView(backButton, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
+        // Memory-refusal recovery: evaluation, catalog, and
+        // evidence only. None of these starts inference.
+        val recovery = LinearLayout(context).apply {
+            orientation = HORIZONTAL
+            // EF-UX-01D: two-line labels wrap; center every
+            // button vertically so single-line Details no
+            // longer rides ~14px high. Touch targets stay
+            // 48dp; wrapping (not truncation) is intended.
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            visibility = GONE
+        }
+        val recheckButton = Button(context).apply {
+            text = "Recover"
+            minimumHeight = dp(48)
+            setOnClickListener { onRecover?.invoke() }
+        }
+        val smallerButton = Button(context).apply {
+            text = "Models"
+            minimumHeight = dp(48)
+            setOnClickListener { onModels?.invoke() }
+        }
+        val detailsButton = Button(context).apply {
+            text = "Details"
+            minimumHeight = dp(48)
+            setOnClickListener { onFailureDetails?.invoke() }
+        }
+        recovery.addView(recheckButton,
+            LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
+        recovery.addView(smallerButton,
+            LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
+        recovery.addView(detailsButton,
+            LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
 
         val column = LinearLayout(context).apply {
             orientation = VERTICAL
@@ -120,11 +157,15 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
                 LayoutParams.WRAP_CONTENT))
             addView(row, LayoutParams(LayoutParams.MATCH_PARENT,
                 LayoutParams.WRAP_CONTENT))
+            addView(Space(context, dp(8)))
+            addView(recovery, LayoutParams(LayoutParams.MATCH_PARENT,
+                LayoutParams.WRAP_CONTENT))
         }
         val scroller = ScrollView(context).apply { addView(column) }
         addView(scroller, LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT))
         resultRowRef = row
+        recoveryRowRef = recovery
     }
 
     /** Run header from the staged model and fixed config. No paths shown. */
@@ -141,6 +182,13 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
         targetTokens = config.nPredict
         resultView.visibility = GONE
         resultRowRef?.visibility = GONE
+        recoveryRowRef?.visibility = GONE
+        // Restore live-run styling; showResult re-applies
+        // terminal emphasis per outcome.
+        stageView.setTextColor(TEXT)
+        tpsView.textSize = 16f
+        tpsView.setTypeface(tpsView.typeface,
+            android.graphics.Typeface.NORMAL)
         cancelButton.visibility = VISIBLE
         cancelButton.isEnabled = true
         modelView.text = "%s (%d MB)\nSHA %s · ctx %d · %d threads · %d tokens · %s/%s".format(
@@ -199,9 +247,21 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
     fun showResult(result: BenchResult) {
         cancelButton.visibility = GONE
         resultRowRef?.visibility = VISIBLE
+        // EF-MEM-03: every uncompleted run exposes
+        // recovery; completed runs need none. Historical
+        // memory-refusal records keep their stored text.
+        val uncompleted =
+            result.status != BenchContract.STATUS_COMPLETED
+        recoveryRowRef?.visibility =
+            if (uncompleted) VISIBLE else GONE
         val measurements = result.measurements
         stageView.text = "Benchmark: " +
             BenchUiText.stageLabel(result.status)
+        if (result.status == BenchContract.STATUS_FAILED ||
+            result.status == BenchContract.STATUS_TIMEOUT) {
+            stageView.setTextColor(resources.getColor(
+                R.color.edgefit_error_on_dark, context.theme))
+        }
         tokensView.text = "%d / %d".format(
             measurements.generatedTokens, result.config.nPredict)
         bar.progress = if (result.status == BenchContract.STATUS_COMPLETED) {
@@ -210,10 +270,51 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
             (measurements.generatedTokens * 1000 /
                 result.config.nPredict.coerceAtLeast(1)).coerceIn(0, 1000)
         }
-        tpsView.text = "Measured " +
-            BenchUiText.tpsLabel(measurements.tpsGen)
+        // EF-UX-01D: refusals and zero-output failures
+        // read as not measured, never as a zero datapoint.
+        // Genuine partials (mid-run cancel/timeout) still
+        // show their measured rate.
+        tpsView.text = BenchUiText.tpsHeadline(result.status,
+            measurements.tpsGen, measurements.generatedTokens)
+        if (result.status == BenchContract.STATUS_COMPLETED) {
+            // Completed headline: larger, bold measured
+            // throughput. Speed never changes the status.
+            tpsView.textSize = 22f
+            tpsView.setTypeface(tpsView.typeface,
+                android.graphics.Typeface.BOLD)
+        }
         val lines = mutableListOf(
-            "Status: ${result.status}",
+            "Status: ${result.status}")
+        // EF-MEM-03 memory conditions: recorded for every
+        // new run, Unknown on pre-MEM-03 records (never 0%).
+        val mem = result.xMemConditions
+        if (mem == null) {
+            lines.add("Memory at start: Unknown")
+        } else {
+            val pct = MemPolicy.formatPct(mem.availPctStart)
+            val flag = when (mem.belowThresholdStart) {
+                true -> " (below ${mem.warningThresholdPct}% advisory)"
+                false -> ""
+                null -> " (advisory unknown)"
+            }
+            lines.add("Memory at start: $pct available$flag")
+            if (mem.lowMemoryStart == true) {
+                lines.add("Android low-memory signal was active.")
+            }
+            if (result.status == BenchContract.STATUS_COMPLETED &&
+                mem.belowThresholdStart == true
+            ) {
+                lines.add("Result note: memory pressure may have " +
+                    "influenced this measurement.")
+            }
+        }
+        val failure = result.xFailure
+        if (failure != null) {
+            lines.add("Native started: " +
+                if (failure.nativeStarted) "yes" else "no")
+            lines.add("Stopped at: ${failure.stage}")
+        }
+        lines.addAll(listOf(
             "Load: ${measurements.loadMs} ms",
             "Prefill: ${measurements.prefillTokens} tokens in " +
                 "${measurements.prefillMs} ms " +
@@ -223,11 +324,27 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
                 "(${BenchUiText.tpsLabel(measurements.tpsGen)})",
             "Thermal: ${measurements.thermal.before} / " +
                 "${measurements.thermal.mid} / ${measurements.thermal.after}"
-        )
-        if (result.error != null) {
-            lines.add(BenchUiText.safeError(result.error))
+        ))
+        val error = result.error?.let { BenchUiText.safeError(it) }
+        if (error != null) {
+            lines.add("Error: $error")
         }
-        resultView.text = lines.joinToString("\n")
+        val full = lines.joinToString("\n")
+        if (error != null) {
+            // Red failure line on the dark result view;
+            // the "Error:" label carries the meaning.
+            val red = resources.getColor(
+                R.color.edgefit_error_on_dark, context.theme)
+            val start = full.indexOf("Error:")
+            val spanned = android.text.SpannableString(full)
+            spanned.setSpan(
+                android.text.style.ForegroundColorSpan(red),
+                start, full.length,
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            resultView.text = spanned
+        } else {
+            resultView.text = full
+        }
         resultView.visibility = VISIBLE
     }
 

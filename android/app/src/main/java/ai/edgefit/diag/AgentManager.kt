@@ -139,6 +139,34 @@ class AgentManager(
         (childrenOf(parentId).mapNotNull { it.experimentSeq }.maxOrNull()
             ?: 0) + 1
 
+    /**
+     * EF-FOLLOWUP-02: child owning an attached run, for
+     * repeat citation. Null when no child of this parent
+     * carries the run id (never crosses parents).
+     */
+    @Suppress("UNCHECKED_CAST")
+    @Synchronized
+    fun childForRun(parentId: String, runId: String): SessionRecord? =
+        childrenOf(parentId).firstOrNull {
+            ((it.benchmark as? Map<String, Any?>)?.get("run_id") == runId)
+        }
+
+    /**
+     * EF-FOLLOWUP-02: executed config of a cited run, read
+     * from the stored benchmark (never from model text).
+     * Null when the run is missing or its config unparsable.
+     */
+    @Suppress("UNCHECKED_CAST")
+    @Synchronized
+    fun executedConfigMapForRun(
+        parentId: String,
+        runId: String
+    ): Map<String, Any?>? {
+        val child = childForRun(parentId, runId) ?: return null
+        val bench = child.benchmark as? Map<String, Any?> ?: return null
+        return bench["executed_config"] as? Map<String, Any?>
+    }
+
     /** Latest experiment config, else the parent base config. */
     @Synchronized
     fun currentConfig(parentId: String): BenchConfigData {
@@ -156,29 +184,88 @@ class AgentManager(
         return AgentEvidence.buildPack(parent, childrenOf(parentId))
     }
 
-    /** Gate with reason: may a proposal be requested now? */
+    /**
+     * EF-MEM-03 proposal mode. OPTIMIZE needs comparable
+     * measurements; RECOVERY needs a typed failed attempt
+     * instead — a failed child no longer dead-ends the
+     * session. BLOCKED names the missing prerequisite.
+     */
+    enum class ProposalMode { OPTIMIZE, RECOVERY, BLOCKED }
+
+    data class GateResult(
+        val mode: ProposalMode,
+        val ok: Boolean,
+        val reason: String
+    )
+
+    /** Gate with mode: may a proposal be requested now, and which kind? */
     @Suppress("UNCHECKED_CAST")
     @Synchronized
-    fun proposalGate(parentId: String): Pair<Boolean, String> {
+    fun proposalGateEx(parentId: String): GateResult {
         val parent = getParent(parentId)
         val agent = parent.agent as? Map<String, Any?>
-            ?: return false to "agent state missing"
-        if (agent["status"] != STATUS_ACTIVE) return false to "session finished"
+            ?: return GateResult(ProposalMode.BLOCKED, false,
+                "agent state missing")
+        if (agent["status"] != STATUS_ACTIVE) {
+            return GateResult(ProposalMode.BLOCKED, false,
+                "session finished")
+        }
         if (agent["pending_proposal"] != null) {
-            return false to "a proposal is already pending review"
+            return GateResult(ProposalMode.BLOCKED, false,
+                "a proposal is already pending review")
         }
         if ((agent["invalid_strikes"] as? Number)?.toInt() ?: 0 >=
             MAX_INVALID_STRIKES
         ) {
-            return false to "proposal stage failed"
+            return GateResult(ProposalMode.BLOCKED, false,
+                "proposal stage failed")
         }
         if (parent.budgetUsed >= parent.budgetMax) {
-            return false to "experiment budget exhausted"
+            return GateResult(ProposalMode.BLOCKED, false,
+                "experiment budget exhausted")
         }
-        if (buildPack(parentId).comparable.isEmpty()) {
-            return false to "no comparable evidence yet"
+        if (buildPack(parentId).comparable.isNotEmpty()) {
+            return GateResult(ProposalMode.OPTIMIZE, true, "ok")
         }
-        return true to "ok"
+        // No completed measurements: a typed failed attempt
+        // still qualifies for a RECOVERY proposal. Anything
+        // else stays blocked with an actionable reason.
+        val target = recoveryTarget(parentId)
+        if (target != null) {
+            val runId = target.benchmark?.get("run_id") ?: "?"
+            return GateResult(ProposalMode.RECOVERY, true,
+                "recovery from failed attempt $runId")
+        }
+        return GateResult(ProposalMode.BLOCKED, false,
+            "no comparable evidence yet — complete or attempt " +
+                "an experiment first")
+    }
+
+    /** Gate with reason: may a proposal be requested now? */
+    @Synchronized
+    fun proposalGate(parentId: String): Pair<Boolean, String> {
+        val gate = proposalGateEx(parentId)
+        return gate.ok to gate.reason
+    }
+
+    /**
+     * Latest failed child qualifying for recovery: an
+     * uncompleted run with a valid run id, same
+     * model/workload as the parent. Null when no failure
+     * evidence exists (a completed-only history uses
+     * OPTIMIZE; an empty history stays BLOCKED).
+     */
+    @Suppress("UNCHECKED_CAST")
+    @Synchronized
+    fun recoveryTarget(parentId: String): SessionRecord? {
+        val parent = getParent(parentId)
+        return childrenOf(parentId)
+            .sortedByDescending { it.experimentSeq ?: Int.MIN_VALUE }
+            .firstOrNull { child ->
+                child.modelSha256 == parent.modelSha256 &&
+                    child.workloadId == parent.workloadId &&
+                    AgentEvidence.describeFailure(child) != null
+            }
     }
 
     // ---- proposal intake ----
@@ -211,6 +298,28 @@ class AgentManager(
         if (requestedSeq != nextSeq(parentId)) {
             throw AgentApi.AgentError("STALE_SEQ", "experiments moved on")
         }
+        // EF-MEM-03 host verification: a recovery cites a
+        // FAILED/TIMEOUT/CANCELLED run of THIS parent with
+        // matching model/workload. Never a completed run
+        // (that is repeat's job), never a foreign run.
+        if (proposal.purpose == AgentApi.PURPOSE_RECOVERY) {
+            val cited = proposal.recoveryOfRunId
+                ?: throw AgentApi.AgentError(
+                    "BAD_STATE", "recovery lacks cited run")
+            val owner = childForRun(parentId, cited)
+                ?: throw AgentApi.AgentError(
+                    "BAD_STATE", "recovery run is foreign")
+            if (AgentEvidence.describeFailure(owner) == null) {
+                throw AgentApi.AgentError("BAD_STATE",
+                    "recovery run is not a failed attempt")
+            }
+            if (owner.modelSha256 != parent.modelSha256 ||
+                owner.workloadId != parent.workloadId
+            ) {
+                throw AgentApi.AgentError("BAD_STATE",
+                    "recovery identity mismatch")
+            }
+        }
         val config = proposal.proposedConfig
             ?: throw AgentApi.AgentError("BAD_STATE", "proposal lacks config")
         // Host-controlled cohort labeling (model text is never
@@ -231,6 +340,9 @@ class AgentManager(
             "experiment_seq" to requestedSeq,
             "proposed_config" to SessionBenchBridge.configMap(config),
             "changed_keys" to proposal.changedKeys,
+            "purpose" to proposal.purpose,
+            "repeat_of_run_id" to proposal.repeatOfRunId,
+            "recovery_of_run_id" to proposal.recoveryOfRunId,
             "host_notes" to hostNotes,
             "hypothesis" to proposal.hypothesis,
             "expected_direction" to proposal.expectedDirection,
@@ -240,12 +352,95 @@ class AgentManager(
             "supporting_evidence_ids" to proposal.supportingEvidenceIds,
             "limitations" to proposal.limitations,
             "benefit" to proposal.benefit,
+            "counterargument" to proposal.counterargument,
+            "alternative_explanation" to proposal.alternativeExplanation,
+            "next_benchmark_establishes" to proposal.nextBenchmarkEstablishes,
+            "contract_version" to proposal.contractVersion,
             "proposal_hash" to sha256(proposal.rawJson),
             "evidence_pack_hash" to packHash,
             "requested_at_utc" to clock()
         )
         agent["invalid_strikes"] = 0
         return saveAgent(parent, agent, "proposal pending review")
+    }
+
+    /**
+     * EF-AGENT-REVIEW-01 developer Modify: replaces the
+     * pending proposed config with host-validated values.
+     * Repeat configs are fixed to the cited run (reject and
+     * re-request to change those). The model's expected
+     * values are kept but flagged stale; approval then
+     * executes the modified config like any pending one.
+     * No budget charge: none was consumed to modify.
+     */
+    @Suppress("UNCHECKED_CAST")
+    @Synchronized
+    fun updatePendingConfig(
+        parentId: String,
+        nCtx: Int,
+        nThreads: Int,
+        nPredict: Int,
+        maxThreads: Int
+    ): SessionRecord {
+        val parent = getParent(parentId)
+        val agent = (parent.agent as? Map<String, Any?>)?.toMutableMap()
+            ?: throw AgentApi.AgentError("BAD_STATE", "agent state missing")
+        requireActive(agent)
+        val pending = (agent["pending_proposal"] as? Map<String, Any?>)
+            ?.toMutableMap()
+            ?: throw AgentApi.AgentError("NO_PENDING", "no proposal pending")
+        if ((pending["purpose"] as? String) == AgentApi.PURPOSE_REPEAT) {
+            throw AgentApi.AgentError("REPEAT_FIXED",
+                "repeat config is fixed to the cited run; reject " +
+                    "and re-request to change it")
+        }
+        val stored = pending["proposed_config"] as? Map<String, Any?>
+            ?: throw AgentApi.AgentError("BAD_STATE", "pending lacks config")
+        val merged = stored.toMutableMap()
+        merged["n_ctx"] = nCtx
+        merged["n_threads"] = nThreads
+        merged["n_predict"] = nPredict
+        val target = SessionBenchBridge.configData(merged)
+            ?: throw AgentApi.AgentError("BAD_CONFIG", "modified config bad")
+        val errors = BenchConfig.validate(target).toMutableList()
+        if (target.nThreads > maxThreads) {
+            errors.add("n_threads $nThreads exceeds device max $maxThreads")
+        }
+        if (errors.isNotEmpty()) {
+            throw AgentApi.AgentError("BAD_CONFIG", errors.joinToString("; "))
+        }
+        val current = currentConfig(parentId)
+        val changed = mutableListOf<String>()
+        if (target.nCtx != current.nCtx) changed.add("n_ctx")
+        if (target.nThreads != current.nThreads) changed.add("n_threads")
+        if (target.nPredict != current.nPredict) changed.add("n_predict")
+        if (changed.isEmpty() &&
+            (pending["purpose"] as? String) == AgentApi.PURPOSE_OPTIMIZE
+        ) {
+            throw AgentApi.AgentError("NO_CHANGE",
+                "modification equals the current config; nothing to test")
+        }
+        val notes = ((pending["host_notes"] as? List<*>)?.mapNotNull {
+            it as? String
+        } ?: emptyList()).toMutableList()
+        notes.add("HOST: developer-modified to ctx=$nCtx threads=$nThreads " +
+            "predict=$nPredict; model expected values predate the change.")
+        if (target.nPredict != current.nPredict) {
+            notes.add("HOST: n_predict ${current.nPredict}→" +
+                "${target.nPredict} forms a distinct configuration cohort; " +
+                "results must not be pooled with " +
+                "${current.nPredict}-token runs.")
+        }
+        pending["proposed_config"] = SessionBenchBridge.configMap(target)
+        pending["changed_keys"] = changed.sorted()
+        pending["modified_by"] = "developer"
+        pending["host_notes"] = notes
+        pending["proposal_hash"] = sha256(
+            (pending["proposal_hash"] as? String).orEmpty() +
+                SessionJson.stringify(
+                    SessionBenchBridge.configMap(target)))
+        agent["pending_proposal"] = pending
+        return saveAgent(parent, agent, "proposal modified by developer")
     }
 
     /** Records one schema-invalid reply; the second strike terminates. */
@@ -303,6 +498,27 @@ class AgentManager(
         ) {
             throw AgentApi.AgentError(
                 "CONFIG_MISMATCH", "child config differs from proposal")
+        }
+        // EF-FOLLOWUP-02 repeat verification: the child must
+        // carry the cited run's prediction, and the cited
+        // run's STORED executed config must equal the child
+        // config (pending text alone is not trusted).
+        if ((pending["purpose"] as? String) == AgentApi.PURPOSE_REPEAT) {
+            val cited = pending["repeat_of_run_id"] as? String
+                ?: throw AgentApi.AgentError(
+                    "REPEAT_NO_CITE", "repeat cites nothing")
+            if (child.repeatOfRunId != cited) {
+                throw AgentApi.AgentError(
+                    "REPEAT_LINK", "child does not carry cited run")
+            }
+            val executed =
+                executedConfigMapForRun(parentId, cited)
+                    ?: throw AgentApi.AgentError(
+                        "REPEAT_NO_CITE", "cited run not found")
+            if (!configEquals(child.config, executed)) {
+                throw AgentApi.AgentError(
+                    "REPEAT_CONFIG", "repeat differs from cited run")
+            }
         }
         @Suppress("UNCHECKED_CAST")
         val experiments = ((agent["experiments"] as? List<*>)
