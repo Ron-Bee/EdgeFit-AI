@@ -47,6 +47,7 @@ class MainActivity : Activity() {
     private lateinit var cancelButton: Button
     private lateinit var saveButton: Button
     private lateinit var memReadinessView: TextView
+    private lateinit var benchConfigView: TextView
     private lateinit var memDiagButton: Button
     private var pendingJson: String? = null
     private var pendingFilename: String? = null
@@ -288,10 +289,22 @@ class MainActivity : Activity() {
         memCheckButton.setOnClickListener {
             showMemReadiness()
         }
+        // EF-COMP-01B-ROUTE: explicit manual config for
+        // unbound runs; bound sessions always win verbatim.
+        benchConfigView = TextView(this).apply {
+            setTextColor(secondaryColor())
+        }
+        val configButton = Button(this).apply {
+            text = "Select Config"
+        }
+        configButton.setOnClickListener {
+            showManualBenchConfig()
+        }
         destinations[NavTab.BENCHMARK] = destination(
             sectionHeader("Benchmark"),
             modelView, select, benchModelsButton, benchView,
             memReadinessView, memCheckButton,
+            benchConfigView, configButton,
             saveButton, runRow)
         destinations[NavTab.SESSIONS] = destination(
             sectionHeader("Sessions"),
@@ -564,7 +577,85 @@ class MainActivity : Activity() {
         if (tab == NavTab.BENCHMARK) {
             diagNote(MemDiag.Checkpoint.CONFIG_READY)
             updateMemReadinessLine()
+            refreshBenchConfigLine()
         }
+    }
+
+    /**
+     * EF-COMP-01B-ROUTE: exact pre-run config line. Bound
+     * sessions name the session (manual selection is
+     * ignored there); unbound runs show the effective
+     * triple + its source. Mirrors startBench resolution.
+     */
+    private fun refreshBenchConfigLine() {
+        if (!::benchConfigView.isInitialized) return
+        val bound = activeSessionId
+        benchConfigView.text = if (bound != null) {
+            "Config: from bound session $bound " +
+                "(manual selection ignored)"
+        } else {
+            ManualBenchConfig.describe(
+                standaloneOverride, currentBenchConfig())
+        }
+    }
+
+    /**
+     * EF-COMP-01B-ROUTE: explicit manual config dialog.
+     * Offers device default + bounded A/B; validates
+     * through production rules; writes standaloneOverride
+     * (or clears it). Never starts a run.
+     */
+    private fun showManualBenchConfig() {
+        val logical = try {
+            DeviceCapabilityCollector(this).collect()
+                .device.logicalProcessors
+        } catch (_: Exception) {
+            BenchConfig.N_THREADS
+        }
+        val options = ManualBenchConfig.options(logical)
+        val current = standaloneOverride
+        val checked = options.indexOfFirst { option ->
+            option.config == current
+        }.coerceAtLeast(0)
+        val items = options.map { option ->
+            (if (option.supported) "" else "[unavailable] ") +
+                option.label + "\n" + option.detail
+        }.toTypedArray()
+        AlertDialog.Builder(this)
+            .setTitle("Benchmark config (unbound runs)" +
+                if (activeSessionId == null) "" else
+                    " — session bound, selection parked")
+            .setSingleChoiceItems(items, checked, null)
+            .setPositiveButton("Apply") { dialog, _ ->
+                val list =
+                    (dialog as AlertDialog).listView
+                val position = list.checkedItemPosition
+                if (position < 0 || position >= options.size) return@setPositiveButton
+                val chosen = options[position]
+                when (val result = ManualBenchConfig.choose(
+                    chosen.id, logical)
+                ) {
+                    is ManualBenchConfig.Choice.Selected -> {
+                        standaloneOverride = result.config
+                        refreshBenchConfigLine()
+                        refreshModelLine()
+                        statusText(
+                            if (result.config == null) {
+                                "Config: device default."
+                            } else {
+                                "Config: manual " +
+                                    "${result.config.nCtx}/" +
+                                    "${result.config.nThreads}/" +
+                                    "${result.config.nPredict}."
+                            })
+                    }
+                    is ManualBenchConfig.Choice.Refused ->
+                        statusText(
+                            "Config refused: ${result.reason}")
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     @Suppress("OVERRIDE_DEPRECATION")
@@ -1206,6 +1297,7 @@ class MainActivity : Activity() {
                     // standalone config override.
                     standaloneOverride = null
                     refreshModelLine()
+                    refreshBenchConfigLine()
                     diagNote(MemDiag.Checkpoint.MODEL_STAGED)
                     updateMemReadinessLine()
                     refreshNextAction()
@@ -1251,7 +1343,8 @@ class MainActivity : Activity() {
                 if (override != null &&
                     activeSessionId == null
                 ) {
-                    " [standalone ctx=${override.nCtx}]"
+                    " [standalone ${override.nCtx}/" +
+                        "${override.nThreads}/${override.nPredict}]"
                 } else {
                     ""
                 }
@@ -1951,6 +2044,7 @@ class MainActivity : Activity() {
             ) {
                 standaloneOverride = config
                 refreshModelLine()
+                refreshBenchConfigLine()
                 updateMemReadinessLine()
                 statusText("Standalone override set " +
                     "(ctx=${config.nCtx}) — press Run to attempt.")
@@ -1959,6 +2053,7 @@ class MainActivity : Activity() {
         actions.add(CardDialog.Action("Clear Override") {
             standaloneOverride = null
             refreshModelLine()
+            refreshBenchConfigLine()
             statusText("Standalone override cleared.")
         })
         actions.add(CardDialog.Action("Recommended Models") {

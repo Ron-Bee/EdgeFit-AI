@@ -1432,3 +1432,36 @@ Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
 - EF-COMP-01B-FINAL: IMPLEMENTATION PASS.
   HOST PASS. LIVE CALLS + 6 RUNS STILL NOT
   AUTHORIZED (separate owner go required).
+
+## EF-COMP-01B-ROUTE (manual A/B execution; HOST ONLY)
+
+- On `implement/ef-comp-01b-route-2026-10-30` from
+  cf055c0, offline only. Confirmed gap: unbound
+  runs always used the 4-thread default; only
+  Agent children could run 8 threads.
+- New bounded selector (Benchmark → Select
+  Config): device default + Manual A/B, through
+  production BenchConfig.validate + hardware
+  thread max; exact pre-run Config line; bound
+  sessions still win verbatim; selection never
+  auto-runs; cleared on new model staging.
+  Manual triples byte-equal the frozen study
+  candidates (asserted in tests).
+- Provenance: executed config == exported
+  config through the single resolution funnel
+  (tested); native stack byte-identical to the
+  historical benchmark cohort (variant
+  `benchmark`, requested `-O3 -g`, effective
+  `-O2`); study APK SHA-256 `2813339C…5B46DE`
+  (9,043,807 bytes). No new freeze needed.
+- Runbook + protocol corrected to manual
+  unbound runs (no repeat proposals, no Agent
+  budget); API budget split study (2 calls) vs
+  demo; Appendix R UI acceptance (not run).
+- Host evidence: JVM suite green incl. 7 new
+  ROUTE tests; benchmark APK builds; Agent/
+  session/BYOK/native code untouched; no live
+  calls, no benchmarks, no DB writes.
+- EF-COMP-01B-ROUTE: IMPLEMENTATION PASS.
+  HOST PASS. PHONE ACCEPTANCE + LIVE STUDY
+  STILL NOT AUTHORIZED.

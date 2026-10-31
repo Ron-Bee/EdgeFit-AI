@@ -25,11 +25,13 @@ never statistically established.
 
 ## 2. Device validation gate (before any decision)
 
-On the S22 Ultra, the owner verifies both A and B pass
-host validation (BenchConfig bounds + device thread max 8)
-in the benchmark preparation screen. If either fails,
-STOP: the study is redesigned, not forced. Record the
-validation outcome with a screenshot.
+On the S22 Ultra, the owner opens Benchmark → Select
+Config (unbound, ROUTE build) and verifies Manual A and
+Manual B are both offered as supported, then confirms
+the Config line shows each exact triple. If B is refused
+or either line mismatches, STOP: the study is redesigned,
+not forced. Record the validation outcome with a
+screenshot per option.
 
 ## 3. Frozen decision procedure
 
@@ -63,17 +65,16 @@ validation outcome with a screenshot.
 6. M0 is NOT evidence-equivalent to R/M1: report it as
    the no-history control, never as a fair fight.
 
-## 4. Run order and sessions
+## 4. Run order (manual unbound runs, ROUTE correction)
 
-Order: A, B, B, A, A, B (6 runs). The five-approved-
-experiments-per-session cap is honored by splitting
-across two separately authorized Agent sessions:
-
-- Session 1: runs 1–3 (A, B, B).
-- Session 2: runs 4–6 (A, A, B).
-
-Each run needs its own explicit approval. One approval =
-one run; no batch approval.
+Order: A, B, B, A, A, B (6 runs), each an individually
+initiated UNBOUND manual run via Benchmark → Select
+Config → Run. No Agent sessions, proposals, or repeats
+are involved, so no experiment budget is consumed and
+no session split is needed. One deliberate Run press =
+one run; no batch approval, no background execution.
+(Supersedes the earlier two-session plan: the ROUTE
+manual selector removed the repeat-proposal dependency.)
 
 ## 5. Controls per run
 

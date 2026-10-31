@@ -29,17 +29,26 @@ re-hash all clean). Writes nothing. STOP on failure.
 
 ## 2. PHONE: verify exact APK + GGUF on the S22 Ultra
 
-Record: APK version/build time + SHA-256 of the installed
-APK bytes, GGUF display name + size + SHA-256 from the
-run screen (must equal
-`6f85a640…5611df83`), runtime `0.7.0-dev`/`arm64-v8a`,
-native variant `benchmark`. STOP on any mismatch.
+Install the ROUTE benchmark APK and record: app version
+0.2.0 (`ai.edgefit.diag.bench`), APK SHA-256
+`2813339C087DBD4191718085C0DC43B5AE5533A81A35889AEA7D3192575B46DE`
+(9,043,807 bytes; Kotlin/UI delta only — native
+llama.cpp/JNI libraries byte-identical to the historical
+benchmark cohort, effective `-O2`, variant `benchmark`).
+GGUF display name + size + SHA-256 from the run screen
+must equal `6f85a640…5611df83`; runtime `0.7.0-dev`/
+`arm64-v8a`. STOP on any mismatch.
 
 ## 3. PHONE: validate both candidate configs
 
-In benchmark preparation, confirm A (512/4/64) and B
-(512/8/64) both pass host validation (device thread max
-8). Screenshot each. STOP if either fails: the study is
+On the Benchmark tab: no active session bound (Sessions
+must show unbound), then tap Select Config. Confirm
+three options: Device default, Manual A (512/4/64),
+Manual B (512/8/64, supported on the 8-core S22).
+Select A: the Config line reads exactly
+`ctx=512 threads=4 predict=64 (manual selection)`.
+Select B: `threads=8`. Screenshot each. STOP if B is
+refused or either line mismatches: the study is
 redesigned, not forced.
 
 ## 4. Review the two frozen request bodies
@@ -89,25 +98,31 @@ Do not start run 1 in the same second as a decision.
 
 ## 9. PHONE: execute six individually initiated runs
 
-Order A,B,B,A,A,B across two Agent sessions (3 approvals
-each; the standalone UI cannot select 8 threads, so the
-Agent + developer-Modify route is required — see
-`ef-comp-01b-stage-b.md` §4 and the route note below).
-One approval = one run; same charger state; cooldown
-between runs; record thermal + RAM% + build identity
-per run. Export every benchmark JSON immediately.
+Order A,B,B,A,A,B as UNBOUND manual runs — no Agent
+sessions, no proposals, no repeats needed:
 
-Route note (verified against MainActivity/SessionManager):
-unbound runs always use 4 threads; only an Agent-approved
-child (genuine optimize change, or host-validated Modify
-to the study config, or a purpose=repeat of the cited run)
-can execute 8 threads. Per session: experiment 1 runs A
-on its prediction, then Modify-to-target / repeat approvals
-produce the remaining two runs. All production gates
-(evidence, budget, approval) stay enforced; modifications
-are recorded as developer-modified. STOP if the model will
-not emit the needed repeat after rejections — never force
-an unchanged optimize.
+1. Confirm no active session is bound.
+2. Tap Select Config → Manual A (or B) → Apply.
+3. Confirm the Config line shows the exact triple.
+4. Tap Run Benchmark (one deliberate press per run).
+5. On COMPLETED, save + export the benchmark JSON.
+6. Repeat for the next config in the order.
+
+Same charger state; cooldown between runs; record
+thermal + RAM% + build identity per run. Each run
+persists as a standalone measurement (no prediction
+invented). Study runs never consume Agent budgets and
+never touch production sessions. STOP on any refusal,
+crash, or config-line mismatch.
+
+## API budget (study vs demonstration)
+
+Independent study: EXACTLY 2 provider calls (M0, M1 in
+steps 5–6), each one bounded no-tools round trip.
+Production Agent demonstration (`ef-comp-01b-agent-demo.md`)
+is SEPARATE: its prediction/proposal/follow-up calls are
+budgeted per demo session (≤5 experiments) and are NOT
+study evidence. Never mix the two call counts.
 
 ## 10. Export and hash all six result artifacts
 
@@ -135,3 +150,21 @@ Report from `study-score.json` only: selections per arm,
 observed medians, regret per arm, errors, cost/latency,
 exclusions, and the exploratory limits (N=3/config,
 single device, no causal claims). Cite run ids + hashes.
+
+## Appendix R. ROUTE two-config UI acceptance (PHONE)
+
+1. Install the ROUTE APK (hash in step 2); stage the
+   study GGUF; confirm Sessions shows no bound session.
+2. Benchmark tab shows a Config line with the device
+   default triple; tap Select Config → 3 options.
+3. Apply Manual A → Config line `manual selection`
+   512/4/64; Run once; export JSON shows n_threads 4.
+4. Apply Manual B → Config line 512/8/64; Run once;
+   export JSON shows n_threads 8.
+5. Apply Device default → line reverts; Run uses 4.
+6. Bind an authorized session (Sessions → Bind) →
+   Config line names the session and notes manual
+   selection ignored; complete that bound run → binding
+   clears automatically → manual line returns.
+7. Stage a different file → manual selection cleared.
+PASS iff all 7 match; else STOP and file screenshots.
