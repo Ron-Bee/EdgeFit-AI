@@ -151,20 +151,61 @@ observed medians, regret per arm, errors, cost/latency,
 exclusions, and the exploratory limits (N=3/config,
 single device, no causal claims). Cite run ids + hashes.
 
-## Appendix R. ROUTE two-config UI acceptance (PHONE)
+## Appendix R. ROUTE acceptance (GATE-1A correction:
+no pre-decision measurements)
 
-1. Install the ROUTE APK (hash in step 2); stage the
-   study GGUF; confirm Sessions shows no bound session.
-2. Benchmark tab shows a Config line with the device
-   default triple; tap Select Config → 3 options.
-3. Apply Manual A → Config line `manual selection`
-   512/4/64; Run once; export JSON shows n_threads 4.
-4. Apply Manual B → Config line 512/8/64; Run once;
-   export JSON shows n_threads 8.
-5. Apply Device default → line reverts; Run uses 4.
-6. Bind an authorized session (Sessions → Bind) →
-   Config line names the session and notes manual
-   selection ignored; complete that bound run → binding
-   clears automatically → manual line returns.
-7. Stage a different file → manual selection cleared.
-PASS iff all 7 match; else STOP and file screenshots.
+The original appendix ordered physical A/B runs before
+the M0/M1 decisions, which would measure config B ahead
+of the prospective predictions. Corrected order below.
+
+### R-UI. Pre-decision UI-only acceptance (PHONE)
+
+NO Run Benchmark presses in this section. Any inference
+here contaminates the study (config B must stay
+unmeasured until the study runs).
+
+1. Install the ROUTE APK (hash in step 2); confirm
+   version 0.2.0 + package ai.edgefit.diag.bench.
+2. Stage the study GGUF; record display name + size.
+   Staging runs no inference (full SHA via the run-as
+   check or the first study export).
+3. Confirm Sessions shows no bound session.
+4. Benchmark tab shows a Config line with the device
+   default triple; tap Select Config → 3 options
+   (Device default, Manual A, Manual B); screenshot.
+5. Apply Manual A → line reads exactly
+   `ctx=512 threads=4 predict=64 (manual selection)`;
+   screenshot. DO NOT RUN.
+6. Apply Manual B → `threads=8`; screenshot. DO NOT RUN.
+7. Apply Device default → line reverts to
+   `(device default)`.
+8. Stage a different file → manual selection cleared;
+   then re-stage the study GGUF.
+R-UI PASS iff all 8 match with no benchmark initiated;
+else STOP and file screenshots.
+
+### R-PHYS. Physical config proof (inside the study)
+
+Study runs 1 (A) and 2 (B) ARE the physical acceptance:
+each exported `n_threads` must equal the selected config
+or STOP. No separate pre-study runs exist.
+
+### R-PROD. Separate product acceptance (NOT study evidence)
+
+After scoring (or on a non-study day): bound-session
+precedence display, AgentReview + Modify + Approve & Run,
+repeat, Muse follow-up, per
+`ef-comp-01b-agent-demo.md`. Never interleave with study
+runs; never add product-run measurements to the study
+corpus.
+
+### Deferred defect (low-end UI; NOT an S22 blocker)
+
+`ManualBenchConfig.options()` advertises Manual A as
+supported on devices with fewer than 4 logical
+processors, while `choose()` correctly refuses it there
+(fail-closed; no bad run possible). Smallest correction:
+gate the A option on `bMax >= 4` with a needs-4-
+processors detail, mirroring B, plus one test asserting
+`options(2)` marks A unsupported. Deferred: no Android
+edit or APK rebuild for this gate.

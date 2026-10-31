@@ -1465,3 +1465,37 @@ Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
 - EF-COMP-01B-ROUTE: IMPLEMENTATION PASS.
   HOST PASS. PHONE ACCEPTANCE + LIVE STUDY
   STILL NOT AUTHORIZED.
+
+## EF-COMP-01B-GATE-1A (readiness gate; DOCS ONLY)
+
+- On `implement/ef-comp-01b-gate-1a-2026-10-30` from
+  61d7bd6. Read-only ADB against S22 R5CT604K33V
+  only; emulator untouched; no app writes, no
+  runs, no calls.
+- Installed phone build is NOT the ROUTE APK:
+  on-device base.apk SHA `C5C9E054…767557`
+  (8,930,572 bytes, installed Oct 30 11:44) vs
+  registered ROUTE `2813339C…5B46DE`
+  (9,043,807 bytes, built 20:03). Package,
+  version 0.2.0, DEBUGGABLE, arm64-v8a all
+  confirmed; Select Config absent until the
+  owner installs the ROUTE APK.
+- No staged model on the phone
+  (`cache/bench-model.gguf` absent); run-as
+  method verified working, hash check pending
+  owner staging. Owner must stage the GGUF,
+  then re-run the read-only hash check.
+- Appendix R corrected: R-UI (8 UI-only
+  checks, zero Run presses) pre-decisions;
+  study runs 1–2 are the physical config
+  proof; product acceptance (bound/Agent/
+  follow-up) separate post-scoring. No
+  pre-decision B measurement can occur under
+  the corrected order.
+- Frozen study byte-identical (no new bench
+  exports; corpus untouched). Low-end Manual-A
+  display inconsistency recorded as deferred
+  (fail-closed; S22 unaffected).
+- EF-COMP-01B-GATE-1A: DOCS PASS. PHONE
+  UI ACCEPTANCE BLOCKED on ROUTE install +
+  GGUF staging (owner actions).
