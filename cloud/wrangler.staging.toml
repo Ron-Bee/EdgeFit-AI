@@ -23,6 +23,11 @@
 # version recorded in the milestone report.
 
 name = "edgefit-evidence-staging"
+# Must be TOP-LEVEL (never under [env.*]): disables versioned and
+# aliased preview URLs for every uploaded Worker version. Default
+# inherits workers_dev, so this explicit false survives a future
+# workers_dev flip: old versions must never gain URLs (H10-02 C).
+preview_urls = false
 # Entry point, relative to this file (cloud/).
 main = "worker.js"
 # Workers runtime behavior is versioned by this date; keep pinned so
@@ -59,6 +64,24 @@ database_name = "edgefit-evidence-staging"
 database_id = "2ccce000-c70c-4c5a-9267-d330dedc22aa"
 # Migrations directory, relative to this file.
 migrations_dir = "migrations"
+
+# Request rate limiting (H10-02 D, staging only). Enforced inside
+# workerFetch per client IP; this is NOT edge-preexecution
+# protection (zone WAF/rate-limit rules cannot attach to
+# workers.dev). Approximate distributed counting may slightly
+# over-admit. Free-tier availability + behavior verified at
+# activation (deploy output must list the binding; live limit test
+# required). First-class `ratelimits` key only: never redeclare
+# under unsafe.bindings (silently never counts).
+[[env.staging.ratelimits]]
+name = "RATE_LIMIT"
+# Account-unique namespace id (operator-chosen positive integer,
+# string form). Change if this account already uses it.
+namespace_id = "7001"
+# 120 requests/minute per IP: the synthetic matrix peaks near
+# ~10/min from one operator, so legitimate staging use never
+# trips; casual floods do. Period must be 10 or 60.
+simple = { limit = 120, period = 60 }
 
 # Secrets (set ONLY via `wrangler secret put` under G2-B2; never in
 # this file, never in git):

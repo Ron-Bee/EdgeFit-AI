@@ -89,6 +89,7 @@ function rdeps(deps) {
     deviceClasses: deps.deviceClasses,
     quorumRuns: deps.quorumRuns,
     quorumInstalls: deps.quorumInstalls,
+    publishConsentVersions: deps.publishConsentVersions,
   };
 }
 

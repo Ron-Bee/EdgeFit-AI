@@ -1,4 +1,13 @@
-# EF-GLOBAL-APP-BRIDGE-01 integration contract (v1.0, PROPOSED)
+# EF-GLOBAL-APP-BRIDGE-01 integration contract (v1.1, PROPOSED)
+
+v1.1 changelog (2026-10-31, H10-03/04): ADDITIVE ONLY — documents
+the `429 rate_limited` edge response and the publication
+allowlist + query-time guard that landed after v1.0 (§5, §6,
+§7, §8, §9, §12, checklist item 12, §15), plus factual
+scheduler corrections (§8, checklist item 14, §15 item 13 —
+no wire change). Every v1.0 fixture, receipt, error code,
+and retry rule is unchanged; the four fenced JSON blocks
+are intact. No staging receipt exists yet.
 
 Versioned client/server handshake for "Contribute to EdgeFit
 Global" (Android) and the future website contribution channel.
@@ -294,7 +303,14 @@ Quota exhaustion: `429 quota_exceeded` with a `retry-after`
 header of seconds-to-UTC-midnight (e.g. `43200` at UTC noon).
 Database contention: `503 temporarily_unavailable` with
 `retry-after: 1`. Both headers pass the Worker edge
-unmodified; no other handler header crosses it.
+unmodified; no other handler header crosses it. Per-IP edge
+budget (v1.1, in source, host-tested, NOT yet deployed):
+`429 rate_limited` with `retry-after: 60`. Nothing was
+claimed and nothing was stored: the check runs BEFORE
+authentication, quota, and dispatch (`cloud/worker.js`
+workerFetch; host tests G2B-W-N1..N4, H10-17/18/19/21/22).
+Clients MUST distinguish the two 429s by `error.code`,
+never by status alone (§9).
 
 ## 6. Field-by-field consent requirements
 
@@ -309,6 +325,13 @@ storage or quota accounting (`cloud/api.js:101-130`,
   been reviewed or approved (owner decision H-§5, G1 §H.5).
   Android MUST send the exact policy version the user saw,
   and MUST NOT treat server acceptance as policy approval.
+  v1.1: acceptance STILL records any 1..32-char string
+  verbatim (B8), but PUBLICATION now requires allowlist
+  membership (§8): staging's allowlist is EMPTY, so accepted
+  rows hold at QUALIFIED. `v1` and `ef-synth-01` are
+  synthetic-only markers — NEVER approve `v1` as a real
+  policy: staging's 16 PUBLISHED test rows carry `v1`, and
+  approving it would surface them as genuine evidence.
 - `accepted_at`: ISO-8601 string, REQUIRED, must not be more
   than 5 minutes in the server's future. MUST be named
   exactly `accepted_at`.
@@ -364,6 +387,12 @@ Source: `cloud/api.js:74-89` (lookup), `cloud/schema.sql:9-14`
   `retry-after` to the next UTC midnight. Global per-IP read
   limits are an edge responsibility, NOT implemented in the
   handler (H10; must be demonstrated before public exposure).
+  v1.1: implemented at the Worker edge (workerFetch
+  pre-dispatch check, 120 requests per 60s per IP,
+  `429 rate_limited` + `retry-after: 60`); handler semantics
+  unchanged. Edge demonstration still required pre-exposure
+  (H10-02 activation gates: dry-run binding proof, burst
+  test, tick-alarm silence).
 - Logging/errors: auth failures return the fixed `401`
   envelope; responses and logs MUST never contain tokens,
   hashes, salts, or install ids (proven locally by
@@ -393,7 +422,11 @@ with `REVOKED` reachable from ANY state and TERMINAL
   throughput ≤ 100000 tps, COMPLETED reconciles
   tokens×1000/ms within 0.1%, earliest run_id wins,
   24h install velocity ≤ quota), QUALIFIED→PUBLISHED
-  (consent still carries `aggregates`). Each step is a
+  (consent still carries `aggregates`). v1.1: AND the row's
+  consent `policy_version` is in the publication allowlist
+  (`cloud/validate.js` `isPublishableVersion`; staging ships
+  NO allowlist key = EMPTY, so rows hold at QUALIFIED with no
+  error). `ef-synth-01` is never allowlisted. Each step is a
   compare-and-swap batch naming the expected from-state; a
   concurrently revoked row is never promoted or resurrected
   (proven under a held-open barrier in acceptance Step C6).
@@ -401,12 +434,14 @@ with `REVOKED` reachable from ANY state and TERMINAL
   `(from_state, to_state, reason, at)` to
   `eligibility_history`; holds and deferrals append nothing.
   `published_at` is set exactly at PUBLISHED.
-- There is NO global lock and NO scheduled job in this
-  repo: qualification runs when the operator invokes
-  `runQualification` (a Cron trigger is staging design,
-  PROPOSED). Concurrent passes are safe: losing CAS steps
-  defer to the next pass. Clients MUST treat promotion as
-  asynchronous and poll `GET /v1/submissions/{id}`.
+- There is NO global lock. Qualification runs on a bounded
+  Cloudflare Cron (`*/10 * * * *`, at most 10 rows per tick)
+  driving the same `runQualification` machine
+  (`cloud/worker.js` scheduledTick; no public administrative
+  endpoint; staging ticks measured 1-3 ms CPU). Concurrent
+  passes are safe: losing CAS steps defer to the next pass.
+  Clients MUST treat promotion as asynchronous and poll
+  `GET /v1/submissions/{id}`.
 - Presentation mapping (for §15 Explorer): SUBMITTED =
   received; VALIDATED = structurally valid; QUALIFIED =
   eligible under the rules; PUBLISHED = in the aggregate
@@ -424,6 +459,17 @@ with `REVOKED` reachable from ANY state and TERMINAL
   client-side.
 - `429`: stop and wait the `retry-after` seconds (to UTC
   midnight); the claim was compensated, nothing was stored.
+- `429` with `error.code "rate_limited"` (v1.1): stop 60
+  seconds, then retry unchanged; nothing was claimed and
+  nothing was stored — this is edge budget, NOT quota state.
+  Distinguish by `error.code`: `quota_exceeded` → quota clock
+  (midnight); `rate_limited` → 60s edge window.
+- Unknown `error.code` values (v1.x forward rule): honor
+  `retry-after` when present, never treat status alone as a
+  known state, and never crash on an unrecognized code. A
+  v1.0 client that honors `retry-after` already behaves
+  correctly under v1.1 (worst case: it mislabels an edge
+  slowdown as quota); see §15.
 - `503`: retry after 1 second with bounded backoff; the
   batch rolled back, nothing was stored.
 - `500 internal`: NOT receipted — NOTHING about the outcome
@@ -516,7 +562,14 @@ Publication (provisional owner policy H2, staging-testing
 only): a cohort publishes statistics iff it holds ≥ 5
 PUBLISHED runs from ≥ 3 independent installs
 (`passesQuorum`). Aggregates use PUBLISHED + COMPLETED +
-`tps_gen > 0` rows only. Thin cohorts are LISTED with
+`tps_gen > 0` rows only. v1.1: AND the row's consent version
+passes the query-time publication guard
+(`publishableVersionClause`; empty allowlist = `1 = 0`, no
+rows). Rows with synthetic or unapproved versions —
+INCLUDING the 16 pre-existing staging PUBLISHED rows (`v1`)
+— contribute to neither counts, quorum, nor statistics on
+any public surface (aggregates, models, candidates, Muse
+retrieval). Thin cohorts are LISTED with
 `status "insufficient-evidence"`, counts, and
 `aggregates: null` — never widened, never averaged, never
 zero-filled. Candidates report ONE representative
@@ -563,13 +616,16 @@ server/client behavior per the cited section):
 11. Timeout/503: bounded backoff honoring `retry-after: 1`;
     no row exists until a receipt arrives (§9).
 12. 429: stop until `retry-after` elapses; show quota state
-    honestly; do not burn retries.
+    honestly; do not burn retries. v1.1: branch on
+    `error.code` — `rate_limited` is a 60s edge slowdown
+    (nothing claimed), not quota state.
 13. Receipt persistence: on `201`/`200`, persist
     `(submission_id, eligibility, duplicate, received_at)`
     locally, bound to the originating run/session id.
 14. Status lookup: `GET /v1/submissions/{id}` with the same
     token; render eligibility + history trail (§5, §8);
-   POLL — promotion is asynchronous and operator-driven.
+   POLL — promotion is asynchronous and Cron-driven
+   (bounded 10-row ticks).
 15. Revocation: user-initiated DELETE → `200 REVOKED`;
     the app shows "withdrawn", keeps the tombstone receipt,
     and never re-submits the revoked bytes silently.
@@ -697,14 +753,25 @@ B. Evidence Explorer (read-only). Maps ONLY to §8 states
 12. R3 cross-install content-existence disclosure on
     duplicate replay: accepted caveat, abuse review at
     staging.
-13. Qualification is operator-invoked (no Cron in repo):
-    staging runbook must define the trigger before the
-    demo needs PUBLISHED rows.
+13. Qualification runs on the staging Cron (*/10, bounded
+    ticks): the demo runbook must allow async promotion
+    (poll status) before the demo needs PUBLISHED rows.
 14. One-device demo ≠ quorum: any demo MUST label
     single-install receipts as unqualified (§11.1).
-15. Contract evolution: this document is v1.0 pinned to
-    backend `71a3952`. Any backend behavior change
-    requires a contract minor/major bump with a
-    compatibility note; clients pin the contract version
-    they implement.
+15. Contract evolution: this document is v1.1. All v1.0
+    sections remain pinned to backend `71a3952` (131/131).
+    Any backend behavior change requires a contract
+    minor/major bump with a compatibility note; clients pin
+    the contract version they implement. v1.1 (2026-10-31,
+    H10-03/04): ADDITIVE — `429 rate_limited` (§5, §7, §9,
+    checklist 12), publication allowlist (§6, §8),
+    query-time guard (§12), factual scheduler corrections
+    (§8, checklist 14, §15 item 13 — no wire change).
+    Provenance: v1.1 sections
+    describe the H10-02/03 tree (213/213 host tests,
+    preserved in the same commit as this amendment). All
+    v1.0 fixtures, receipts, and codes unchanged. v1.0
+    clients that honor `retry-after` are behavior-safe
+    under v1.1; exact Android handling is UNVERIFIED (no
+    Android source in this worktree).
 

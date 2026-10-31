@@ -43,6 +43,17 @@ export const WORKER_DEPS = {
   maxGroups: 200,
   maxModels: 500,
 };
+// NOTE (H10-02): no publishConsentVersions here on purpose.
+// Staging publishes nothing until the owner approves a real
+// consent policy version (the validate.js helpers default to an
+// empty allowlist when the key is absent). Do not add versions
+// without that approval record.
+
+/**
+ * Rate-limit window for the 429 Retry-After hint. Must match the
+ * binding's period in wrangler.staging.toml (60s).
+ */
+export const RATE_LIMIT_RETRY_SECS = 60;
 
 /**
  * Scheduler batch ceiling: at most 10 rows per Cron invocation.
@@ -94,6 +105,20 @@ function utf8Length(text) {
   return new TextEncoder().encode(text).length;
 }
 
+/**
+ * Rate-limit key: the edge-supplied client IP. Cloudflare always
+ * sets CF-Connecting-IP on served requests; header-less callers
+ * (local tests) share the "unknown" bucket but never reach the
+ * limiter (no binding outside staging). Never tokens or ids.
+ */
+function rateLimitKey(request) {
+  const ip = request?.headers?.get?.("cf-connecting-ip");
+  if (typeof ip === "string" && ip.length > 0 && ip.length <= 64) {
+    return `ip:${ip}`;
+  }
+  return "ip:unknown";
+}
+
 function retryHeaders(res) {
   // Only a numeric retry-after crosses the boundary: quota (429)
   // and contention (503) stay retryable with honest delays, and no
@@ -119,6 +144,50 @@ export async function workerFetch(request, ctx) {
   const nowMs = ctx?.nowMs ?? Date.now();
   if (!db || !deps) return failClosed(500, "internal",
     "temporary backend failure");
+  // Request rate limit (H10-02 D): bounded staging abuse
+  // protection, checked before anything else so junk requests
+  // cost the sender budget. Absent binding (local tests, dev
+  // without the binding) skips open; production presence is
+  // enforced by config + deploy-output checklist + the
+  // scheduled-tick alarm below, not here. A THROWING limiter
+  // also skips open: auth and per-install quotas still apply,
+  // and a limiter outage must never brick reads, deletes, or
+  // uploads. Faults are OBSERVABLE, not silent: ctx carries an
+  // optional onRateLimitError hook (wired to a sanitized warn
+  // by the fetch entry; never throws into the request path).
+  // Exceeding returns 429 with the standard envelope (new
+  // `rate_limited` code: bridge-contract v1.1 amendment
+  // alongside, owner decision required).
+  const limiter = ctx?.rateLimit;
+  const onLimiterError = ctx?.onRateLimitError;
+  const reportLimiterFault = (fault) => {
+    if (typeof onLimiterError !== "function") return;
+    try {
+      onLimiterError(fault);
+    } catch {
+      // Telemetry must never break requests.
+    }
+  };
+  if (limiter && typeof limiter.limit === "function") {
+    let allowed = true;
+    try {
+      const verdict = await limiter.limit({ key: rateLimitKey(request) });
+      if (!verdict || typeof verdict !== "object" ||
+          typeof verdict.success !== "boolean") {
+        reportLimiterFault(new Error("rate limiter verdict malformed"));
+      } else {
+        allowed = verdict.success;
+      }
+    } catch (e) {
+      reportLimiterFault(e);
+      allowed = true;
+    }
+    if (!allowed) {
+      return failClosed(429, "rate_limited",
+        "too many requests; retry shortly",
+        { "retry-after": String(RATE_LIMIT_RETRY_SECS) });
+    }
+  }
   const method = String(request?.method ?? "").toUpperCase();
   if (!WORKER_METHODS.includes(method)) {
     return failClosed(405, "method_not_allowed", "method not allowed");
@@ -183,9 +252,10 @@ export async function workerFetch(request, ctx) {
 }
 
 /**
- * One bounded qualification tick. ctx: { db, deps, nowMs?, maxRows?,
- * log? }. Runs the EXISTING runQualification state machine over at
- * most maxRows pending rows (default SCHEDULED_MAX_ROWS, clamped
+ * One bounded qualification tick. ctx: { db, deps, nowMs?,
+ * maxRows?, log?, logErr?, rateLimit? }. Runs the EXISTING
+ * runQualification state machine over at most maxRows pending
+ * rows (default SCHEDULED_MAX_ROWS, clamped
  * into [1, 10]); every transition, CAS guard, revocation rule,
  * cohort definition and quorum check is runQualification's own —
  * this function adds scheduling bounds and observable logging
@@ -206,6 +276,17 @@ export async function scheduledTick(ctx) {
   if (!db || !deps) {
     logErr("qualify tick misconfigured: no database or deps");
     throw new Error("worker misconfigured");
+  }
+  // Rate-limit binding alarm (H10-03 C): the scheduled entry
+  // passes its env.RATE_LIMIT every tick, so a missing or
+  // malformed staging binding surfaces in operator logs within
+  // one Cron interval instead of failing open silently. Key
+  // presence is the switch: callers that never pass rateLimit
+  // (host tests, local ticks) stay silent. Healthy bindings
+  // log nothing; this line fires ONLY while unusable.
+  if ("rateLimit" in ctx &&
+      typeof ctx.rateLimit?.limit !== "function") {
+    logErr("rate-limit binding unusable: requests fail open until fixed");
   }
   const maxRows = Math.max(1, Math.min(
     Number.isInteger(ctx?.maxRows) ? ctx.maxRows : SCHEDULED_MAX_ROWS,
@@ -253,14 +334,21 @@ export default {
     } catch {
       return failClosed(500, "internal", "temporary backend failure");
     }
-    return await workerFetch(request, { db, deps, nowMs: Date.now() });
+    return await workerFetch(request, { db, deps, nowMs: Date.now(),
+      rateLimit: env.RATE_LIMIT,
+      // Limiter faults stay visible in operator logs without
+      // touching the request path: kind-only (code/name), never
+      // the key, IP, token, or error text.
+      onRateLimitError: (e) => console.warn(
+        `rate limiter fault kind=${e?.code ?? e?.name ?? "error"}`) });
   },
   async scheduled(event, env, ctx) {
     void event;
     const finish = async () => {
       const db = openD1(env.DB);
       const deps = makeDepsFromEnv(env);
-      await scheduledTick({ db, deps, nowMs: Date.now() });
+      await scheduledTick({ db, deps, nowMs: Date.now(),
+        rateLimit: env.RATE_LIMIT });
     };
     // ctx.waitUntil keeps the isolate alive past the handler
     // return when the runtime offers it; awaiting covers the

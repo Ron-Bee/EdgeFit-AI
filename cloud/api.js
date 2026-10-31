@@ -15,6 +15,7 @@ import {
   MAX_BODY_BYTES,
   validateSubmission,
   configHashFor,
+  publishableVersionClause,
 } from "./validate.js";
 import { mean, median, iqr } from "./stats.js";
 import { groupCohorts, passesQuorum, saltedInstall } from "./cohort.js";
@@ -470,6 +471,12 @@ async function getAggregates(req) {
     filters.push("prompt_sha = ?");
     params.push(query.prompt_sha);
   }
+  // Publication allowlist (H10-02, query-time guard): only rows
+  // whose consent version is approved contribute to public
+  // evidence, including historical PUBLISHED rows.
+  const pub = publishableVersionClause(deps);
+  filters.push(pub.clause);
+  params.push(...pub.params);
   // Throughput aggregates use completed measurements only;
   // failed attempts stay stored evidence, never averages.
   const rows = await db.all(
@@ -504,11 +511,15 @@ async function getAggregates(req) {
 
 async function getModels(req) {
   const { db, deps } = req;
+  // Publication allowlist (H10-02, query-time guard): population
+  // counts include approved-consent rows only.
+  const pub = publishableVersionClause(deps);
   const rows = await db.all(
     `SELECT model_sha, install_id, collected_at
      FROM submissions
      WHERE eligibility = 'PUBLISHED' AND status = 'COMPLETED'
-       AND tps_gen > 0`,
+       AND tps_gen > 0 AND ${pub.clause}`,
+    ...pub.params,
   );
   const byModel = new Map();
   for (const row of rows) {
@@ -592,6 +603,10 @@ async function getCandidates(req) {
     filters.push("workload_id = ?");
     params.push(query.workload_id);
   }
+  // Publication allowlist (H10-02, query-time guard).
+  const pub = publishableVersionClause(deps);
+  filters.push(pub.clause);
+  params.push(...pub.params);
   // v1 has no catalog table: candidates derive from observed
   // published artifacts. License and source URL are unknown
   // until catalog curation; the response says so. Catalog facts

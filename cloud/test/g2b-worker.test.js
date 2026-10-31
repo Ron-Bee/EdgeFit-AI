@@ -448,3 +448,93 @@ test("G2B-W-NEG2: unauthorized submissions store nothing", async (t) => {
   const rows = await ctx.db.get("SELECT COUNT(*) AS n FROM submissions");
   assert.equal(rows.n, 0);
 });
+
+// ---------- N. rate-limiter fault telemetry (H10-03 C) ----------
+
+test("G2B-W-N1: throwing limiter reports the fault and fails open", async (t) => {
+  const { ctx } = await openCtx(t);
+  const tokens = await seed3(ctx);
+  const faults = [];
+  ctx.rateLimit = { limit: async () => { throw new Error("RL FAKE down"); } };
+  ctx.onRateLimitError = (e) => faults.push(e);
+  const res = await wfetch(ctx, "POST", "/v1/submissions", {
+    headers: auth(tokens[1]),
+    body: JSON.stringify(makeEnvelope(makeResult(freshRun()))),
+  });
+  assert.equal(res.status, 201);
+  assert.equal(faults.length, 1);
+  assert.equal(faults[0].message, "RL FAKE down");
+});
+
+test("G2B-W-N2: malformed limiter verdicts report and fail open", async (t) => {
+  const { ctx } = await openCtx(t);
+  await seed3(ctx);
+  for (const verdict of [null, 42, "yes", {},
+    { success: "true" }, { success: 1 }]) {
+    const faults = [];
+    const res = await wfetch({ ...ctx,
+      rateLimit: { limit: async () => verdict },
+      onRateLimitError: (e) => faults.push(e) },
+    "GET", "/v1/models", {});
+    assert.equal(res.status, 200, JSON.stringify(verdict));
+    assert.equal(faults.length, 1, JSON.stringify(verdict));
+  }
+  const silent = [];
+  const ok = await wfetch({ ...ctx,
+    rateLimit: { limit: async () => ({ success: true }) },
+    onRateLimitError: (e) => silent.push(e) },
+  "GET", "/v1/models", {});
+  assert.equal(ok.status, 200);
+  assert.equal(silent.length, 0);
+});
+
+test("G2B-W-N3: telemetry faults never break requests or leak", async (t) => {
+  const { ctx } = await openCtx(t);
+  await seed3(ctx);
+  const res = await wfetch({ ...ctx,
+    rateLimit: { limit: async () => { throw new Error("RL down"); } },
+    onRateLimitError: () => { throw new Error("hook exploded"); } },
+  "GET", "/v1/models", {});
+  assert.equal(res.status, 200);
+  // Default export wires the hook to a kind-only console.warn.
+  const mock = openMockD1Binding();
+  t.after(() => mock.close());
+  await initSchema(openD1(mock.binding));
+  const warned = [];
+  const origWarn = console.warn;
+  console.warn = (s) => warned.push(String(s));
+  try {
+    const served = await workerDefault.fetch(
+      new Request(urlFor("/v1/models"), { method: "GET",
+        headers: { "cf-connecting-ip": "10.9.8.7" } }),
+      { DB: mock.binding, INSTALL_SALT: "wiring-salt",
+        RATE_LIMIT: { limit: async () => {
+          const e = new Error("boom 10.9.8.7 tok-ALPHA-1");
+          e.code = "RL_FAKE";
+          throw e;
+        } } });
+    assert.equal(served.status, 200);
+  } finally {
+    console.warn = origWarn;
+  }
+  assert.deepEqual(warned, ["rate limiter fault kind=RL_FAKE"]);
+});
+
+test("G2B-W-N4: limiter passage preserves auth and owner privacy", async (t) => {
+  const { ctx } = await openCtx(t);
+  const tokens = await seed3(ctx);
+  const gated = { ...ctx,
+    rateLimit: { limit: async () => ({ success: true }) } };
+  const noAuth = await wfetch(gated, "GET",
+    "/v1/submissions/SUB-absent", {});
+  assert.equal(noAuth.status, 401);
+  const created = await wfetch(gated, "POST", "/v1/submissions", {
+    headers: auth(tokens[1]),
+    body: JSON.stringify(makeEnvelope(makeResult(freshRun()))),
+  });
+  assert.equal(created.status, 201);
+  const foreign = await wfetch(gated, "GET",
+    `/v1/submissions/${created.body.submission_id}`,
+    { headers: auth(tokens[2]) });
+  assert.equal(foreign.status, 404);
+});

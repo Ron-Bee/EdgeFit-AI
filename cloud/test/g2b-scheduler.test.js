@@ -454,3 +454,54 @@ test("GSCH-16: batch ceiling is 10, downward-only, default intact", async (t) =>
   const rest = await runQualification(db, NOW, deps);
   assert.equal(rest.processed, 1);
 });
+
+// 17. Tick alarms on an unusable limiter binding, silent otherwise.
+test("GSCH-17: tick alarms on unusable limiter binding only", async (t) => {
+  const db = await openTestDb();
+  t.after(() => db.close());
+  const deps = makeDeps();
+  for (const bad of [undefined, null, {}, { limit: "yes" }]) {
+    const c = collector();
+    const sum = await scheduledTick({ db, deps, nowMs: NOW,
+      log: c.log, logErr: c.logErr, rateLimit: bad });
+    assert.deepEqual(sum,
+      { processed: 0, promoted: 0, held: 0, deferred: 0, maxRows: 10 });
+    assert.deepEqual(c.errors,
+      ["rate-limit binding unusable: requests fail open until fixed"],
+      JSON.stringify(bad));
+  }
+  const quiet = collector();
+  await scheduledTick({ db, deps, nowMs: NOW,
+    log: quiet.log, logErr: quiet.logErr });
+  assert.equal(quiet.errors.length, 0);
+  const healthy = collector();
+  await scheduledTick({ db, deps, nowMs: NOW,
+    log: healthy.log, logErr: healthy.logErr,
+    rateLimit: { limit: async () => ({ success: true }) } });
+  assert.equal(healthy.errors.length, 0);
+});
+
+// 18. Default scheduled() entry surfaces a missing binding.
+test("GSCH-18: scheduled entry alarms when the binding is missing", async (t) => {
+  const mock = openMockD1Binding();
+  t.after(() => mock.close());
+  const d1 = openD1(mock.binding);
+  await initSchema(d1);
+  const lines = [];
+  const errors = [];
+  const origLog = console.log;
+  const origErr = console.error;
+  console.log = (s) => lines.push(String(s));
+  console.error = (s) => errors.push(String(s));
+  try {
+    await workerDefault.scheduled({ cron: "*/10 * * * *" },
+      { DB: mock.binding, INSTALL_SALT: "alarm-salt" }, {});
+  } finally {
+    console.log = origLog;
+    console.error = origErr;
+  }
+  assert.ok(errors.some((l) => l.includes("rate-limit binding unusable")),
+    JSON.stringify(errors));
+  assert.ok(lines.some((l) => l.includes("qualify tick processed=0")),
+    JSON.stringify(lines));
+});

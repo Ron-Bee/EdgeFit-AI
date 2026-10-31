@@ -18,6 +18,37 @@ export const EFFECTIVE_OPT_STATUSES = [
   "unverified",
 ];
 
+// Publication consent allowlist (H10-02). A row may advance to
+// PUBLISHED and appear in public evidence only when its consent
+// policy version is listed in deps.publishConsentVersions. The
+// default is EMPTY (fail closed when unconfigured); staging sets
+// nothing until the owner approves a real policy version.
+// ef-synth-01 is the reserved synthetic-test marker: API-accepted
+// and qualification-eligible, but never publishable.
+export const SYNTHETIC_CONSENT_VERSION = "ef-synth-01";
+
+export function publishConsentVersions(deps) {
+  const allow = deps?.publishConsentVersions;
+  return Array.isArray(allow) ? allow : [];
+}
+
+export function isPublishableVersion(version, deps) {
+  return publishConsentVersions(deps).includes(version);
+}
+
+// Parameterized SQL predicate for the query-time guard. An empty
+// allowlist yields the valid, unsatisfiable `1 = 0` (never an
+// invalid empty IN list). Column is a fixed internal constant,
+// values are bound parameters; caller spreads params.
+export function publishableVersionClause(deps) {
+  const allow = publishConsentVersions(deps);
+  if (allow.length === 0) return { clause: "1 = 0", params: [] };
+  return {
+    clause: `consent_policy_version IN (${allow.map(() => "?").join(", ")})`,
+    params: [...allow],
+  };
+}
+
 const SHA64 = /^[0-9a-f]{64}$/;
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const PRINTABLE = /^[\x20-\x7E]{1,64}$/;

@@ -20,6 +20,10 @@ export function makeDeps(overrides = {}) {
     sha256hex: (text) => createHash("sha256").update(text, "utf8").digest("hex"),
     newId: () => `SUB-${String(++counter).padStart(32, "0")}`,
     installSalt: "test-salt",
+    // Fixture consent version ("v1", see makeEnvelope). Production
+    // default is EMPTY (fail closed); h10 tests pin [], unknown,
+    // and ef-synth-01 explicitly.
+    publishConsentVersions: ["v1"],
     quorumRuns: 5,
     quorumInstalls: 3,
     quotaPerDay: 20,

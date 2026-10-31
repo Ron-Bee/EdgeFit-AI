@@ -9,6 +9,7 @@
 
 import { mean, median } from "./stats.js";
 import { groupCohorts, passesQuorum } from "./cohort.js";
+import { publishableVersionClause } from "./validate.js";
 
 const SHA64 = /^[0-9a-f]{64}$/;
 
@@ -34,14 +35,19 @@ export async function evidenceRetrieve(db, params, deps) {
       message: `limit must be 1..${RETRIEVAL_MAX_LIMIT}`,
     };
   }
+  // Publication allowlist (H10-02, query-time guard): internal
+  // retrieval serves approved-consent rows only, like every
+  // other downstream evidence surface.
+  const pub = publishableVersionClause(deps);
   const rows = await db.all(
     `SELECT model_sha, quantization_label, device_class, workload_id,
             prompt_sha, runtime_impl, runtime_backend, build_key, config_hash,
             n_ctx, n_threads, n_predict, sampler, tps_gen, install_id
      FROM submissions
      WHERE eligibility = 'PUBLISHED' AND status = 'COMPLETED'
-       AND tps_gen > 0 AND model_sha = ? AND device_class = ?`,
-    modelId, deviceClass,
+       AND tps_gen > 0 AND model_sha = ? AND device_class = ?
+       AND ${pub.clause}`,
+    modelId, deviceClass, ...pub.params,
   );
   const cites = [];
   for (const g of groupCohorts(rows, deps)) {

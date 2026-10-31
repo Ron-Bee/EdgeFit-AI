@@ -9,7 +9,7 @@
 // deferrals leave no history row (nothing transitioned).
 // Corrupt stored JSON always holds its row, never aborts a pass.
 
-import { MAX_PLAUSIBLE_TPS, validateSubmission } from "./validate.js";
+import { MAX_PLAUSIBLE_TPS, isPublishableVersion, validateSubmission } from "./validate.js";
 
 export const BATCH_LIMIT = 1000;
 /** Relative tolerance for tps vs tokens*1000/ms consistency. */
@@ -221,6 +221,18 @@ export async function runQualification(db, nowMs, deps, maxRows = BATCH_LIMIT) {
             submission_id: id,
             state: "QUALIFIED",
             reason: "aggregate consent scope missing",
+          });
+          continue;
+        }
+        // Publication allowlist (H10-02): the version must be
+        // approved for publication, not merely syntactically
+        // valid. Staging default is empty: new rows hold here
+        // until the owner approves a real policy version.
+        if (!isPublishableVersion(live.consent_policy_version, deps)) {
+          held.push({
+            submission_id: id,
+            state: "QUALIFIED",
+            reason: "consent version not approved for publication",
           });
           continue;
         }
