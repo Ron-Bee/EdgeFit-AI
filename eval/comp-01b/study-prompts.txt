@@ -1,0 +1,32 @@
+=== M0 SYSTEM ===
+You are an EdgeFit configuration analyst. Answer with ONLY a single JSON object, no prose outside it, with exactly these fields: model_sha (string), workload_id (string), selection (one of "A", "B", "abstain"), abstain_reason (string or null), expected_gen_tps (number or null), expected_prefill_tps (number or null), uncertainty (string or null), supporting_evidence_ids (string array), limitations (string array). Echo model_sha and workload_id EXACTLY as given. Select the candidate you expect to measure higher generation throughput, or abstain with a reason when no defensible choice exists — abstaining is a correct answer, never a failure. You have NO historical measurements (3 withheld by design for this arm): supporting_evidence_ids must be []. Never invent measurements, run ids, or statistics. Estimates are finite positive tokens/second when offered.
+
+=== M0 USER ===
+STUDY: ef-comp-01b manifest=dd609616123cf1c83ea021895ae669606ebb9de28d7e165638699ccc0f4fd53f
+MODEL: sha256=6f85a640a97cf2bf5b8e764087b1e83da0fdb51d7c9fab7d0fece9385611df83 size_bytes=807694464 quantization=2
+WORKLOAD: id=edgefit-prompt-v1 prompt_sha256=36104db0657a294048410f9043d4efc8510a77088ca1e2f17c0b6c8359c44382
+RUNTIME: version=0.7.0-dev abi=arm64-v8a variant=benchmark
+DEVICE: max_threads=8 mem_avail_pct=unknown
+CANDIDATE_A: n_ctx=512 n_threads=4 n_predict=64
+CANDIDATE_B: n_ctx=512 n_threads=8 n_predict=64
+CANDIDATE_HASH: ece46b8f85cc87813b12ee324948416bc01f674f938734cf281c3648fb53f5cc
+MANIFESTED_EVIDENCE: withheld by M0 design (3 run(s)); select from constraints only.
+Select exactly one of A, B, or abstain.
+
+=== M1 SYSTEM ===
+You are an EdgeFit configuration analyst. Answer with ONLY a single JSON object, no prose outside it, with exactly these fields: model_sha (string), workload_id (string), selection (one of "A", "B", "abstain"), abstain_reason (string or null), expected_gen_tps (number or null), expected_prefill_tps (number or null), uncertainty (string or null), supporting_evidence_ids (string array), limitations (string array). Echo model_sha and workload_id EXACTLY as given. Select the candidate you expect to measure higher generation throughput, or abstain with a reason when no defensible choice exists — abstaining is a correct answer, never a failure. Cite ONLY run ids from MANIFESTED_EVIDENCE. Never invent measurements, run ids, or statistics. Estimates are finite positive tokens/second when offered.
+
+=== M1 USER ===
+STUDY: ef-comp-01b manifest=dd609616123cf1c83ea021895ae669606ebb9de28d7e165638699ccc0f4fd53f
+MODEL: sha256=6f85a640a97cf2bf5b8e764087b1e83da0fdb51d7c9fab7d0fece9385611df83 size_bytes=807694464 quantization=2
+WORKLOAD: id=edgefit-prompt-v1 prompt_sha256=36104db0657a294048410f9043d4efc8510a77088ca1e2f17c0b6c8359c44382
+RUNTIME: version=0.7.0-dev abi=arm64-v8a variant=benchmark
+DEVICE: max_threads=8 mem_avail_pct=unknown
+CANDIDATE_A: n_ctx=512 n_threads=4 n_predict=64
+CANDIDATE_B: n_ctx=512 n_threads=8 n_predict=64
+CANDIDATE_HASH: ece46b8f85cc87813b12ee324948416bc01f674f938734cf281c3648fb53f5cc
+MANIFESTED_EVIDENCE:
+BENCH-20261027T170002Z-36227bc0 ctx=512 threads=4 predict=64 gen_tps=14.382022471910112 prefill_tps=22.54901960784314 thermal_after=none at=2026-10-27T17:00:02Z
+BENCH-20261027T203446Z-4197e471 ctx=512 threads=4 predict=64 gen_tps=16.584607411246438 prefill_tps=26.651216685979144 thermal_after=none at=2026-10-27T20:34:46Z
+BENCH-20261027T221015Z-6555133c ctx=512 threads=4 predict=64 gen_tps=7.407407407407407 prefill_tps=17.437452615617893 thermal_after=moderate at=2026-10-27T22:10:15Z
+Select exactly one of A, B, or abstain.

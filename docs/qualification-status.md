@@ -1352,3 +1352,39 @@ Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
   historical evidence mutated; no live calls.
 - EF-COMP-01A-R1: IMPLEMENTATION PASS.
   HOST PASS. STAGE B STILL NOT AUTHORIZED.
+
+## EF-COMP-01B-PREP (study bridge; HOST ONLY)
+
+- Executable preflight on
+  `implement/ef-comp-01b-prep-2026-10-30` from
+  43b442b, offline only. Study decisions are a
+  separate type from production proposals (no
+  seq/budget/session path; production optimize
+  change-gate and proposal evidence-gate
+  untouched and re-tested).
+- Real freeze of runs B/C/D (run-a Debug
+  refused: unrecorded build): manifest +
+  R decision (selects A, median 14.382 over 3)
+  + M0/M1 request payloads persisted under
+  `eval/comp-01b/`, verdict READY. M0 payload
+  verified measurement-free; M1 cites all
+  three runs.
+- Rejection metric now coverage-gated: any
+  unknown outcome vetoes the enforcement rate
+  (counts in `hostRejection`).
+- Run START ordering = run-id stamp (verified
+  entry-captured in BenchRunner); strict
+  decision < START enforced by
+  `verifyRunOrdering`. Prospective scoring
+  reuses EvalMetrics; abstention never scored
+  as failed selection; exploratory labeling.
+- AgentReview demo acceptance protocol in
+  `docs/ef-comp-01b-agent-demo.md` (prepared,
+  NOT executed).
+- Host evidence: JVM suite green incl. 17 new
+  PREP tests; corpus 4/4 verified, 0
+  evaluable pairs, no variation; no live
+  calls, no benchmarks, no DB writes.
+- EF-COMP-01B-PREP: IMPLEMENTATION PASS.
+  HOST PASS. LIVE CALLS + 6 RUNS STILL NOT
+  AUTHORIZED.

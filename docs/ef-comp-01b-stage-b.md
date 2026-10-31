@@ -46,10 +46,17 @@ validation outcome with a screenshot.
    approval. Record the validated response + pack hash +
    timestamp.
 5. Verify all three selections + both pack hashes are
-   recorded BEFORE run 1 starts (timestamps < run 1
-   `collected_at_utc`). This is the
-   prediction-before-measurement proof; a hash alone is
-   not proof without the ordering.
+   recorded BEFORE run 1 starts, ordered against the
+   benchmark START time: the run-id stamp
+   (`BENCH-yyyyMMdd'T'HHmmss'Z'-hex`, captured at run
+   entry before guards/native work — BenchRunner.kt) IS
+   the START time; `collected_at_utc` is captured at the
+   same entry point and must agree within 120s.
+   Require `decided_at_utc` strictly < START for every
+   arm on every run (equal second-precision stamps prove
+   nothing). Executable check:
+   `EvalStudy.verifyRunOrdering`. A hash alone is not
+   proof without the ordering.
 6. M0 is NOT evidence-equivalent to R/M1: report it as
    the no-history control, never as a fair fight.
 

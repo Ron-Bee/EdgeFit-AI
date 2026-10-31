@@ -237,6 +237,39 @@ class EvalMetricsTest {
     }
 
     @Test
+    fun partialRejectionCoverageVetoesEnforcementRate() {
+        // 1 verified refusal + 1 verified escape + 1
+        // unknown: the rate must NOT quietly become 1/2
+        // over the known outcomes. Unknowns veto it.
+        val report = EvalMetrics.summarize(listOf(
+            case(valid = false, rejectedByHost = true),
+            case(valid = false, rejectedByHost = false),
+            case(valid = false, rejectedByHost = null)
+        ), "M1")
+        assertEquals(EvalMetrics.NOT_EVALUABLE,
+            report.hostRejectionRate.status)
+        assertTrue(report.hostRejectionRate.reason!!
+            .contains("1 of 3"))
+        val coverage = report.hostRejection
+        assertEquals(3, coverage.totalInvalid)
+        assertEquals(1, coverage.verifiedRejected)
+        assertEquals(1, coverage.verifiedNonRejected)
+        assertEquals(1, coverage.unknown)
+        assertTrue(!coverage.completeCoverage)
+        assertTrue(report.limitations.any {
+            it.contains("enforcement unverifiable")
+        })
+        // Full coverage restores a claimable rate: 1/2.
+        val full = EvalMetrics.summarize(listOf(
+            case(valid = false, rejectedByHost = true),
+            case(valid = false, rejectedByHost = false)
+        ), "M1")
+        assertEquals(0.5, full.hostRejectionRate.value!!, 1e-9)
+        assertEquals(2, full.hostRejectionRate.n)
+        assertTrue(full.hostRejection.completeCoverage)
+    }
+
+    @Test
     fun armsAreScopedIndependently() {
         val cases = listOf(case(arm = "R"), case(arm = "M1"))
         assertEquals(1, EvalMetrics.summarize(cases, "R").n)

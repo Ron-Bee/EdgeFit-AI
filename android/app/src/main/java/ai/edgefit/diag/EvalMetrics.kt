@@ -79,6 +79,23 @@ object EvalMetrics {
         val costUsd: Double? = null
     )
 
+    /**
+     * EF-COMP-01B-PREP Task 4: full accounting of invalid
+     * submissions by rejection-evidence outcome. Unknowns
+     * are counted, never silently dropped: a universal
+     * enforcement claim needs complete coverage.
+     */
+    data class HostRejectionReport(
+        val totalInvalid: Int,
+        val verifiedRejected: Int,
+        val verifiedNonRejected: Int,
+        val unknown: Int
+    ) {
+        /** True iff every invalid has a known outcome. */
+        val completeCoverage: Boolean
+            get() = totalInvalid > 0 && unknown == 0
+    }
+
     data class EvalReport(
         val arm: String,
         val n: Int,
@@ -90,11 +107,16 @@ object EvalMetrics {
          */
         val invalidProposalRate: MetricValue,
         /**
-         * R1: share of invalid submissions with recorded
-         * host-refusal evidence. The only metric that may
-         * support an enforcement claim.
+         * PREP: verified refusals over ALL invalid
+         * submissions — but ONLY when every invalid has
+         * a known outcome. Any unknown keeps this
+         * NOT_EVALUABLE (see [hostRejection] for the
+         * counts); unknowns are never omitted from the
+         * denominator of an enforcement claim.
          */
         val hostRejectionRate: MetricValue,
+        /** PREP: the coverage behind [hostRejectionRate]. */
+        val hostRejection: HostRejectionReport,
         val fabricatedCitationRate: MetricValue,
         val abstentionRate: MetricValue,
         /** Share of abstentions judged appropriate. */
@@ -113,6 +135,13 @@ object EvalMetrics {
         val scoped = cases.filter { it.arm == arm }
         val limitations = mutableListOf<String>()
         if (scoped.isEmpty()) limitations.add("no cases for arm $arm")
+        val rejection = rejectionReport(scoped)
+        if (rejection.unknown > 0) {
+            limitations.add(
+                "${rejection.unknown} of ${rejection.totalInvalid} " +
+                    "invalid submission(s) lack rejection evidence; " +
+                    "enforcement unverifiable")
+        }
         return EvalReport(
             arm = arm,
             n = scoped.size,
@@ -128,18 +157,12 @@ object EvalMetrics {
                 { it.valid == false },
                 "no proposed experiments"
             ),
-            // R1: verified refusals over invalid cases
-            // WITH recorded rejection evidence. Null
-            // evidence (fixture-only invalid flags) keeps
-            // this NOT_EVALUABLE instead of 100%.
-            hostRejectionRate = rate(
-                scoped.filter {
-                    it.proposed && it.valid == false &&
-                        it.rejectedByHost != null
-                },
-                { it.rejectedByHost == true },
-                "no recorded rejection evidence"
-            ),
+            // PREP: verified refusals over ALL invalid
+            // cases, gated on complete coverage. Unknowns
+            // stay in the denominator's accounting via
+            // [HostRejectionReport] and veto the rate.
+            hostRejectionRate = rejectionRate(rejection),
+            hostRejection = rejection,
             fabricatedCitationRate = citationRate(scoped),
             abstentionRate = rate(
                 scoped, { it.abstained }, "no cases evaluated"
@@ -182,6 +205,32 @@ object EvalMetrics {
         return MetricValue.ok(
             denominator.count(numerator).toDouble() / denominator.size,
             denominator.size
+        )
+    }
+
+    private fun rejectionReport(cases: List<ProposalCase>): HostRejectionReport {
+        val invalid = cases.filter { it.proposed && it.valid == false }
+        return HostRejectionReport(
+            totalInvalid = invalid.size,
+            verifiedRejected = invalid.count { it.rejectedByHost == true },
+            verifiedNonRejected = invalid.count { it.rejectedByHost == false },
+            unknown = invalid.count { it.rejectedByHost == null }
+        )
+    }
+
+    private fun rejectionRate(report: HostRejectionReport): MetricValue {
+        if (report.totalInvalid == 0) {
+            return MetricValue.missing("no invalid submissions")
+        }
+        if (!report.completeCoverage) {
+            return MetricValue.missing(
+                "${report.unknown} of ${report.totalInvalid} invalid " +
+                    "submission(s) have unknown rejection outcomes; " +
+                    "enforcement rate unverifiable")
+        }
+        return MetricValue.ok(
+            report.verifiedRejected.toDouble() / report.totalInvalid,
+            report.totalInvalid
         )
     }
 
