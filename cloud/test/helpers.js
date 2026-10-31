@@ -1,6 +1,9 @@
 // Shared EF-CLOUD-01A test fixtures. Synthetic records only;
 // nothing here is a community measurement.
 import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { openDatabase, initSchema } from "../db.js";
 import { handleRequest } from "../api.js";
 import { runQualification } from "../qualify.js";
@@ -27,9 +30,26 @@ export function makeDeps(overrides = {}) {
   };
 }
 
+/**
+ * Apply every migration in cloud/migrations/ in filename order.
+ * initSchema() carries the initial (v1) schema; the migration
+ * chain brings a database to current (002 trigger and beyond).
+ * Idempotent: every migration statement is IF NOT EXISTS.
+ */
+export async function applyMigrations(db) {
+  const dir = join(dirname(fileURLToPath(import.meta.url)), "..",
+    "migrations");
+  const files = readdirSync(dir).filter((f) => f.endsWith(".sql"))
+    .sort();
+  for (const file of files) {
+    await db.exec(readFileSync(join(dir, file), "utf8"));
+  }
+}
+
 export async function openTestDb() {
   const db = openDatabase(":memory:");
   await initSchema(db);
+  await applyMigrations(db);
   return db;
 }
 

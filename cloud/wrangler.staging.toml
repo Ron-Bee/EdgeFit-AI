@@ -1,19 +1,26 @@
-# EF-GLOBAL-01 staging Worker configuration — TEMPLATE ONLY.
+# EF-GLOBAL-01 staging Worker configuration — STAGING ONLY.
 #
-# This file has NEVER been applied: no D1 database exists, no Worker
-# is deployed, no secret is set, and the database_id below is a
-# placeholder. It becomes real only under the owner-gated G2-B2
-# milestone, which provisions resources explicitly. Do not run
-# `wrangler deploy`, `wrangler d1 create`, or any remote command
-# against this file without that authorization.
+# Applied under owner-gated G2-B2 (FREE-02, 2026-10-31):
+#   Worker: edgefit-evidence-staging (env staging deploys as
+#     edgefit-evidence-staging-staging; workers_dev = false, so
+#     there is deliberately NO public URL)
+#   D1: edgefit-evidence-staging
+#     (2ccce000-c70c-4c5a-9267-d330dedc22aa)
+#   Cron Trigger: */10 * * * * (scheduled() only; no HTTP surface)
+#   Secrets set ONLY via `wrangler secret put` (INSTALL_SALT is
+#     set; it never appears in this file or in git).
+# The database_id below is a non-secret staging resource locator,
+# recorded here by owner decision (FREE-04 E) so staging deploys
+# reproduce from a clean checkout. Production does not exist.
+# Do not run remote commands against this file without the
+# milestone authorization that names them.
 #
 # Local tests do NOT read this file: they inject adapters directly
-# into cloud/worker.js workerFetch. This template exists so G2-B2
-# starts from a reviewed, minimal, staging-only shape.
+# into cloud/worker.js workerFetch.
 #
 # Wrangler itself is deliberately NOT installed (no dependency or
-# lockfile changes in G2-B1). G2-B2 pins a version and records the
-# install effect before any remote command.
+# lockfile changes): remote commands use a pinned npx wrangler@x
+# version recorded in the milestone report.
 
 name = "edgefit-evidence-staging"
 # Entry point, relative to this file (cloud/).
@@ -27,19 +34,29 @@ compatibility_flags = ["nodejs_compat"]
 
 # No production environment exists in this file. Staging only.
 [env.staging]
-# No workers.dev URL until G2-B2 deliberately enables one for
-# qualification traffic; local `wrangler dev` is the first remote
-# touchpoint, and only under G2-B2 authorization.
+# Deliberately nonpublic: no workers.dev URL unless a later
+# milestone explicitly authorizes and protects HTTP exposure
+# (H10). The Cron Trigger below is the only entry point.
 workers_dev = false
-# No custom domain, no route, no trigger: nothing public by default.
+# No custom domain, no route: nothing public by default. The Cron
+# Trigger below is NOT a public route: it invokes scheduled()
+# server-side only, on UTC cadence, with no HTTP surface.
+
+[env.staging.triggers]
+# Owner-approved initial cadence: every 10 minutes, subject to
+# measured Free-tier performance. One trigger of the 5/account
+# Free allowance. Each tick processes at most 10 rows
+# (SCHEDULED_MAX_ROWS, worker.js); empty ticks cost one snapshot
+# SELECT. Best-effort timing per Cloudflare Cron semantics:
+# clients poll for promotion and never depend on tick latency.
+crons = ["*/10 * * * *"]
 
 [[env.staging.d1_databases]]
 binding = "DB"
 database_name = "edgefit-evidence-staging"
-# Placeholder: replaced by the real id at G2-B2 provisioning time.
-# Never commit a real database id for production here; this file is
-# staging-only and production does not exist yet.
-database_id = "REPLACE-AT-G2B2-PROVISIONING"
+# Real staging id, recorded by owner decision (FREE-04 E).
+# Non-secret resource locator; staging-only; production DNE.
+database_id = "2ccce000-c70c-4c5a-9267-d330dedc22aa"
 # Migrations directory, relative to this file.
 migrations_dir = "migrations"
 

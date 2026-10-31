@@ -13,7 +13,7 @@ import { MAX_BODY_BYTES } from "../validate.js";
 import { openMockD1Binding } from "./d1mock.js";
 import {
   NOW, MODEL_A, makeDeps, seedInstall, submitValid, qualify,
-  makeEnvelope, makeResult,
+  makeEnvelope, makeResult, applyMigrations,
 } from "./helpers.js";
 
 const ORIGIN = "https://ef-staging.invalid";
@@ -32,6 +32,7 @@ async function openCtx(t, { faults = {}, depsOverrides = {} } = {}) {
   t.after(() => mock.close());
   const db = openD1(mock.binding);
   await initSchema(db);
+  await applyMigrations(db);
   const deps = makeDeps(depsOverrides);
   return { ctx: { db, deps, nowMs: NOW }, mock };
 }

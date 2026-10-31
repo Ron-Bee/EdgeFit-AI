@@ -329,11 +329,19 @@ async function deleteSubmission(req, submissionId, nowMs) {
       body: { submission_id: submissionId, eligibility: "REVOKED" },
     };
   }
-  const at = utcNow(nowMs);
   // Atomic + idempotent in batch-compatible form: read outside, then
-  // one guarded batch. The guard names the observed from-state, so an
-  // applied revoke records exact history (eligibility moves forward
-  // only: no ABA). A lost race retries once against fresh state (G2).
+  // one guarded UPDATE. The guard names the observed from-state, so
+  // an applied revoke records exact history (eligibility moves
+  // forward only: no ABA). The history row comes from migration
+  // 002's trigger in the SAME statement — the old explicit INSERT
+  // could only predicate on the to-state, which a concurrent
+  // DELETE may have set first, appending a phantom row for a
+  // revoke this attempt never performed (FREE-05 RW-01). A lost
+  // race retries once against fresh state (G2). Success is
+  // changes > 0, NOT === 1: D1 counts the trigger's audit INSERT
+  // in the statement's changes (observed 2 on the FREE-05 probe)
+  // while node counts the direct UPDATE only (observed 1); both
+  // report 0 for a CAS loser, and submission_id is a primary key.
   for (let attempt = 1; attempt <= 2; attempt += 1) {
     const fresh = await db.get(
       "SELECT eligibility FROM submissions WHERE submission_id = ?",
@@ -346,17 +354,8 @@ async function deleteSubmission(req, submissionId, nowMs) {
               WHERE submission_id = ? AND eligibility = ?`,
         params: [submissionId, fresh.eligibility],
       },
-      {
-        sql: `INSERT INTO eligibility_history
-                (submission_id, from_state, to_state, reason, at)
-              SELECT ?, ?, 'REVOKED', ?, ?
-              WHERE (SELECT eligibility FROM submissions
-                     WHERE submission_id = ?) = 'REVOKED'`,
-        params: [submissionId, fresh.eligibility,
-          "consent withdrawn by owner", at, submissionId],
-      },
     ]);
-    if (updated.changes === 1) break;
+    if (updated.changes > 0) break;
   }
   const final = await db.get(
     "SELECT eligibility FROM submissions WHERE submission_id = ?",

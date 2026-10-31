@@ -28,6 +28,10 @@ const EXPECTED_INDEXES = [
   "idx_sub_install",
   "idx_sub_run",
 ];
+// FREE-04: migration 002 adds the eligibility-audit trigger.
+const EXPECTED_TRIGGERS = [
+  "trg_eligibility_audit",
+];
 
 const dir = dirname(fileURLToPath(import.meta.url));
 
@@ -46,6 +50,9 @@ function verify(sqlite) {
   }
   for (const i of EXPECTED_INDEXES) {
     if (!names.has(`index:${i}`)) missing.push(`index ${i}`);
+  }
+  for (const tr of EXPECTED_TRIGGERS) {
+    if (!names.has(`trigger:${tr}`)) missing.push(`trigger ${tr}`);
   }
   return missing;
 }

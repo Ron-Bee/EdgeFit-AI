@@ -29,37 +29,39 @@ function safeParse(text) {
 }
 
 /**
- * Conditional single-step transition in one atomic batch. The guard
- * names the expected from-state and every follow-on write is
- * conditional on the transition having applied, so the unit stays
- * valid on D1 batch() (no mid-batch reads). Returns true when the
- * guarded UPDATE applied exactly one row.
+ * Guarded single-batch CAS transition with trigger-written audit
+ * (migration 002, trg_eligibility_audit). The UPDATE applies
+ * eligibility (+ published_at when publishing) only from the
+ * expected from-state; the trigger appends the history row in
+ * the SAME statement. A committed transition can therefore
+ * neither phantom (a CAS loser's 0-row UPDATE fires nothing)
+ * nor lose its audit row (no inter-step crash window — the
+ * FREE-03 two-step residue is gone), and a failing trigger
+ * INSERT aborts the UPDATE itself. Transition reasons live in
+ * the trigger's CASE, 1:1 with the target state; the history
+ * `at` stamp is commit time. Requires a database at migration
+ * 002 or later: code and migrations ship and deploy together
+ * (H11). Returns true when the guarded UPDATE applied.
+ * Success is changes > 0, NOT === 1: D1 counts the trigger's
+ * audit INSERT in the statement's changes (observed 2 on the
+ * FREE-04 scratch probe) while node:sqlite counts the direct
+ * UPDATE only (observed 1). Both report 0 for a CAS loser, and
+ * submission_id is a primary key so at most one row can match —
+ * > 0 holds exactly when this attempt won its row, on either
+ * engine. (GT-25 pins this. The submit-path === 1 check in
+ * api.js is unaffected — INSERTs never fire the trigger. The
+ * revoke path uses the same > 0 rule since FREE-05, when the
+ * trigger started covering REVOKED; RW-02 pins it.)
  */
-async function transition(db, submissionId, from, to, reason, at) {
-  const statements = [
+async function transition(db, submissionId, from, to, at) {
+  const [updated] = await db.batch([
     {
-      sql: `UPDATE submissions SET eligibility = ?
+      sql: `UPDATE submissions SET eligibility = ?, published_at = ?
             WHERE submission_id = ? AND eligibility = ?`,
-      params: [to, submissionId, from],
+      params: [to, to === "PUBLISHED" ? at : null, submissionId, from],
     },
-    {
-      sql: `INSERT INTO eligibility_history
-              (submission_id, from_state, to_state, reason, at)
-            SELECT ?, ?, ?, ?, ?
-            WHERE (SELECT eligibility FROM submissions
-                   WHERE submission_id = ?) = ?`,
-      params: [submissionId, from, to, reason, at, submissionId, to],
-    },
-  ];
-  if (to === "PUBLISHED") {
-    statements.push({
-      sql: `UPDATE submissions SET published_at = ?
-            WHERE submission_id = ? AND eligibility = 'PUBLISHED'`,
-      params: [at, submissionId],
-    });
-  }
-  const [updated] = await db.batch(statements);
-  return updated.changes === 1;
+  ]);
+  return updated.changes > 0;
 }
 
 /**
@@ -108,11 +110,16 @@ export async function anomalyHold(db, row, result, nowMs, deps) {
   return null;
 }
 
-export async function runQualification(db, nowMs, deps) {
+export async function runQualification(db, nowMs, deps, maxRows = BATCH_LIMIT) {
   const at = utcNow(nowMs);
   const promoted = [];
   const held = [];
   const deferred = [];
+  // Bounded worklist: callers (notably the Free-tier scheduler)
+  // cap rows per pass. Clamped to [1, BATCH_LIMIT]; the default
+  // preserves every existing caller exactly.
+  const limit = Math.max(1, Math.min(
+    Number.isInteger(maxRows) ? maxRows : BATCH_LIMIT, BATCH_LIMIT));
   // The snapshot is a worklist only: every step below re-reads its
   // row outside the batch and the batch re-guards on from-state,
   // yielding to concurrent writers.
@@ -120,7 +127,7 @@ export async function runQualification(db, nowMs, deps) {
     `SELECT * FROM submissions
      WHERE eligibility IN ('SUBMITTED', 'VALIDATED', 'QUALIFIED')
      ORDER BY received_at ASC, submission_id ASC LIMIT ?`,
-    BATCH_LIMIT,
+    limit,
   );
   for (const snap of pending) {
     try {
@@ -164,8 +171,7 @@ export async function runQualification(db, nowMs, deps) {
           });
           continue;
         }
-        if (!await transition(db, id, "SUBMITTED", "VALIDATED",
-          "schema recheck passed", at)) {
+        if (!await transition(db, id, "SUBMITTED", "VALIDATED", at)) {
           deferred.push({
             submission_id: id,
             reason: "concurrent modification; retry next pass",
@@ -190,8 +196,7 @@ export async function runQualification(db, nowMs, deps) {
           held.push({ submission_id: id, state: "VALIDATED", reason: hold });
           continue;
         }
-        if (!await transition(db, id, "VALIDATED", "QUALIFIED",
-          "anomaly suite passed", at)) {
+        if (!await transition(db, id, "VALIDATED", "QUALIFIED", at)) {
           deferred.push({
             submission_id: id,
             reason: "concurrent modification; retry next pass",
@@ -219,8 +224,7 @@ export async function runQualification(db, nowMs, deps) {
           });
           continue;
         }
-        if (!await transition(db, id, "QUALIFIED", "PUBLISHED",
-          "consent current; published", at)) {
+        if (!await transition(db, id, "QUALIFIED", "PUBLISHED", at)) {
           deferred.push({
             submission_id: id,
             reason: "concurrent modification; retry next pass",

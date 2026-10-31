@@ -28,6 +28,7 @@
 
 import { createHash } from "node:crypto";
 import { handleRequest } from "./api.js";
+import { runQualification } from "./qualify.js";
 import { MAX_BODY_BYTES } from "./validate.js";
 import { openD1 } from "./d1.js";
 
@@ -42,6 +43,17 @@ export const WORKER_DEPS = {
   maxGroups: 200,
   maxModels: 500,
 };
+
+/**
+ * Scheduler batch ceiling: at most 10 rows per Cron invocation.
+ * Measured host cost is ~0.7 ms CPU/row steady-state (an UPPER
+ * bound: local SQLite burns CPU that D1 spends as network I/O),
+ * so 10 rows sit inside the 10 ms Free CPU budget with deploy-
+ * time verification. Configurable DOWNWARD per invocation only:
+ * scheduledTick clamps ctx.maxRows into [1, 10]; nothing raises
+ * it above this constant without a reviewed code change.
+ */
+export const SCHEDULED_MAX_ROWS = 10;
 
 function errBody(code, message) {
   return { error: { code, message } };
@@ -171,11 +183,64 @@ export async function workerFetch(request, ctx) {
 }
 
 /**
+ * One bounded qualification tick. ctx: { db, deps, nowMs?, maxRows?,
+ * log? }. Runs the EXISTING runQualification state machine over at
+ * most maxRows pending rows (default SCHEDULED_MAX_ROWS, clamped
+ * into [1, 10]); every transition, CAS guard, revocation rule,
+ * cohort definition and quorum check is runQualification's own —
+ * this function adds scheduling bounds and observable logging
+ * ONLY. Returns the counts summary. On database failure it logs
+ * a counts-only error (no rows, ids, secrets, or evidence) and
+ * rethrows, so Cron retries surface persistently instead of
+ * silently succeeding; the per-row containment inside
+ * runQualification already converts poison rows to holds.
+ * Test seam: inject log to capture lines; production passes
+ * console methods bound by the scheduled() entry below.
+ */
+export async function scheduledTick(ctx) {
+  const db = ctx?.db;
+  const deps = ctx?.deps;
+  const nowMs = ctx?.nowMs ?? Date.now();
+  const log = ctx?.log ?? console.log.bind(console);
+  const logErr = ctx?.logErr ?? console.error.bind(console);
+  if (!db || !deps) {
+    logErr("qualify tick misconfigured: no database or deps");
+    throw new Error("worker misconfigured");
+  }
+  const maxRows = Math.max(1, Math.min(
+    Number.isInteger(ctx?.maxRows) ? ctx.maxRows : SCHEDULED_MAX_ROWS,
+    SCHEDULED_MAX_ROWS));
+  let report;
+  try {
+    report = await runQualification(db, nowMs, deps, maxRows);
+  } catch (e) {
+    // Observable AND sanitized: counts and the failure's CLASS
+    // only. e.g. D1 outage text (table names, SQL fragments)
+    // never reaches logs; the throw keeps the tick failed.
+    const kind = e?.code ?? e?.name ?? "error";
+    logErr(`qualify tick failed kind=${kind} maxRows=${maxRows}`);
+    throw e;
+  }
+  log(`qualify tick processed=${report.processed} ` +
+    `promoted=${report.promoted.length} held=${report.held.length} ` +
+    `deferred=${report.deferred.length} maxRows=${maxRows}`);
+  return {
+    processed: report.processed,
+    promoted: report.promoted.length,
+    held: report.held.length,
+    deferred: report.deferred.length,
+    maxRows,
+  };
+}
+
+/**
  * Deployed entry point. env: { DB, INSTALL_SALT }. NOT exercised
  * against real Cloudflare here: local tests drive workerFetch with
  * injected adapters, and the default export is covered with mock
  * env bindings only. Missing binding or salt fails closed as an
- * identical 500 either way (test M).
+ * identical 500 either way (test M). scheduled() runs bounded
+ * qualification ticks on the Cron Trigger; it answers NO HTTP
+ * route and changes no fetch behavior.
  */
 export default {
   async fetch(request, env) {
@@ -189,5 +254,24 @@ export default {
       return failClosed(500, "internal", "temporary backend failure");
     }
     return await workerFetch(request, { db, deps, nowMs: Date.now() });
+  },
+  async scheduled(event, env, ctx) {
+    void event;
+    const finish = async () => {
+      const db = openD1(env.DB);
+      const deps = makeDepsFromEnv(env);
+      await scheduledTick({ db, deps, nowMs: Date.now() });
+    };
+    // ctx.waitUntil keeps the isolate alive past the handler
+    // return when the runtime offers it; awaiting covers the
+    // runtimes that do not. Either way the tick is fully
+    // awaited: nothing runs past settlement.
+    if (ctx && typeof ctx.waitUntil === "function") {
+      const done = finish();
+      ctx.waitUntil(done);
+      await done;
+    } else {
+      await finish();
+    }
   },
 };

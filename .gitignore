@@ -34,3 +34,10 @@ edgefit-bench-*.json
 # Generated CMake build outputs and local model weights (EF-LOOP-01)
 android/app/.cxx/
 *.gguf
+# Cloudflare CLI state, local-only config overrides, database exports (FREE-04 E)
+.wrangler/
+cloud/.wrangler/
+cloud/wrangler.*.local.toml
+wrangler.*.local.toml
+cloud/d1-export-*.sql
+cloud/d1-export-*.json

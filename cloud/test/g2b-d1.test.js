@@ -15,6 +15,7 @@ import { evidenceRetrieve } from "../retrieval.js";
 import { openMockD1Binding } from "./d1mock.js";
 import {
   NOW, MODEL_A, makeDeps, seedInstall, get, submitValid, qualify,
+  applyMigrations,
 } from "./helpers.js";
 
 const PROMPT_B = "b".repeat(64);
@@ -38,12 +39,13 @@ function rdeps(deps) {
   };
 }
 
-/** D1 adapter over a fresh mock binding, schema applied. */
+/** D1 adapter over a fresh mock binding, schema + migrations applied. */
 async function openAdapter(t, faults = {}) {
   const mock = openMockD1Binding({ faults });
   t.after(() => mock.close());
   const db = openD1(mock.binding);
   await initSchema(db);
+  await applyMigrations(db);
   return { db, mock };
 }
 
