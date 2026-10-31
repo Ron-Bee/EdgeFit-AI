@@ -35,7 +35,7 @@ function safeParse(text) {
  * valid on D1 batch() (no mid-batch reads). Returns true when the
  * guarded UPDATE applied exactly one row.
  */
-function transition(db, submissionId, from, to, reason, at) {
+async function transition(db, submissionId, from, to, reason, at) {
   const statements = [
     {
       sql: `UPDATE submissions SET eligibility = ?
@@ -58,7 +58,7 @@ function transition(db, submissionId, from, to, reason, at) {
       params: [at, submissionId],
     });
   }
-  const [updated] = db.batch(statements);
+  const [updated] = await db.batch(statements);
   return updated.changes === 1;
 }
 
@@ -66,7 +66,7 @@ function transition(db, submissionId, from, to, reason, at) {
  * Anomaly suite for a parsed result + stored row context.
  * Returns null when qualified, else the hold reason.
  */
-export function anomalyHold(db, row, result, nowMs, deps) {
+export async function anomalyHold(db, row, result, nowMs, deps) {
   if (result.measurements.tps_gen > MAX_PLAUSIBLE_TPS ||
       result.measurements.tps_prefill > MAX_PLAUSIBLE_TPS) {
     return "implausible throughput above anomaly bound";
@@ -86,7 +86,7 @@ export function anomalyHold(db, row, result, nowMs, deps) {
   // Same run id claimed twice (dedup already rules out
   // identical bytes): only the earliest received keeps its
   // standing; later copies hold for review.
-  const earliest = db.get(
+  const earliest = await db.get(
     `SELECT submission_id FROM submissions
      WHERE run_id = ? AND eligibility != 'REVOKED'
      ORDER BY received_at ASC, submission_id ASC LIMIT 1`,
@@ -97,7 +97,7 @@ export function anomalyHold(db, row, result, nowMs, deps) {
   }
   // Velocity: floods wait for review even under the daily quota.
   const dayAgo = utcNow(nowMs - 24 * 60 * 60 * 1000);
-  const recent = db.get(
+  const recent = await db.get(
     `SELECT COUNT(*) AS n FROM submissions
      WHERE install_id = ? AND received_at >= ?`,
     row.install_id, dayAgo,
@@ -108,7 +108,7 @@ export function anomalyHold(db, row, result, nowMs, deps) {
   return null;
 }
 
-export function runQualification(db, nowMs, deps) {
+export async function runQualification(db, nowMs, deps) {
   const at = utcNow(nowMs);
   const promoted = [];
   const held = [];
@@ -116,7 +116,7 @@ export function runQualification(db, nowMs, deps) {
   // The snapshot is a worklist only: every step below re-reads its
   // row outside the batch and the batch re-guards on from-state,
   // yielding to concurrent writers.
-  const pending = db.all(
+  const pending = await db.all(
     `SELECT * FROM submissions
      WHERE eligibility IN ('SUBMITTED', 'VALIDATED', 'QUALIFIED')
      ORDER BY received_at ASC, submission_id ASC LIMIT ?`,
@@ -125,7 +125,7 @@ export function runQualification(db, nowMs, deps) {
   for (const snap of pending) {
     try {
       const id = snap.submission_id;
-      const live = db.get(
+      const live = await db.get(
         "SELECT * FROM submissions WHERE submission_id = ?", id);
       if (!live || live.eligibility === "REVOKED") continue;
       if (live.eligibility === "SUBMITTED") {
@@ -164,7 +164,7 @@ export function runQualification(db, nowMs, deps) {
           });
           continue;
         }
-        if (!transition(db, id, "SUBMITTED", "VALIDATED",
+        if (!await transition(db, id, "SUBMITTED", "VALIDATED",
           "schema recheck passed", at)) {
           deferred.push({
             submission_id: id,
@@ -185,12 +185,12 @@ export function runQualification(db, nowMs, deps) {
           });
           continue;
         }
-        const hold = anomalyHold(db, live, parsed.value, nowMs, deps);
+        const hold = await anomalyHold(db, live, parsed.value, nowMs, deps);
         if (hold !== null) {
           held.push({ submission_id: id, state: "VALIDATED", reason: hold });
           continue;
         }
-        if (!transition(db, id, "VALIDATED", "QUALIFIED",
+        if (!await transition(db, id, "VALIDATED", "QUALIFIED",
           "anomaly suite passed", at)) {
           deferred.push({
             submission_id: id,
@@ -219,7 +219,7 @@ export function runQualification(db, nowMs, deps) {
           });
           continue;
         }
-        if (!transition(db, id, "QUALIFIED", "PUBLISHED",
+        if (!await transition(db, id, "QUALIFIED", "PUBLISHED",
           "consent current; published", at)) {
           deferred.push({
             submission_id: id,

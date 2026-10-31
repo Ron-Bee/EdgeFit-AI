@@ -7,11 +7,11 @@ import {
   submitValid, qualify, tpsFor,
 } from "./helpers.js";
 
-function setup(nInstalls = 3) {
+async function setup(nInstalls = 3) {
   const deps = makeDeps();
-  const db = openTestDb();
+  const db = await openTestDb();
   for (let i = 1; i <= nInstalls; i++) {
-    seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
+    await seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
   }
   return { deps, db };
 }
@@ -34,77 +34,77 @@ function plan(prefix, installs, nRuns, overrides = {}) {
   return rows;
 }
 
-function publishPlan(db, deps, rows) {
+async function publishPlan(db, deps, rows) {
   for (const { install, ...overrides } of rows) {
-    submitValid(db, deps, `test-token-${install}`, overrides);
+    await submitValid(db, deps, `test-token-${install}`, overrides);
   }
-  qualify(db, deps);
+  await qualify(db, deps);
 }
 
-function aggregates(db, deps, query) {
-  return get(db, deps, "/v1/benchmarks/aggregates", query);
+async function aggregates(db, deps, query) {
+  return await get(db, deps, "/v1/benchmarks/aggregates", query);
 }
 
-test("quorum gates publication: runs and installs", () => {
-  const { deps, db } = setup();
-  publishPlan(db, deps, plan("T", [1, 2, 3], 4));
-  let res = aggregates(db, deps, { model_sha: MODEL_A });
+test("quorum gates publication: runs and installs", async () => {
+  const { deps, db } = await setup();
+  await publishPlan(db, deps, plan("T", [1, 2, 3], 4));
+  let res = await aggregates(db, deps, { model_sha: MODEL_A });
   assert.equal(res.status, 200);
   assert.equal(res.body.groups.length, 1);
   assert.equal(res.body.groups[0].status, "insufficient-evidence");
   assert.equal(res.body.groups[0].n, 4);
   assert.equal(res.body.groups[0].installs, 3);
   assert.equal(res.body.groups[0].aggregates, null);
-  publishPlan(db, deps, plan("T", [1], 1).map((r) => ({
+  await publishPlan(db, deps, plan("T", [1], 1).map((r) => ({
     ...r, run_id: "BENCH-T4",
   })));
-  qualify(db, deps);
-  res = aggregates(db, deps, { model_sha: MODEL_A });
+  await qualify(db, deps);
+  res = await aggregates(db, deps, { model_sha: MODEL_A });
   assert.equal(res.body.groups[0].status, "published");
   assert.equal(res.body.groups[0].n, 5);
   assert.ok(res.body.groups[0].aggregates.mean_gen_tps > 0);
   db.close();
 });
 
-test("many runs from few installs stay thin", () => {
-  const { deps, db } = setup(2);
-  publishPlan(db, deps, plan("M", [1, 2], 20));
-  const res = aggregates(db, deps, { model_sha: MODEL_A });
+test("many runs from few installs stay thin", async () => {
+  const { deps, db } = await setup(2);
+  await publishPlan(db, deps, plan("M", [1, 2], 20));
+  const res = await aggregates(db, deps, { model_sha: MODEL_A });
   assert.equal(res.body.groups[0].n, 20);
   assert.equal(res.body.groups[0].installs, 2);
   assert.equal(res.body.groups[0].status, "insufficient-evidence");
   db.close();
 });
 
-test("cohorts split on config, build, device, and workload", () => {
-  const { deps, db } = setup();
-  publishPlan(db, deps, plan("C", [1, 2, 3], 5));
-  publishPlan(db, deps, plan("8T", [1, 2, 3], 5, {
+test("cohorts split on config, build, device, and workload", async () => {
+  const { deps, db } = await setup();
+  await publishPlan(db, deps, plan("C", [1, 2, 3], 5));
+  await publishPlan(db, deps, plan("8T", [1, 2, 3], 5, {
     config: { n_ctx: 512, n_threads: 8, n_predict: 64 },
   }));
-  publishPlan(db, deps, plan("SD", [1, 2, 3], 5, {
+  await publishPlan(db, deps, plan("SD", [1, 2, 3], 5, {
     x_effective_opt: { value: "O2", status: "self_declared" },
   }));
-  publishPlan(db, deps, plan("PX", [1, 2, 3], 5, {
+  await publishPlan(db, deps, plan("PX", [1, 2, 3], 5, {
     device: { model: "Pixel 9" },
   }));
-  const res = aggregates(db, deps, { model_sha: MODEL_A });
+  const res = await aggregates(db, deps, { model_sha: MODEL_A });
   assert.equal(res.body.groups.length, 4);
   assert.ok(res.body.groups.every((g) => g.status === "published"));
   const builds = new Set(res.body.groups.map((g) => g.cohort.build));
   assert.deepEqual([...builds].sort(),
     ["O2:operator_attested", "O2:self_declared"]);
-  const one = aggregates(db, deps,
+  const one = await aggregates(db, deps,
     { model_sha: MODEL_A, device_class: "Pixel 9" });
   assert.equal(one.body.groups.length, 1);
   assert.equal(one.body.groups[0].cohort.device_class, "Pixel 9");
   db.close();
 });
 
-test("statistics reconcile with the stored rows", () => {
-  const { deps, db } = setup();
-  publishPlan(db, deps, plan("S", [1, 2, 3], 13));
-  const res = aggregates(db, deps, { model_sha: MODEL_A });
+test("statistics reconcile with the stored rows", async () => {
+  const { deps, db } = await setup();
+  await publishPlan(db, deps, plan("S", [1, 2, 3], 13));
+  const res = await aggregates(db, deps, { model_sha: MODEL_A });
   const group = res.body.groups[0];
   assert.equal(group.n, 13);
   assert.equal(group.installs, 3);
@@ -117,13 +117,13 @@ test("statistics reconcile with the stored rows", () => {
   db.close();
 });
 
-test("IQR withholds below eight samples", () => {
-  const { deps, db } = setup();
-  [10, 12, 14, 16, 18, 20, 22].forEach((rate, i) => {
+test("IQR withholds below eight samples", async () => {
+  const { deps, db } = await setup();
+  for (const [i, rate] of [10, 12, 14, 16, 18, 20, 22].entries()) {
     const ms = Math.round((64 * 1000) / rate);
     const install = (i % 3) + 1;
     const exact = tpsFor(64, ms);
-    submitValid(db, deps, `test-token-${install}`, {
+    await submitValid(db, deps, `test-token-${install}`, {
       run_id: `BENCH-I${i}`,
       collected_at_utc: new Date(NOW - (i + 1) * 60000).toISOString(),
       measurements: {
@@ -136,32 +136,32 @@ test("IQR withholds below eight samples", () => {
           available: true },
       },
     });
-  });
-  qualify(db, deps);
-  const res = aggregates(db, deps, { model_sha: MODEL_A });
+  }
+  await qualify(db, deps);
+  const res = await aggregates(db, deps, { model_sha: MODEL_A });
   assert.equal(res.body.groups[0].status, "published");
   assert.equal(res.body.groups[0].aggregates.iqr_gen_tps, null);
   assert.ok(res.body.groups[0].aggregates.iqr_note.includes("8 samples"));
   db.close();
 });
 
-test("revoked and failed rows never enter aggregates", () => {
-  const { deps, db } = setup();
-  const gone = submitValid(db, deps, "test-token-1", { run_id: "BENCH-X1" });
-  submitValid(db, deps, "test-token-1",
+test("revoked and failed rows never enter aggregates", async () => {
+  const { deps, db } = await setup();
+  const gone = await submitValid(db, deps, "test-token-1", { run_id: "BENCH-X1" });
+  await submitValid(db, deps, "test-token-1",
     { run_id: "BENCH-X2", status: "FAILED", error: "boom" });
-  del(db, deps, `/v1/submissions/${gone}`, "test-token-1");
-  publishPlan(db, deps, plan("XK", [1, 2, 3, 1, 2], 5));
-  const res = aggregates(db, deps, { model_sha: MODEL_A });
+  await del(db, deps, `/v1/submissions/${gone}`, "test-token-1");
+  await publishPlan(db, deps, plan("XK", [1, 2, 3, 1, 2], 5));
+  const res = await aggregates(db, deps, { model_sha: MODEL_A });
   assert.equal(res.body.groups[0].n, 5);
   db.close();
 });
 
-test("response is deterministic and contract-shaped", () => {
-  const { deps, db } = setup();
-  publishPlan(db, deps, plan("D", [1, 2], 2));
-  const first = aggregates(db, deps, { model_sha: MODEL_A });
-  const second = aggregates(db, deps, { model_sha: MODEL_A });
+test("response is deterministic and contract-shaped", async () => {
+  const { deps, db } = await setup();
+  await publishPlan(db, deps, plan("D", [1, 2], 2));
+  const first = await aggregates(db, deps, { model_sha: MODEL_A });
+  const second = await aggregates(db, deps, { model_sha: MODEL_A });
   assert.deepEqual(first.body, second.body);
   assert.equal(first.body.api_version, "1");
   assert.equal(first.body.stats_version, "ef-stats-01");
@@ -175,15 +175,15 @@ test("response is deterministic and contract-shaped", () => {
   db.close();
 });
 
-test("malformed aggregate filters are 400s", () => {
-  const { deps, db } = setup();
-  assert.equal(aggregates(db, deps, {}).status, 400);
-  assert.equal(aggregates(db, deps, { model_sha: "xyz" }).status, 400);
-  assert.equal(aggregates(db, deps,
-    { model_sha: MODEL_A, build: "nope" }).status, 400);
-  assert.equal(aggregates(db, deps,
-    { model_sha: MODEL_A, config_hash: "zz" }).status, 400);
-  const empty = aggregates(db, deps, { model_sha: MODEL_B });
+test("malformed aggregate filters are 400s", async () => {
+  const { deps, db } = await setup();
+  assert.equal((await aggregates(db, deps, {})).status, 400);
+  assert.equal((await aggregates(db, deps, { model_sha: "xyz" })).status, 400);
+  assert.equal((await aggregates(db, deps,
+    { model_sha: MODEL_A, build: "nope" })).status, 400);
+  assert.equal((await aggregates(db, deps,
+    { model_sha: MODEL_A, config_hash: "zz" })).status, 400);
+  const empty = await aggregates(db, deps, { model_sha: MODEL_B });
   assert.equal(empty.status, 200);
   assert.deepEqual(empty.body.groups, []);
   db.close();

@@ -9,18 +9,18 @@ import {
 
 let runCounter = 0;
 
-function setup(nInstalls = 3) {
+async function setup(nInstalls = 3) {
   const deps = makeDeps();
-  const db = openTestDb();
+  const db = await openTestDb();
   for (let i = 1; i <= nInstalls; i++) {
-    seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
+    await seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
   }
   return { deps, db };
 }
 
-function pub(db, deps, install, extra = {}) {
+async function pub(db, deps, install, extra = {}) {
   runCounter += 1;
-  return submitValid(db, deps, `test-token-${install}`, {
+  return await submitValid(db, deps, `test-token-${install}`, {
     run_id: `BENCH-G1BQ${runCounter}`,
     collected_at_utc: new Date(NOW - runCounter * 60000).toISOString(),
     ...extra,
@@ -37,16 +37,16 @@ function retrievalDeps(deps) {
   };
 }
 
-test("G1B-Q1: exactly 5 runs / 3 installs publishes", () => {
-  const { deps, db } = setup();
-  [1, 2, 3, 1, 2].forEach((inst) => pub(db, deps, inst));
-  qualify(db, deps);
-  const agg = get(db, deps, "/v1/benchmarks/aggregates", { model_sha: MODEL_A });
+test("G1B-Q1: exactly 5 runs / 3 installs publishes", async () => {
+  const { deps, db } = await setup();
+  for (const inst of [1, 2, 3, 1, 2]) { await pub(db, deps, inst); }
+  await qualify(db, deps);
+  const agg = await get(db, deps, "/v1/benchmarks/aggregates", { model_sha: MODEL_A });
   assert.equal(agg.body.groups.length, 1);
   assert.equal(agg.body.groups[0].status, "published");
   assert.equal(agg.body.groups[0].n, 5);
   assert.equal(agg.body.groups[0].installs, 3);
-  const ret = evidenceRetrieve(db,
+  const ret = await evidenceRetrieve(db,
     { device_class: "SM-S908U", model_id: MODEL_A }, retrievalDeps(deps));
   assert.equal(ret.cites.length, 1);
   assert.equal(ret.cites[0].n, 5);
@@ -54,33 +54,33 @@ test("G1B-Q1: exactly 5 runs / 3 installs publishes", () => {
   db.close();
 });
 
-test("G1B-Q2: 5 runs / 2 installs stays thin everywhere", () => {
-  const { deps, db } = setup(2);
-  [1, 2, 1, 2, 1].forEach((inst) => pub(db, deps, inst));
-  qualify(db, deps);
-  const agg = get(db, deps, "/v1/benchmarks/aggregates", { model_sha: MODEL_A });
+test("G1B-Q2: 5 runs / 2 installs stays thin everywhere", async () => {
+  const { deps, db } = await setup(2);
+  for (const inst of [1, 2, 1, 2, 1]) { await pub(db, deps, inst); }
+  await qualify(db, deps);
+  const agg = await get(db, deps, "/v1/benchmarks/aggregates", { model_sha: MODEL_A });
   assert.equal(agg.body.groups.length, 1);
   assert.equal(agg.body.groups[0].status, "insufficient-evidence");
   assert.equal(agg.body.groups[0].aggregates, null);
-  const ret = evidenceRetrieve(db,
+  const ret = await evidenceRetrieve(db,
     { device_class: "SM-S908U", model_id: MODEL_A }, retrievalDeps(deps));
   assert.equal(ret.ok, true);
   assert.deepEqual(ret.cites, []);
   db.close();
 });
 
-test("G1B-Q3: public and internal retrieval partition identically", () => {
-  const { deps, db } = setup();
+test("G1B-Q3: public and internal retrieval partition identically", async () => {
+  const { deps, db } = await setup();
   for (let i = 0; i < 5; i++) {
-    pub(db, deps, (i % 3) + 1, { config: { n_ctx: 512, n_threads: 4, n_predict: 64 } });
-    pub(db, deps, ((i + 1) % 3) + 1,
+    await pub(db, deps, (i % 3) + 1, { config: { n_ctx: 512, n_threads: 4, n_predict: 64 } });
+    await pub(db, deps, ((i + 1) % 3) + 1,
       { config: { n_ctx: 256, n_threads: 4, n_predict: 64 } });
   }
-  qualify(db, deps);
-  const agg = get(db, deps, "/v1/benchmarks/aggregates", { model_sha: MODEL_A });
+  await qualify(db, deps);
+  const agg = await get(db, deps, "/v1/benchmarks/aggregates", { model_sha: MODEL_A });
   const hashes = agg.body.groups.map((g) => g.cohort_hash).sort();
   assert.equal(hashes.length, 2);
-  const ret = evidenceRetrieve(db,
+  const ret = await evidenceRetrieve(db,
     { device_class: "SM-S908U", model_id: MODEL_A }, retrievalDeps(deps));
   assert.deepEqual(ret.cites.map((c) => c.cohort_hash).sort(), hashes);
   db.close();

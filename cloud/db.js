@@ -1,14 +1,11 @@
-// EF-CLOUD-01A database adapter, G2 batch primitive. The API
-// layer speaks only { get, all, run, exec, batch, close }.
-//
-// batch() is the SOLE multi-statement primitive, shaped for D1:
-// a fixed statement array in, per-statement results out, executed
-// atomically with no mid-batch reads. node:sqlite runs it as one
-// BEGIN IMMEDIATE .. COMMIT; a D1 deployment implements the same
-// array-in/array-out contract over env.DB.batch() without touching
-// routes, validation, or stats. D1 service behavior is UNVERIFIED:
-// error shapes, batch limits, and contention must be qualified on
-// staging (see docs/ef-global-01-g2-staging-design.md).
+// EF-CLOUD-01A database adapter, G2-B1 async contract. The API
+// layer speaks { get, all, run, exec, batch, close } with every
+// data method ASYNC: D1 over the network cannot answer
+// synchronously, so the handler contract awaits the adapter.
+// node:sqlite executes synchronously underneath; D1 executes
+// remotely. Same array-in/array-out batch contract both sides:
+// fixed statements in, aligned results out, atomic, no mid-batch
+// reads. D1 service behavior is UNVERIFIED (see staging design).
 //
 // Adapter error contract (both engines): UNIQUE violations surface
 // as Error "UNIQUE constraint failed: <table>.<column>"; lock
@@ -26,16 +23,16 @@ export function openDatabase(filename = ":memory:") {
   const db = new DatabaseSync(filename);
   db.exec(`PRAGMA busy_timeout = ${BUSY_TIMEOUT_MS}`);
   return {
-    get(sql, ...params) {
+    async get(sql, ...params) {
       return db.prepare(sql).get(...params);
     },
-    all(sql, ...params) {
+    async all(sql, ...params) {
       return db.prepare(sql).all(...params);
     },
-    run(sql, ...params) {
+    async run(sql, ...params) {
       return db.prepare(sql).run(...params);
     },
-    exec(sql) {
+    async exec(sql) {
       return db.exec(sql);
     },
     /**
@@ -44,10 +41,9 @@ export function openDatabase(filename = ":memory:") {
      * 'get', or 'all'. Returns results aligned with the input:
      * run -> { changes, lastInsertRowid }, get -> row|undefined,
      * all -> rows. Any failure rolls back and rethrows. NOT
-     * nestable: one batch per atomic unit (submission claim+insert,
-     * single eligibility transition, revocation).
+     * nestable: one batch per atomic unit.
      */
-    batch(statements) {
+    async batch(statements) {
       for (const s of statements) {
         const mode = s.mode ?? "run";
         if (mode !== "run" && mode !== "get" && mode !== "all") {
@@ -85,8 +81,8 @@ export function openDatabase(filename = ":memory:") {
   };
 }
 
-export function initSchema(db) {
+export async function initSchema(db) {
   const dir = dirname(fileURLToPath(import.meta.url));
   const ddl = readFileSync(join(dir, "schema.sql"), "utf8");
-  db.exec(ddl);
+  await db.exec(ddl);
 }

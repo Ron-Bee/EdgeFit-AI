@@ -27,14 +27,14 @@ export function makeDeps(overrides = {}) {
   };
 }
 
-export function openTestDb() {
+export async function openTestDb() {
   const db = openDatabase(":memory:");
-  initSchema(db);
+  await initSchema(db);
   return db;
 }
 
-export function seedInstall(db, deps, installId, token) {
-  db.run(
+export async function seedInstall(db, deps, installId, token) {
+  await db.run(
     "INSERT INTO installs (install_id, token_hash, created_at, revoked_at) VALUES (?, ?, ?, NULL)",
     installId, deps.sha256hex(token), new Date(NOW).toISOString(),
   );
@@ -142,8 +142,8 @@ export function makeEnvelope(result, consentOverrides = {}) {
   };
 }
 
-export function post(db, deps, token, envelope, nowMs = NOW) {
-  return handleRequest({
+export async function post(db, deps, token, envelope, nowMs = NOW) {
+  return await handleRequest({
     method: "POST",
     path: "/v1/submissions",
     query: {},
@@ -155,8 +155,8 @@ export function post(db, deps, token, envelope, nowMs = NOW) {
   });
 }
 
-export function get(db, deps, path, query = {}, token = null) {
-  return handleRequest({
+export async function get(db, deps, path, query = {}, token = null) {
+  return await handleRequest({
     method: "GET",
     path,
     query,
@@ -168,8 +168,8 @@ export function get(db, deps, path, query = {}, token = null) {
   });
 }
 
-export function del(db, deps, path, token) {
-  return handleRequest({
+export async function del(db, deps, path, token) {
+  return await handleRequest({
     method: "DELETE",
     path,
     query: {},
@@ -182,9 +182,9 @@ export function del(db, deps, path, token) {
 }
 
 /** Submit one valid synthetic result from an install; returns submission_id. */
-export function submitValid(db, deps, token, overrides = {},
+export async function submitValid(db, deps, token, overrides = {},
   consentOverrides = {}, nowMs = NOW) {
-  const res = post(db, deps, token,
+  const res = await post(db, deps, token,
     makeEnvelope(makeResult(overrides), consentOverrides), nowMs);
   if (res.status !== 201) {
     throw new Error(`fixture submit failed: ${JSON.stringify(res.body)}`);
@@ -192,6 +192,6 @@ export function submitValid(db, deps, token, overrides = {},
   return res.body.submission_id;
 }
 
-export function qualify(db, deps, nowMs = NOW) {
-  return runQualification(db, nowMs, deps);
+export async function qualify(db, deps, nowMs = NOW) {
+  return await runQualification(db, nowMs, deps);
 }

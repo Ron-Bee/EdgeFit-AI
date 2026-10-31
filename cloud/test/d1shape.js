@@ -1,10 +1,10 @@
-// Test-only D1-shape adapter (G2). Proves the backend uses only
-// the batch-compatible interface ({ get, all, run, exec, batch,
-// close }) plus the adapter error contract — the same contract a
-// real D1 binding must satisfy. SQL execution underneath is
-// node:sqlite; this proves INTERFACE compatibility, never D1
-// service behavior (error text, limits, contention, replication
-// all need staging qualification).
+// Test-only D1-shape adapter (G2, G2-B1 async contract). Proves the
+// backend uses only the batch-compatible interface
+// ({ get, all, run, exec, batch, close }, all async) plus the
+// adapter error contract — the same contract a real D1 binding must
+// satisfy. SQL execution underneath is node:sqlite; this proves
+// INTERFACE compatibility, never D1 service behavior (error text,
+// limits, contention, replication all need staging qualification).
 import { openDatabase, initSchema } from "../db.js";
 
 // Staging-extensible mapping: observed real-D1 error shapes
@@ -46,7 +46,7 @@ export function openD1Shape(filename = ":memory:") {
     all: inner.all.bind(inner),
     run: inner.run.bind(inner),
     exec: inner.exec.bind(inner),
-    batch(statements) {
+    async batch(statements) {
       for (const s of statements) {
         const mode = s.mode ?? "run";
         if (mode !== "run" && mode !== "get" && mode !== "all") {
@@ -55,27 +55,27 @@ export function openD1Shape(filename = ":memory:") {
       }
       // Fixed array in, results out: no mid-batch reads are
       // expressible, mirroring D1 batch() semantics. Atomic.
-      inner.exec("BEGIN IMMEDIATE");
+      await inner.exec("BEGIN IMMEDIATE");
       const out = [];
       try {
         for (const s of statements) {
           const params = s.params ?? [];
           const mode = s.mode ?? "run";
-          if (mode === "get") out.push(inner.get(s.sql, ...params));
-          else if (mode === "all") out.push(inner.all(s.sql, ...params));
+          if (mode === "get") out.push(await inner.get(s.sql, ...params));
+          else if (mode === "all") out.push(await inner.all(s.sql, ...params));
           else {
-            const r = inner.run(s.sql, ...params);
+            const r = await inner.run(s.sql, ...params);
             out.push({
               changes: r.changes,
               lastInsertRowid: r.lastInsertRowid,
             });
           }
         }
-        inner.exec("COMMIT");
+        await inner.exec("COMMIT");
         return out;
       } catch (e) {
         try {
-          inner.exec("ROLLBACK");
+          await inner.exec("ROLLBACK");
         } catch {
           // Keep the original failure.
         }
@@ -86,8 +86,8 @@ export function openD1Shape(filename = ":memory:") {
   };
 }
 
-export function openD1ShapeTestDb() {
+export async function openD1ShapeTestDb() {
   const db = openD1Shape(":memory:");
-  initSchema(db);
+  await initSchema(db);
   return db;
 }

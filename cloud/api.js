@@ -77,10 +77,10 @@ function bearerToken(headers) {
   return match ? match[1] : null;
 }
 
-function findInstall(db, deps, headers) {
+async function findInstall(db, deps, headers) {
   const token = bearerToken(headers);
   if (token === null) return null;
-  const row = db.get(
+  const row = await db.get(
     "SELECT install_id, revoked_at FROM installs WHERE token_hash = ?",
     deps.sha256hex(token),
   );
@@ -98,9 +98,9 @@ function utcNow(nowMs) {
 
 // ---------- POST /v1/submissions ----------
 
-function postSubmissions(req) {
+async function postSubmissions(req) {
   const { db, deps, nowMs, headers, bodyText } = req;
-  const installId = findInstall(db, deps, headers);
+  const installId = await findInstall(db, deps, headers);
   if (installId === null) {
     return {
       status: 401,
@@ -130,7 +130,7 @@ function postSubmissions(req) {
   }
   const row = validated.row;
   // Fast-path dedup outside the atomic batch: replays cost no quota.
-  const seen = db.get(
+  const seen = await db.get(
     "SELECT submission_id, eligibility FROM submissions WHERE content_hash = ?",
     row.content_hash,
   );
@@ -170,7 +170,7 @@ function postSubmissions(req) {
       // The quota verdict is the conditional INSERT's change count:
       // admitted rows insert exactly one row; rejected claims are
       // compensated in-batch, leaving the counter exact (G2).
-      const results = db.batch([
+      const results = await db.batch([
         {
           sql: `INSERT INTO daily_counts (install_id, day, count)
                 VALUES (?, ?, 1)
@@ -221,7 +221,7 @@ function postSubmissions(req) {
       if (isUniqueConflict(e, "submissions", "content_hash")) {
         // Lost a duplicate race: the winner committed first. The
         // rolled-back claim cost nothing; resolve against committed rows.
-        const winner = db.get(
+        const winner = await db.get(
           "SELECT submission_id, eligibility FROM submissions WHERE content_hash = ?",
           row.content_hash,
         );
@@ -266,10 +266,10 @@ function postSubmissions(req) {
 
 // ---------- GET / DELETE /v1/submissions/{id} ----------
 
-function ownedSubmission(db, deps, headers, submissionId) {
-  const installId = findInstall(db, deps, headers);
+async function ownedSubmission(db, deps, headers, submissionId) {
+  const installId = await findInstall(db, deps, headers);
   if (installId === null) return { auth: false };
-  const row = db.get(
+  const row = await db.get(
     `SELECT submission_id, install_id, run_id, content_hash,
             eligibility, received_at, published_at
      FROM submissions WHERE submission_id = ?`,
@@ -280,9 +280,9 @@ function ownedSubmission(db, deps, headers, submissionId) {
   return { auth: true, row };
 }
 
-function getSubmission(req, submissionId) {
+async function getSubmission(req, submissionId) {
   const { db, deps, headers } = req;
-  const owned = ownedSubmission(db, deps, headers, submissionId);
+  const owned = await ownedSubmission(db, deps, headers, submissionId);
   if (!owned.auth) {
     return {
       status: 401,
@@ -292,7 +292,7 @@ function getSubmission(req, submissionId) {
   if (!owned.row) {
     return { status: 404, body: err("not_found", "no such submission") };
   }
-  const trail = db.all(
+  const trail = await db.all(
     `SELECT from_state AS from_state, to_state, reason, at
      FROM eligibility_history WHERE submission_id = ? ORDER BY id ASC`,
     submissionId,
@@ -311,9 +311,9 @@ function getSubmission(req, submissionId) {
   };
 }
 
-function deleteSubmission(req, submissionId, nowMs) {
+async function deleteSubmission(req, submissionId, nowMs) {
   const { db, deps, headers } = req;
-  const owned = ownedSubmission(db, deps, headers, submissionId);
+  const owned = await ownedSubmission(db, deps, headers, submissionId);
   if (!owned.auth) {
     return {
       status: 401,
@@ -335,12 +335,12 @@ function deleteSubmission(req, submissionId, nowMs) {
   // applied revoke records exact history (eligibility moves forward
   // only: no ABA). A lost race retries once against fresh state (G2).
   for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const fresh = db.get(
+    const fresh = await db.get(
       "SELECT eligibility FROM submissions WHERE submission_id = ?",
       submissionId,
     );
     if (!fresh || fresh.eligibility === "REVOKED") break;
-    const [updated] = db.batch([
+    const [updated] = await db.batch([
       {
         sql: `UPDATE submissions SET eligibility = 'REVOKED'
               WHERE submission_id = ? AND eligibility = ?`,
@@ -358,7 +358,7 @@ function deleteSubmission(req, submissionId, nowMs) {
     ]);
     if (updated.changes === 1) break;
   }
-  const final = db.get(
+  const final = await db.get(
     "SELECT eligibility FROM submissions WHERE submission_id = ?",
     submissionId,
   );
@@ -405,7 +405,7 @@ function aggregateRows(rows, deps) {
   return groups;
 }
 
-function getAggregates(req) {
+async function getAggregates(req) {
   const { db, deps, query } = req;
   if (typeof query.model_sha !== "string" || !SHA64.test(query.model_sha)) {
     return {
@@ -473,7 +473,7 @@ function getAggregates(req) {
   }
   // Throughput aggregates use completed measurements only;
   // failed attempts stay stored evidence, never averages.
-  const rows = db.all(
+  const rows = await db.all(
     `SELECT model_sha, quantization_label, device_class, workload_id,
             prompt_sha, runtime_impl, runtime_backend, build_key, config_hash,
             n_ctx, n_threads, n_predict, sampler, tps_gen, install_id
@@ -503,9 +503,9 @@ function getAggregates(req) {
 
 // ---------- public models ----------
 
-function getModels(req) {
+async function getModels(req) {
   const { db, deps } = req;
-  const rows = db.all(
+  const rows = await db.all(
     `SELECT model_sha, install_id, collected_at
      FROM submissions
      WHERE eligibility = 'PUBLISHED' AND status = 'COMPLETED'
@@ -542,7 +542,7 @@ function getModels(req) {
 
 // ---------- public model candidates ----------
 
-function getCandidates(req) {
+async function getCandidates(req) {
   const { db, deps, query } = req;
   let limit = 5;
   if (query.limit !== undefined) {
@@ -599,7 +599,7 @@ function getCandidates(req) {
   // (size, license, provenance) stay distinct from measured
   // cohort evidence below: means always come from ONE exact
   // quorum-passing cohort, never from a pooled set (D3).
-  const rows = db.all(
+  const rows = await db.all(
     `SELECT model_sha, model_size_bytes, tps_gen, install_id, collected_at,
             quantization_label, device_class, workload_id, prompt_sha,
             runtime_impl, runtime_backend, build_key, config_hash,
@@ -672,25 +672,25 @@ export function withDefaults(deps) {
   return { ...DEFAULTS, ...deps };
 }
 
-function dispatch(req) {
+async function dispatch(req) {
   const { method, path } = req;
   if (method === "POST" && path === "/v1/submissions") {
-    return postSubmissions(req);
+    return await postSubmissions(req);
   }
   const submissionMatch = /^\/v1\/submissions\/([A-Za-z0-9-]+)$/.exec(path);
   if (submissionMatch) {
-    if (method === "GET") return getSubmission(req, submissionMatch[1]);
+    if (method === "GET") return await getSubmission(req, submissionMatch[1]);
     if (method === "DELETE") {
-      return deleteSubmission(req, submissionMatch[1], req.nowMs);
+      return await deleteSubmission(req, submissionMatch[1], req.nowMs);
     }
     return { status: 405, body: err("method_not_allowed", "method not allowed") };
   }
   if (method === "GET" && path === "/v1/benchmarks/aggregates") {
-    return getAggregates(req);
+    return await getAggregates(req);
   }
-  if (method === "GET" && path === "/v1/models") return getModels(req);
+  if (method === "GET" && path === "/v1/models") return await getModels(req);
   if (method === "GET" && path === "/v1/evidence/model-candidates") {
-    return getCandidates(req);
+    return await getCandidates(req);
   }
   if (method === "GET" && path === "/v1/benchmarks/runs") {
     // Scaffolding present, explicitly inactive: individual-run
@@ -704,11 +704,11 @@ function dispatch(req) {
   return { status: 404, body: err("not_found", "no such route") };
 }
 
-export function handleRequest(input) {
+export async function handleRequest(input) {
   const req = { ...input, deps: withDefaults(input.deps) };
   let res;
   try {
-    res = dispatch(req);
+    res = await dispatch(req);
   } catch (e) {
     // Backstop (D6): database and unexpected failures surface as
     // bounded envelopes. Internal text (SQL, paths, ids) NEVER

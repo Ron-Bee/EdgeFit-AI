@@ -11,12 +11,12 @@ import {
   makeDeps, seedInstall, makeResult, makeEnvelope, post,
 } from "./helpers.js";
 
-test("G2-L1: locked database answers 503, stores nothing, recovers", (t) => {
+test("G2-L1: locked database answers 503, stores nothing, recovers", async (t) => {
   const dir = join(dirname(fileURLToPath(import.meta.url)), ".tmp-g1b");
   mkdirSync(dir, { recursive: true });
   const path = join(dir, `contention-${process.pid}.db`);
   const a = openDatabase(path);
-  initSchema(a);
+  await initSchema(a);
   const b = openDatabase(path);
   t.after(() => {
     try { a.close(); } catch { /* ignore */ }
@@ -24,20 +24,20 @@ test("G2-L1: locked database answers 503, stores nothing, recovers", (t) => {
     try { unlinkSync(path); } catch { /* ignore */ }
   });
   const deps = makeDeps();
-  seedInstall(a, deps, "install-1", "token-one");
+  await seedInstall(a, deps, "install-1", "token-one");
   // B waits briefly; the bound below only guards against hangs
   // (typical return ~0.2 s; 150x margin, not timing-sensitive).
-  b.exec("PRAGMA busy_timeout = 200");
+  await b.exec("PRAGMA busy_timeout = 200");
   // A holds a RESERVED lock with an uncommitted write.
-  a.exec("BEGIN IMMEDIATE");
-  a.run("INSERT INTO daily_counts (install_id, day, count) VALUES (?, ?, ?)",
+  await a.exec("BEGIN IMMEDIATE");
+  await a.run("INSERT INTO daily_counts (install_id, day, count) VALUES (?, ?, ?)",
     "install-1", "2026-10-30", 0);
   const envelope = makeEnvelope(makeResult({ run_id: "BENCH-G2L1" }));
   const started = Date.now();
   let res = null;
   let threw = null;
   try {
-    res = post(b, deps, "token-one", envelope);
+    res = await post(b, deps, "token-one", envelope);
   } catch (e) {
     threw = e;
   }
@@ -46,14 +46,14 @@ test("G2-L1: locked database answers 503, stores nothing, recovers", (t) => {
   assert.equal(res.body.error.code, "temporarily_unavailable");
   assert.equal(res.headers["retry-after"], "1");
   assert.ok(Date.now() - started < 30000, "busy wait must be bounded");
-  assert.equal(b.get("SELECT COUNT(*) AS n FROM submissions").n, 0);
-  assert.equal(b.get("SELECT COUNT(*) AS n FROM eligibility_history").n, 0);
+  assert.equal((await b.get("SELECT COUNT(*) AS n FROM submissions")).n, 0);
+  assert.equal((await b.get("SELECT COUNT(*) AS n FROM eligibility_history")).n, 0);
   // Contention clears: the same bytes store cleanly with exact counts.
-  a.exec("ROLLBACK");
-  const retry = post(b, deps, "token-one", envelope);
+  await a.exec("ROLLBACK");
+  const retry = await post(b, deps, "token-one", envelope);
   assert.equal(retry.status, 201);
-  assert.equal(b.get("SELECT COUNT(*) AS n FROM submissions").n, 1);
-  assert.equal(b.get(
-    "SELECT count FROM daily_counts WHERE install_id = 'install-1'").count, 1);
-  assert.equal(b.get("SELECT COUNT(*) AS n FROM eligibility_history").n, 1);
+  assert.equal((await b.get("SELECT COUNT(*) AS n FROM submissions")).n, 1);
+  assert.equal((await b.get(
+    "SELECT count FROM daily_counts WHERE install_id = 'install-1'")).count, 1);
+  assert.equal((await b.get("SELECT COUNT(*) AS n FROM eligibility_history")).n, 1);
 });

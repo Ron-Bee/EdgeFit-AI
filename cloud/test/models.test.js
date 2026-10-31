@@ -7,33 +7,33 @@ import {
   submitValid, qualify,
 } from "./helpers.js";
 
-function setup() {
+async function setup() {
   const deps = makeDeps();
-  const db = openTestDb();
+  const db = await openTestDb();
   for (let i = 1; i <= 3; i++) {
-    seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
+    await seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
   }
   return { deps, db };
 }
 
-function publishMany(db, deps, modelSha, installs, n, prefix,
+async function publishMany(db, deps, modelSha, installs, n, prefix,
   extra = {}) {
   for (let i = 0; i < n; i++) {
-    submitValid(db, deps, `test-token-${installs[i % installs.length]}`, {
+    await submitValid(db, deps, `test-token-${installs[i % installs.length]}`, {
       run_id: `BENCH-${prefix}${i}`,
       collected_at_utc: new Date(NOW - (i + 1) * 60000).toISOString(),
       model: { sha256: modelSha },
       ...extra,
     });
   }
-  qualify(db, deps);
+  await qualify(db, deps);
 }
 
-test("models lists published artifacts with honest counts", () => {
-  const { deps, db } = setup();
-  publishMany(db, deps, MODEL_A, [1, 2, 3], 5, "MA");
-  publishMany(db, deps, MODEL_B, [1], 2, "MB");
-  const res = get(db, deps, "/v1/models");
+test("models lists published artifacts with honest counts", async () => {
+  const { deps, db } = await setup();
+  await publishMany(db, deps, MODEL_A, [1, 2, 3], 5, "MA");
+  await publishMany(db, deps, MODEL_B, [1], 2, "MB");
+  const res = await get(db, deps, "/v1/models");
   assert.equal(res.status, 200);
   assert.equal(res.body.artifacts.length, 2);
   const a = res.body.artifacts.find((r) => r.model_sha === MODEL_A);
@@ -48,11 +48,11 @@ test("models lists published artifacts with honest counts", () => {
   db.close();
 });
 
-test("candidates filter, cap, and label thin evidence", () => {
-  const { deps, db } = setup();
-  publishMany(db, deps, MODEL_A, [1, 2, 3], 5, "CA");
-  publishMany(db, deps, MODEL_B, [1], 2, "CB");
-  const res = get(db, deps, "/v1/evidence/model-candidates",
+test("candidates filter, cap, and label thin evidence", async () => {
+  const { deps, db } = await setup();
+  await publishMany(db, deps, MODEL_A, [1, 2, 3], 5, "CA");
+  await publishMany(db, deps, MODEL_B, [1], 2, "CB");
+  const res = await get(db, deps, "/v1/evidence/model-candidates",
     { device_class: "SM-S908U" });
   assert.equal(res.status, 200);
   assert.equal(res.body.candidates.length, 2);
@@ -69,23 +69,23 @@ test("candidates filter, cap, and label thin evidence", () => {
   const thin = res.body.candidates.find((c) => c.model_sha === MODEL_B);
   assert.equal(thin.status, "insufficient-evidence");
   assert.equal(thin.median_gen_tps, null);
-  const capped = get(db, deps, "/v1/evidence/model-candidates",
+  const capped = await get(db, deps, "/v1/evidence/model-candidates",
     { limit: "1" });
   assert.equal(capped.body.candidates.length, 1);
   db.close();
 });
 
-test("candidate query bounds are enforced", () => {
-  const { deps, db } = setup();
-  assert.equal(get(db, deps, "/v1/evidence/model-candidates",
-    { limit: "6" }).status, 400);
-  assert.equal(get(db, deps, "/v1/evidence/model-candidates",
-    { limit: "0" }).status, 400);
-  assert.equal(get(db, deps, "/v1/evidence/model-candidates",
-    { device_class: "" }).status, 400);
-  assert.equal(get(db, deps, "/v1/evidence/model-candidates",
-    { intended_n_ctx: "huge" }).status, 400);
-  const empty = get(db, deps, "/v1/evidence/model-candidates",
+test("candidate query bounds are enforced", async () => {
+  const { deps, db } = await setup();
+  assert.equal((await get(db, deps, "/v1/evidence/model-candidates",
+    { limit: "6" })).status, 400);
+  assert.equal((await get(db, deps, "/v1/evidence/model-candidates",
+    { limit: "0" })).status, 400);
+  assert.equal((await get(db, deps, "/v1/evidence/model-candidates",
+    { device_class: "" })).status, 400);
+  assert.equal((await get(db, deps, "/v1/evidence/model-candidates",
+    { intended_n_ctx: "huge" })).status, 400);
+  const empty = await get(db, deps, "/v1/evidence/model-candidates",
     { device_class: "No Such Phone" });
   assert.equal(empty.status, 200);
   assert.deepEqual(empty.body.candidates, []);

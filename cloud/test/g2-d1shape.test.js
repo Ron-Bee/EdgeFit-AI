@@ -23,11 +23,11 @@ let runCounter = 0;
 let fileCounter = 0;
 
 const ADAPTERS = {
-  node: () => {
-    const db = openTestDb();
+  node: async () => {
+    const db = await openTestDb();
     return db;
   },
-  d1shape: () => openD1ShapeTestDb(),
+  d1shape: async () => openD1ShapeTestDb(),
 };
 
 function freshRun() {
@@ -38,41 +38,41 @@ function freshRun() {
   };
 }
 
-function seed3(db, deps) {
+async function seed3(db, deps) {
   const tokens = { 1: "token-one", 2: "token-two", 3: "token-three" };
-  for (let i = 1; i <= 3; i++) seedInstall(db, deps, `install-${i}`, tokens[i]);
+  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, tokens[i]);
 }
 
 function tappedDb(db, hooks = {}) {
   return {
     get: db.get.bind(db),
-    all(sql, ...params) {
-      const rows = db.all(sql, ...params);
+    async all(sql, ...params) {
+      const rows = await db.all(sql, ...params);
       if (hooks.afterAll) hooks.afterAll(sql, rows);
       return rows;
     },
-    run(sql, ...params) {
+    async run(sql, ...params) {
       if (hooks.beforeRun) hooks.beforeRun(sql, params);
-      return db.run(sql, ...params);
+      return await db.run(sql, ...params);
     },
-    batch(statements) {
+    async batch(statements) {
       if (hooks.beforeRun) {
-        for (const s of statements) hooks.beforeRun(s.sql, s.params ?? []);
+        for (const s of statements) await hooks.beforeRun(s.sql, s.params ?? []);
       }
-      return db.batch(statements);
+      return await db.batch(statements);
     },
     exec: db.exec.bind(db),
     close: db.close.bind(db),
   };
 }
 
-function openSharedD1(t) {
+async function openSharedD1(t) {
   fileCounter += 1;
   const dir = join(dirname(fileURLToPath(import.meta.url)), ".tmp-g1b");
   mkdirSync(dir, { recursive: true });
   const path = join(dir, `g2shared-${process.pid}-${fileCounter}.db`);
   const a = openD1Shape(path);
-  initSchema(a);
+  await initSchema(a);
   const b = openD1Shape(path);
   t.after(() => {
     try { a.close(); } catch { /* ignore */ }
@@ -94,9 +94,9 @@ function rdeps(deps) {
 
 // ---------- A. adapter conformance ----------
 
-test("G2-A1: both adapters expose exactly the batch interface", () => {
+test("G2-A1: both adapters expose exactly the batch interface", async () => {
   for (const [name, open] of Object.entries(ADAPTERS)) {
-    const db = open();
+    const db = await open();
     assert.deepEqual(Object.keys(db).sort(),
       ["all", "batch", "close", "exec", "get", "run"], name);
     assert.equal(typeof db.transaction, "undefined", name);
@@ -104,12 +104,12 @@ test("G2-A1: both adapters expose exactly the batch interface", () => {
   }
 });
 
-test("G2-A2: batch run/get/all modes return aligned shapes", () => {
+test("G2-A2: batch run/get/all modes return aligned shapes", async () => {
   for (const [name, open] of Object.entries(ADAPTERS)) {
     const deps = makeDeps();
-    const db = open();
-    seedInstall(db, deps, "install-1", "token-one");
-    const [ins, one, many] = db.batch([
+    const db = await open();
+    await seedInstall(db, deps, "install-1", "token-one");
+    const [ins, one, many] = await db.batch([
       { sql: "INSERT INTO daily_counts (install_id, day, count) VALUES (?, ?, ?)",
         params: ["install-1", DAY, 4] },
       { sql: "SELECT count FROM daily_counts WHERE install_id = ?",
@@ -123,12 +123,12 @@ test("G2-A2: batch run/get/all modes return aligned shapes", () => {
   }
 });
 
-test("G2-A3: batch failures roll back every statement", () => {
+test("G2-A3: batch failures roll back every statement", async () => {
   for (const [name, open] of Object.entries(ADAPTERS)) {
-    const db = open();
+    const db = await open();
     let threw = null;
     try {
-      db.batch([
+      await db.batch([
         { sql: "INSERT INTO daily_counts (install_id, day, count) VALUES (?, ?, ?)",
           params: ["install-9", DAY, 1] },
         { sql: "INSERT INTO daily_counts (install_id, day, count) VALUES (?, ?, ?)",
@@ -139,25 +139,25 @@ test("G2-A3: batch failures roll back every statement", () => {
       threw = e;
     }
     assert.ok(threw, `${name}: batch must throw`);
-    assert.equal(db.get("SELECT COUNT(*) AS n FROM daily_counts").n, 0, name);
+    assert.equal((await db.get("SELECT COUNT(*) AS n FROM daily_counts")).n, 0, name);
     db.close();
   }
 });
 
-test("G2-A4: empty batch is a no-op returning []", () => {
+test("G2-A4: empty batch is a no-op returning []", async () => {
   for (const [name, open] of Object.entries(ADAPTERS)) {
-    const db = open();
-    assert.deepEqual(db.batch([]), [], name);
+    const db = await open();
+    assert.deepEqual(await db.batch([]), [], name);
     db.close();
   }
 });
 
-test("G2-A5: unknown batch mode throws before executing", () => {
+test("G2-A5: unknown batch mode throws before executing", async () => {
   for (const [name, open] of Object.entries(ADAPTERS)) {
-    const db = open();
+    const db = await open();
     let threw = null;
     try {
-      db.batch([
+      await db.batch([
         { sql: "INSERT INTO daily_counts (install_id, day, count) VALUES (?, ?, ?)",
           params: ["install-9", DAY, 1], mode: "bogus" },
       ]);
@@ -165,20 +165,20 @@ test("G2-A5: unknown batch mode throws before executing", () => {
       threw = e;
     }
     assert.ok(threw, `${name}: batch must throw`);
-    assert.equal(db.get("SELECT COUNT(*) AS n FROM daily_counts").n, 0, name);
+    assert.equal((await db.get("SELECT COUNT(*) AS n FROM daily_counts")).n, 0, name);
     db.close();
   }
 });
 
 // ---------- B. error normalization ----------
 
-test("G2-B1: UNIQUE failures keep contract shape through D1 errors", () => {
+test("G2-B1: UNIQUE failures keep contract shape through D1 errors", async () => {
   const deps = makeDeps();
-  const db = openD1ShapeTestDb();
-  seedInstall(db, deps, "install-1", "token-one");
+  const db = await openD1ShapeTestDb();
+  await seedInstall(db, deps, "install-1", "token-one");
   let threw = null;
   try {
-    db.batch([
+    await db.batch([
       { sql: "INSERT INTO installs (install_id, token_hash, created_at) VALUES (?, ?, ?)",
         params: ["install-1", "other-hash", new Date(NOW).toISOString()] },
     ]);
@@ -191,7 +191,7 @@ test("G2-B1: UNIQUE failures keep contract shape through D1 errors", () => {
   db.close();
 });
 
-test("G2-B2: the normalizer round-trips fields, passes unknowns through", () => {
+test("G2-B2: the normalizer round-trips fields, passes unknowns through", async () => {
   const d1 = new Error("database is locked");
   d1.name = "D1Error";
   d1.code = "SQLITE_BUSY";
@@ -206,31 +206,31 @@ test("G2-B2: the normalizer round-trips fields, passes unknowns through", () => 
 
 // ---------- C. app behavior through the D1-shape adapter ----------
 
-test("G2-C1: prompt SHAs split cohorts on the D1-shape adapter", () => {
+test("G2-C1: prompt SHAs split cohorts on the D1-shape adapter", async () => {
   const deps = makeDeps();
-  const db = openD1ShapeTestDb();
-  for (let i = 1; i <= 3; i++) seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
-  [1, 2, 3, 1, 2].forEach((inst, i) => {
-    submitValid(db, deps, `test-token-${inst}`, {
+  const db = await openD1ShapeTestDb();
+  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
+  for (const [i, inst] of [1, 2, 3, 1, 2].entries()) {
+    await submitValid(db, deps, `test-token-${inst}`, {
       ...freshRun(),
       workload: { id: "edgefit-prompt-v1",
         prompt_sha256: i < 3 ? PROMPT_SHA : PROMPT_B, prompt_chars: 100 },
     });
-  });
-  qualify(db, deps);
-  const res = get(db, deps, "/v1/benchmarks/aggregates", { model_sha: MODEL_A });
+  }
+  await qualify(db, deps);
+  const res = await get(db, deps, "/v1/benchmarks/aggregates", { model_sha: MODEL_A });
   assert.equal(res.body.groups.length, 2);
   assert.ok(res.body.groups.every((g) => g.status === "insufficient-evidence"));
-  const ret = evidenceRetrieve(db,
+  const ret = await evidenceRetrieve(db,
     { device_class: "SM-S908U", model_id: MODEL_A }, rdeps(deps));
   assert.deepEqual(ret.cites, []);
   db.close();
 });
 
-test("G2-C2: mixed cohorts publish representative stats on D1-shape", () => {
+test("G2-C2: mixed cohorts publish representative stats on D1-shape", async () => {
   const deps = makeDeps();
-  const db = openD1ShapeTestDb();
-  for (let i = 1; i <= 3; i++) seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
+  const db = await openD1ShapeTestDb();
+  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
   const at = (tps) => {
     const ms = Math.round((64 * 1000) / tps);
     return {
@@ -243,21 +243,21 @@ test("G2-C2: mixed cohorts publish representative stats on D1-shape", () => {
     };
   };
   for (let i = 0; i < 5; i++) {
-    submitValid(db, deps, `test-token-${(i % 3) + 1}`, {
+    await submitValid(db, deps, `test-token-${(i % 3) + 1}`, {
       ...freshRun(),
       config: { n_ctx: 512, n_threads: 4, n_predict: 64 },
       measurements: at(10),
     });
   }
   for (const n_ctx of [256, 1024]) {
-    submitValid(db, deps, "test-token-1", {
+    await submitValid(db, deps, "test-token-1", {
       ...freshRun(),
       config: { n_ctx, n_threads: 4, n_predict: 64 },
       measurements: at(100),
     });
   }
-  qualify(db, deps);
-  const res = get(db, deps, "/v1/evidence/model-candidates", {});
+  await qualify(db, deps);
+  const res = await get(db, deps, "/v1/evidence/model-candidates", {});
   const c = res.body.candidates.find((x) => x.model_sha === MODEL_A);
   assert.equal(c.status, "published");
   assert.equal(c.mean_gen_tps, 10);
@@ -266,36 +266,36 @@ test("G2-C2: mixed cohorts publish representative stats on D1-shape", () => {
   db.close();
 });
 
-test("G2-C3: exact quorum publishes on the D1-shape adapter", () => {
+test("G2-C3: exact quorum publishes on the D1-shape adapter", async () => {
   const deps = makeDeps();
-  const db = openD1ShapeTestDb();
-  for (let i = 1; i <= 3; i++) seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
-  [1, 2, 3, 1, 2].forEach((inst) => {
-    submitValid(db, deps, `test-token-${inst}`, freshRun());
-  });
-  qualify(db, deps);
-  const agg = get(db, deps, "/v1/benchmarks/aggregates", { model_sha: MODEL_A });
+  const db = await openD1ShapeTestDb();
+  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
+  for (const inst of [1, 2, 3, 1, 2]) {
+    await submitValid(db, deps, `test-token-${inst}`, freshRun());
+  }
+  await qualify(db, deps);
+  const agg = await get(db, deps, "/v1/benchmarks/aggregates", { model_sha: MODEL_A });
   assert.equal(agg.body.groups[0].status, "published");
   assert.equal(agg.body.groups[0].n, 5);
-  const ret = evidenceRetrieve(db,
+  const ret = await evidenceRetrieve(db,
     { device_class: "SM-S908U", model_id: MODEL_A }, rdeps(deps));
   assert.equal(ret.cites.length, 1);
   assert.equal(ret.cites[0].cohort_hash, agg.body.groups[0].cohort_hash);
   db.close();
 });
 
-test("G2-C4: revocation during qualification stays terminal on D1-shape", (t) => {
+test("G2-C4: revocation during qualification stays terminal on D1-shape", async (t) => {
   const deps = makeDeps();
-  const { a, b } = openSharedD1(t);
-  seed3(a, deps);
-  const id = submitValid(a, deps, "token-one", freshRun());
+  const { a, b } = await openSharedD1(t);
+  await seed3(a, deps);
+  const id = await submitValid(a, deps, "token-one", freshRun());
   let fired = false;
   const tapped = tappedDb(a, {
-    afterAll(sql) {
+    async afterAll(sql) {
       if (fired || !sql.includes("eligibility IN (")) return;
       fired = true;
-      b.run("UPDATE submissions SET eligibility = 'REVOKED' WHERE submission_id = ?", id);
-      b.run(
+      await b.run("UPDATE submissions SET eligibility = 'REVOKED' WHERE submission_id = ?", id);
+      await b.run(
         `INSERT INTO eligibility_history
            (submission_id, from_state, to_state, reason, at)
          VALUES (?, 'SUBMITTED', 'REVOKED', 'concurrent test revoke', ?)`,
@@ -303,58 +303,58 @@ test("G2-C4: revocation during qualification stays terminal on D1-shape", (t) =>
       );
     },
   });
-  const report = qualify(tapped, deps);
+  const report = await qualify(tapped, deps);
   assert.ok(fired, "interleave hook never fired");
   assert.equal(
-    a.get("SELECT eligibility FROM submissions WHERE submission_id = ?", id).eligibility,
+    (await a.get("SELECT eligibility FROM submissions WHERE submission_id = ?", id)).eligibility,
     "REVOKED",
   );
   assert.ok(report.promoted.every((p) => p.submission_id !== id));
 });
 
-test("G2-C5: quota race admits exactly quota on D1-shape", () => {
+test("G2-C5: quota race admits exactly quota on D1-shape", async () => {
   const deps = makeDeps({ quotaPerDay: 3 });
-  const db = openD1ShapeTestDb();
-  seed3(db, deps);
-  submitValid(db, deps, "token-one", freshRun());
-  submitValid(db, deps, "token-one", freshRun());
+  const db = await openD1ShapeTestDb();
+  await seed3(db, deps);
+  await submitValid(db, deps, "token-one", freshRun());
+  await submitValid(db, deps, "token-one", freshRun());
   let bResult = null;
   let fired = false;
   const tapped = tappedDb(db, {
-    beforeRun(sql) {
+    async beforeRun(sql) {
       if (fired || !/^INSERT INTO submissions/i.test(sql)) return;
       fired = true;
-      bResult = post(db, deps, "token-one", makeEnvelope(makeResult(freshRun())));
+      bResult = await post(db, deps, "token-one", makeEnvelope(makeResult(freshRun())));
     },
   });
-  const aRes = post(tapped, deps, "token-one", makeEnvelope(makeResult(freshRun())));
+  const aRes = await post(tapped, deps, "token-one", makeEnvelope(makeResult(freshRun())));
   assert.ok(fired, "interleave hook never fired");
   assert.equal(bResult.status, 201);
   assert.equal(aRes.status, 429);
-  assert.equal(db.get("SELECT COUNT(*) AS n FROM submissions").n, 3);
-  assert.equal(db.get(
-    "SELECT count FROM daily_counts WHERE install_id = 'install-1'").count, 3);
+  assert.equal((await db.get("SELECT COUNT(*) AS n FROM submissions")).n, 3);
+  assert.equal((await db.get(
+    "SELECT count FROM daily_counts WHERE install_id = 'install-1'")).count, 3);
   db.close();
 });
 
-test("G2-C6: duplicate race resolves to one row on D1-shape", () => {
+test("G2-C6: duplicate race resolves to one row on D1-shape", async () => {
   const deps = makeDeps();
-  const db = openD1ShapeTestDb();
-  seed3(db, deps);
+  const db = await openD1ShapeTestDb();
+  await seed3(db, deps);
   const envelope = makeEnvelope(makeResult(freshRun()));
   let bResult = null;
   let fired = false;
   const tapped = tappedDb(db, {
-    beforeRun(sql) {
+    async beforeRun(sql) {
       if (fired || !/^INSERT INTO submissions/i.test(sql)) return;
       fired = true;
-      bResult = post(db, deps, "token-two", envelope);
+      bResult = await post(db, deps, "token-two", envelope);
     },
   });
   let res = null;
   let threw = null;
   try {
-    res = post(tapped, deps, "token-one", envelope);
+    res = await post(tapped, deps, "token-one", envelope);
   } catch (e) {
     threw = e;
   }
@@ -363,16 +363,16 @@ test("G2-C6: duplicate race resolves to one row on D1-shape", () => {
   assert.equal(threw, null, `submission threw: ${threw && threw.message}`);
   assert.equal(res.body.duplicate, true);
   assert.equal(res.body.submission_id, bResult.body.submission_id);
-  assert.equal(db.get("SELECT COUNT(*) AS n FROM submissions").n, 1);
+  assert.equal((await db.get("SELECT COUNT(*) AS n FROM submissions")).n, 1);
   db.close();
 });
 
-test("G2-C7: write failure sanitizes with zero partial rows on D1-shape", () => {
+test("G2-C7: write failure sanitizes with zero partial rows on D1-shape", async () => {
   const deps = makeDeps();
-  const db = openD1ShapeTestDb();
-  seed3(db, deps);
+  const db = await openD1ShapeTestDb();
+  await seed3(db, deps);
   const tapped = tappedDb(db, {
-    beforeRun(sql) {
+    async beforeRun(sql) {
       if (/INSERT INTO eligibility_history/i.test(sql)) {
         throw new Error("CANARY_G2_7k7k SQLITE_FAKE x'; DROP TABLE submissions; --");
       }
@@ -381,7 +381,7 @@ test("G2-C7: write failure sanitizes with zero partial rows on D1-shape", () => 
   let res = null;
   let threw = null;
   try {
-    res = post(tapped, deps, "token-one", makeEnvelope(makeResult(freshRun())));
+    res = await post(tapped, deps, "token-one", makeEnvelope(makeResult(freshRun())));
   } catch (e) {
     threw = e;
   }
@@ -391,16 +391,16 @@ test("G2-C7: write failure sanitizes with zero partial rows on D1-shape", () => 
   const serialized = JSON.stringify(res.body);
   assert.ok(!serialized.includes("CANARY_G2_7k7k"));
   assert.ok(!serialized.includes("DROP TABLE"));
-  assert.equal(db.get("SELECT COUNT(*) AS n FROM submissions").n, 0);
+  assert.equal((await db.get("SELECT COUNT(*) AS n FROM submissions")).n, 0);
   db.close();
 });
 
-test("G2-C8: lock maps to 503 with Retry-After on D1-shape", () => {
+test("G2-C8: lock maps to 503 with Retry-After on D1-shape", async () => {
   const deps = makeDeps();
-  const db = openD1ShapeTestDb();
-  seed3(db, deps);
+  const db = await openD1ShapeTestDb();
+  await seed3(db, deps);
   const tapped = tappedDb(db, {
-    beforeRun(sql) {
+    async beforeRun(sql) {
       if (/^INSERT INTO submissions/i.test(sql)) {
         const err = new Error("database is locked");
         err.code = "SQLITE_BUSY";
@@ -411,7 +411,7 @@ test("G2-C8: lock maps to 503 with Retry-After on D1-shape", () => {
   let res = null;
   let threw = null;
   try {
-    res = post(tapped, deps, "token-one", makeEnvelope(makeResult(freshRun())));
+    res = await post(tapped, deps, "token-one", makeEnvelope(makeResult(freshRun())));
   } catch (e) {
     threw = e;
   }
@@ -424,7 +424,7 @@ test("G2-C8: lock maps to 503 with Retry-After on D1-shape", () => {
 
 // ---------- D. migration drift ----------
 
-test("G2-D1: migration 001 carries the exact initial schema", () => {
+test("G2-D1: migration 001 carries the exact initial schema", async () => {
   const dir = dirname(fileURLToPath(import.meta.url));
   const schema = readFileSync(join(dir, "..", "schema.sql"), "utf8");
   const migration = readFileSync(join(dir, "..", "migrations", "001_init.sql"), "utf8");

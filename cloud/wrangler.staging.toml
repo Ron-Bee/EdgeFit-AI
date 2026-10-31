@@ -1,0 +1,49 @@
+# EF-GLOBAL-01 staging Worker configuration — TEMPLATE ONLY.
+#
+# This file has NEVER been applied: no D1 database exists, no Worker
+# is deployed, no secret is set, and the database_id below is a
+# placeholder. It becomes real only under the owner-gated G2-B2
+# milestone, which provisions resources explicitly. Do not run
+# `wrangler deploy`, `wrangler d1 create`, or any remote command
+# against this file without that authorization.
+#
+# Local tests do NOT read this file: they inject adapters directly
+# into cloud/worker.js workerFetch. This template exists so G2-B2
+# starts from a reviewed, minimal, staging-only shape.
+#
+# Wrangler itself is deliberately NOT installed (no dependency or
+# lockfile changes in G2-B1). G2-B2 pins a version and records the
+# install effect before any remote command.
+
+name = "edgefit-evidence-staging"
+# Entry point, relative to this file (cloud/).
+main = "worker.js"
+# Workers runtime behavior is versioned by this date; keep pinned so
+# staging and review run the same semantics. nodejs_compat provides
+# node:crypto, which the Worker uses for synchronous SHA-256 (see
+# cloud/worker.js): without it the Worker fails to start.
+compatibility_date = "2026-10-30"
+compatibility_flags = ["nodejs_compat"]
+
+# No production environment exists in this file. Staging only.
+[env.staging]
+# No workers.dev URL until G2-B2 deliberately enables one for
+# qualification traffic; local `wrangler dev` is the first remote
+# touchpoint, and only under G2-B2 authorization.
+workers_dev = false
+# No custom domain, no route, no trigger: nothing public by default.
+
+[[env.staging.d1_databases]]
+binding = "DB"
+database_name = "edgefit-evidence-staging"
+# Placeholder: replaced by the real id at G2-B2 provisioning time.
+# Never commit a real database id for production here; this file is
+# staging-only and production does not exist yet.
+database_id = "REPLACE-AT-G2B2-PROVISIONING"
+# Migrations directory, relative to this file.
+migrations_dir = "migrations"
+
+# Secrets (set ONLY via `wrangler secret put` under G2-B2; never in
+# this file, never in git):
+#   INSTALL_SALT — random per-deployment salt for install identities.
+# No Meta service key, no install tokens, no API keys live here.

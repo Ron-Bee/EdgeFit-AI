@@ -1,10 +1,9 @@
-// EF-CLOUD-01A bounded Muse retrieval (master 13), G1B cohorts.
-// One fixed query shape over PUBLISHED quorum-passing cohorts:
-// no raw rows, no install identities, no SQL passthrough.
-// The model cites cohort hashes; the backend owns the math.
-// Grouping is the shared canonical implementation (D8): the
-// partition here is identical to public aggregates by construction.
-//
+// EF-CLOUD-01A bounded Muse retrieval (master 13), G1B cohorts,
+// G2-B1 async contract. One fixed query shape over PUBLISHED
+// quorum-passing cohorts: no raw rows, no install identities, no
+// SQL passthrough. The model cites cohort hashes; the backend owns
+// the math. Grouping is the shared canonical implementation (D8):
+// the partition here is identical to public aggregates.
 // retrievalDeps: { sha256hex, installSalt, deviceClasses[],
 //                  quorumRuns, quorumInstalls }
 
@@ -15,7 +14,7 @@ const SHA64 = /^[0-9a-f]{64}$/;
 
 export const RETRIEVAL_MAX_LIMIT = 3;
 
-export function evidenceRetrieve(db, params, deps) {
+export async function evidenceRetrieve(db, params, deps) {
   const { device_class: deviceClass, model_id: modelId } = params;
   let limit = params.limit === undefined ? RETRIEVAL_MAX_LIMIT
     : Number(params.limit);
@@ -35,7 +34,7 @@ export function evidenceRetrieve(db, params, deps) {
       message: `limit must be 1..${RETRIEVAL_MAX_LIMIT}`,
     };
   }
-  const rows = db.all(
+  const rows = await db.all(
     `SELECT model_sha, quantization_label, device_class, workload_id,
             prompt_sha, runtime_impl, runtime_backend, build_key, config_hash,
             n_ctx, n_threads, n_predict, sampler, tps_gen, install_id

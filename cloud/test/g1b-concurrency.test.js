@@ -15,7 +15,7 @@ import {
 let fileCounter = 0;
 let runCounter = 0;
 
-function openShared(t) {
+async function openShared(t) {
   fileCounter += 1;
   // Repo-local scratch dir (works in sandboxes without a shared tmp);
   // every file is unlinked in t.after, verified by git status.
@@ -23,10 +23,10 @@ function openShared(t) {
   mkdirSync(dir, { recursive: true });
   const path = join(dir, `shared-${process.pid}-${fileCounter}.db`);
   const a = openDatabase(path);
-  initSchema(a);
+  await initSchema(a);
   const b = openDatabase(path);
-  a.exec("PRAGMA busy_timeout = 5000");
-  b.exec("PRAGMA busy_timeout = 100");
+  await a.exec("PRAGMA busy_timeout = 5000");
+  await b.exec("PRAGMA busy_timeout = 100");
   t.after(() => {
     try { a.close(); } catch { /* ignore */ }
     try { b.close(); } catch { /* ignore */ }
@@ -37,8 +37,8 @@ function openShared(t) {
 
 const TOKENS = { 1: "token-one", 2: "token-two", 3: "token-three" };
 
-function seed3(db, deps) {
-  for (let i = 1; i <= 3; i++) seedInstall(db, deps, `install-${i}`, TOKENS[i]);
+async function seed3(db, deps) {
+  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, TOKENS[i]);
 }
 
 // Forwards the adapter interface; hooks observe (never rewrite) statements.
@@ -48,20 +48,20 @@ function seed3(db, deps) {
 function tappedDb(db, hooks = {}) {
   return {
     get: db.get.bind(db),
-    all(sql, ...params) {
-      const rows = db.all(sql, ...params);
+    async all(sql, ...params) {
+      const rows = await db.all(sql, ...params);
       if (hooks.afterAll) hooks.afterAll(sql, rows);
       return rows;
     },
-    run(sql, ...params) {
+    async run(sql, ...params) {
       if (hooks.beforeRun) hooks.beforeRun(sql, params);
-      return db.run(sql, ...params);
+      return await db.run(sql, ...params);
     },
-    batch(statements) {
+    async batch(statements) {
       if (hooks.beforeRun) {
-        for (const s of statements) hooks.beforeRun(s.sql, s.params ?? []);
+        for (const s of statements) await hooks.beforeRun(s.sql, s.params ?? []);
       }
-      return db.batch(statements);
+      return await db.batch(statements);
     },
     exec: db.exec.bind(db),
     close: db.close.bind(db),
@@ -76,27 +76,27 @@ function freshRun() {
   };
 }
 
-function tryPost(db, deps, token, envelope) {
+async function tryPost(db, deps, token, envelope) {
   try {
-    return { res: post(db, deps, token, envelope), threw: null };
+    return { res: await post(db, deps, token, envelope), threw: null };
   } catch (e) {
     return { res: null, threw: e };
   }
 }
 
-test("G1B-T6: revocation during qualification stays terminal", (t) => {
+test("G1B-T6: revocation during qualification stays terminal", async (t) => {
   const deps = makeDeps();
-  const { a, b } = openShared(t);
-  seed3(a, deps);
-  const id = submitValid(a, deps, "token-one", freshRun());
+  const { a, b } = await openShared(t);
+  await seed3(a, deps);
+  const id = await submitValid(a, deps, "token-one", freshRun());
   let fired = false;
   const tapped = tappedDb(a, {
-    afterAll(sql) {
+    async afterAll(sql) {
       if (fired || !sql.includes("eligibility IN (")) return;
       fired = true;
       // A concurrent owner DELETE commits between snapshot and transition.
-      b.run("UPDATE submissions SET eligibility = 'REVOKED' WHERE submission_id = ?", id);
-      b.run(
+      await b.run("UPDATE submissions SET eligibility = 'REVOKED' WHERE submission_id = ?", id);
+      await b.run(
         `INSERT INTO eligibility_history
            (submission_id, from_state, to_state, reason, at)
          VALUES (?, 'SUBMITTED', 'REVOKED', 'concurrent test revoke', ?)`,
@@ -104,13 +104,13 @@ test("G1B-T6: revocation during qualification stays terminal", (t) => {
       );
     },
   });
-  const report = qualify(tapped, deps);
+  const report = await qualify(tapped, deps);
   assert.ok(fired, "interleave hook never fired");
   assert.equal(
-    a.get("SELECT eligibility FROM submissions WHERE submission_id = ?", id).eligibility,
+    (await a.get("SELECT eligibility FROM submissions WHERE submission_id = ?", id)).eligibility,
     "REVOKED",
   );
-  const trail = a.all(
+  const trail = await a.all(
     "SELECT from_state, to_state FROM eligibility_history WHERE submission_id = ? ORDER BY id ASC",
     id,
   );
@@ -119,119 +119,119 @@ test("G1B-T6: revocation during qualification stays terminal", (t) => {
   assert.ok(report.promoted.every((p) => p.submission_id !== id));
 });
 
-test("G1B-T7: concurrent uploads at the quota edge admit exactly quota", () => {
+test("G1B-T7: concurrent uploads at the quota edge admit exactly quota", async () => {
   const deps = makeDeps({ quotaPerDay: 3 });
-  const db = openTestDb();
-  seed3(db, deps);
-  submitValid(db, deps, "token-one", freshRun());
-  submitValid(db, deps, "token-one", freshRun());
+  const db = await openTestDb();
+  await seed3(db, deps);
+  await submitValid(db, deps, "token-one", freshRun());
+  await submitValid(db, deps, "token-one", freshRun());
   let bResult = null;
   let fired = false;
   const tapped = tappedDb(db, {
-    beforeRun(sql) {
+    async beforeRun(sql) {
       if (fired || !/^INSERT INTO submissions/i.test(sql)) return;
       fired = true;
       // A competitor's batch serialized first and took the last slot.
       // (Single-writer engines serialize batches; any order reduces to
       // one batch winning. Lock-timing contention is covered by G1B-F5.)
-      bResult = post(db, deps, "token-one",
+      bResult = await post(db, deps, "token-one",
         makeEnvelope(makeResult(freshRun())));
     },
   });
-  const aRes = post(tapped, deps, "token-one", makeEnvelope(makeResult(freshRun())));
+  const aRes = await post(tapped, deps, "token-one", makeEnvelope(makeResult(freshRun())));
   assert.ok(fired, "interleave hook never fired");
   assert.equal(bResult.status, 201);
   assert.equal(aRes.status, 429);
   assert.ok(aRes.headers && aRes.headers["retry-after"], "missing Retry-After");
-  assert.equal(db.get("SELECT COUNT(*) AS n FROM submissions").n, 3);
+  assert.equal((await db.get("SELECT COUNT(*) AS n FROM submissions")).n, 3);
   // The rejected claim was compensated in-batch: the counter is exact.
-  assert.equal(db.get(
-    "SELECT count FROM daily_counts WHERE install_id = 'install-1'").count, 3);
+  assert.equal((await db.get(
+    "SELECT count FROM daily_counts WHERE install_id = 'install-1'")).count, 3);
   db.close();
 });
 
-test("G1B-T7b: racing duplicate content resolves to one row", () => {
+test("G1B-T7b: racing duplicate content resolves to one row", async () => {
   const deps = makeDeps();
-  const db = openTestDb();
-  seed3(db, deps);
+  const db = await openTestDb();
+  await seed3(db, deps);
   const envelope = makeEnvelope(makeResult(freshRun()));
   let bResult = null;
   let fired = false;
   const tapped = tappedDb(db, {
-    beforeRun(sql) {
+    async beforeRun(sql) {
       if (fired || !/^INSERT INTO submissions/i.test(sql)) return;
       fired = true;
       // A competitor committed the identical content first.
-      bResult = post(db, deps, "token-two", envelope);
+      bResult = await post(db, deps, "token-two", envelope);
     },
   });
-  const { res, threw } = tryPost(tapped, deps, "token-one", envelope);
+  const { res, threw } = await tryPost(tapped, deps, "token-one", envelope);
   assert.ok(fired, "interleave hook never fired");
   assert.equal(bResult.status, 201);
   assert.equal(threw, null, `submission threw: ${threw && threw.message}`);
   assert.equal(res.status, 200);
   assert.equal(res.body.duplicate, true);
   assert.equal(res.body.submission_id, bResult.body.submission_id);
-  assert.equal(db.get("SELECT COUNT(*) AS n FROM submissions").n, 1);
+  assert.equal((await db.get("SELECT COUNT(*) AS n FROM submissions")).n, 1);
   // The loser's rolled-back claim cost nothing.
-  assert.equal(db.get(
-    "SELECT count FROM daily_counts WHERE install_id = 'install-2'").count, 1);
-  assert.equal(db.get(
-    "SELECT COUNT(*) AS n FROM daily_counts WHERE install_id = 'install-1'").n, 0);
+  assert.equal((await db.get(
+    "SELECT count FROM daily_counts WHERE install_id = 'install-2'")).count, 1);
+  assert.equal((await db.get(
+    "SELECT COUNT(*) AS n FROM daily_counts WHERE install_id = 'install-1'")).n, 0);
   db.close();
 });
 
-test("G1B-T7c: UNIQUE conflicts without a committed row stay retryable", () => {
+test("G1B-T7c: UNIQUE conflicts without a committed row stay retryable", async () => {
   const deps = makeDeps();
-  const db = openTestDb();
-  seed3(db, deps);
+  const db = await openTestDb();
+  await seed3(db, deps);
   const tapped = tappedDb(db, {
-    beforeRun(sql) {
+    async beforeRun(sql) {
       if (/^INSERT INTO submissions/i.test(sql)) {
         // A UNIQUE failure with no committed winner (vanishing race).
         throw new Error("UNIQUE constraint failed: submissions.content_hash");
       }
     },
   });
-  const { res, threw } = tryPost(tapped, deps, "token-one",
+  const { res, threw } = await tryPost(tapped, deps, "token-one",
     makeEnvelope(makeResult(freshRun())));
   assert.equal(threw, null, `submission threw: ${threw && threw.message}`);
   assert.equal(res.status, 503);
   assert.equal(res.body.error.code, "temporarily_unavailable");
   assert.equal(res.headers["retry-after"], "1");
-  assert.equal(db.get("SELECT COUNT(*) AS n FROM submissions").n, 0);
+  assert.equal((await db.get("SELECT COUNT(*) AS n FROM submissions")).n, 0);
   db.close();
 });
 
-test("G1B-T7d: submission-id collision retries with a fresh id", () => {
+test("G1B-T7d: submission-id collision retries with a fresh id", async () => {
   const ids = ["SUB-IDC-1", "SUB-IDC-1", "SUB-IDC-2"];
   let n = 0;
   const deps = makeDeps({ newId: () => ids[n++] ?? `SUB-IDC-F${n}` });
-  const db = openTestDb();
-  seed3(db, deps);
-  const first = post(db, deps, "token-one", makeEnvelope(makeResult(freshRun())));
+  const db = await openTestDb();
+  await seed3(db, deps);
+  const first = await post(db, deps, "token-one", makeEnvelope(makeResult(freshRun())));
   assert.equal(first.status, 201);
-  const { res, threw } = tryPost(db, deps, "token-one",
+  const { res, threw } = await tryPost(db, deps, "token-one",
     makeEnvelope(makeResult(freshRun())));
   assert.equal(threw, null, `submission threw: ${threw && threw.message}`);
   assert.equal(res.status, 201);
   assert.equal(res.body.submission_id, "SUB-IDC-2");
-  assert.equal(db.get("SELECT COUNT(*) AS n FROM submissions").n, 2);
+  assert.equal((await db.get("SELECT COUNT(*) AS n FROM submissions")).n, 2);
   db.close();
 });
 
-test("G1B-T7e: persistent id collision ends in a sanitized 500", () => {
+test("G1B-T7e: persistent id collision ends in a sanitized 500", async () => {
   const deps = makeDeps({ newId: () => "SUB-SAME-9" });
-  const db = openTestDb();
-  seed3(db, deps);
-  assert.equal(post(db, deps, "token-one",
-    makeEnvelope(makeResult(freshRun()))).status, 201);
-  const { res, threw } = tryPost(db, deps, "token-one",
+  const db = await openTestDb();
+  await seed3(db, deps);
+  assert.equal((await post(db, deps, "token-one",
+    makeEnvelope(makeResult(freshRun())))).status, 201);
+  const { res, threw } = await tryPost(db, deps, "token-one",
     makeEnvelope(makeResult(freshRun())));
   assert.equal(threw, null, `submission threw: ${threw && threw.message}`);
   assert.equal(res.status, 500);
   assert.equal(res.body.error.code, "internal");
   assert.ok(!JSON.stringify(res.body).includes("SUB-SAME-9"));
-  assert.equal(db.get("SELECT COUNT(*) AS n FROM submissions").n, 1);
+  assert.equal((await db.get("SELECT COUNT(*) AS n FROM submissions")).n, 1);
   db.close();
 });

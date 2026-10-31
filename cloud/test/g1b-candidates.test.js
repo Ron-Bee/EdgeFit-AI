@@ -8,16 +8,16 @@ import {
 
 let runCounter = 0;
 
-function setup() {
+async function setup() {
   const deps = makeDeps();
-  const db = openTestDb();
-  for (let i = 1; i <= 3; i++) seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
+  const db = await openTestDb();
+  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
   return { deps, db };
 }
 
-function pub(db, deps, install, extra = {}) {
+async function pub(db, deps, install, extra = {}) {
   runCounter += 1;
-  return submitValid(db, deps, `test-token-${install}`, {
+  return await submitValid(db, deps, `test-token-${install}`, {
     run_id: `BENCH-G1BC${runCounter}`,
     collected_at_utc: new Date(NOW - runCounter * 60000).toISOString(),
     ...extra,
@@ -36,41 +36,41 @@ function measurementsAt(tps) {
   };
 }
 
-function candidateOf(db, deps, modelSha) {
-  const res = get(db, deps, "/v1/evidence/model-candidates", {});
+async function candidateOf(db, deps, modelSha) {
+  const res = await get(db, deps, "/v1/evidence/model-candidates", {});
   assert.equal(res.status, 200);
   return res.body.candidates.find((c) => c.model_sha === modelSha);
 }
 
-test("G1B-C1: five incompatible n=1 cohorts stay insufficient-evidence", () => {
-  const { deps, db } = setup();
-  [128, 256, 512, 1024, 2048].forEach((n_ctx, i) => {
-    pub(db, deps, (i % 3) + 1, { config: { n_ctx, n_threads: 4, n_predict: 64 } });
-  });
-  qualify(db, deps);
-  const c = candidateOf(db, deps, MODEL_A);
+test("G1B-C1: five incompatible n=1 cohorts stay insufficient-evidence", async () => {
+  const { deps, db } = await setup();
+  for (const [i, n_ctx] of [128, 256, 512, 1024, 2048].entries()) {
+    await pub(db, deps, (i % 3) + 1, { config: { n_ctx, n_threads: 4, n_predict: 64 } });
+  }
+  await qualify(db, deps);
+  const c = await candidateOf(db, deps, MODEL_A);
   assert.equal(c.status, "insufficient-evidence");
   assert.equal(c.median_gen_tps, null);
   assert.equal(c.mean_gen_tps, null);
   db.close();
 });
 
-test("G1B-C2: mixed thin+quorum cohorts publish quorum stats only", () => {
-  const { deps, db } = setup();
+test("G1B-C2: mixed thin+quorum cohorts publish quorum stats only", async () => {
+  const { deps, db } = await setup();
   for (let i = 0; i < 5; i++) {
-    pub(db, deps, (i % 3) + 1, {
+    await pub(db, deps, (i % 3) + 1, {
       config: { n_ctx: 512, n_threads: 4, n_predict: 64 },
       measurements: measurementsAt(10),
     });
   }
   for (const n_ctx of [256, 1024]) {
-    pub(db, deps, 1, {
+    await pub(db, deps, 1, {
       config: { n_ctx, n_threads: 4, n_predict: 64 },
       measurements: measurementsAt(100),
     });
   }
-  qualify(db, deps);
-  const c = candidateOf(db, deps, MODEL_A);
+  await qualify(db, deps);
+  const c = await candidateOf(db, deps, MODEL_A);
   assert.equal(c.status, "published");
   assert.equal(c.mean_gen_tps, 10);
   assert.equal(c.median_gen_tps, 10);
@@ -79,11 +79,11 @@ test("G1B-C2: mixed thin+quorum cohorts publish quorum stats only", () => {
   db.close();
 });
 
-test("G1B-C3: single quorum cohort keeps its shape (guard)", () => {
-  const { deps, db } = setup();
-  for (let i = 0; i < 5; i++) pub(db, deps, (i % 3) + 1);
-  qualify(db, deps);
-  const c = candidateOf(db, deps, MODEL_A);
+test("G1B-C3: single quorum cohort keeps its shape (guard)", async () => {
+  const { deps, db } = await setup();
+  for (let i = 0; i < 5; i++) await pub(db, deps, (i % 3) + 1);
+  await qualify(db, deps);
+  const c = await candidateOf(db, deps, MODEL_A);
   assert.equal(c.status, "published");
   assert.equal(c.median_gen_tps, 16);
   assert.equal(c.matching_runs, 5);
@@ -92,13 +92,13 @@ test("G1B-C3: single quorum cohort keeps its shape (guard)", () => {
   db.close();
 });
 
-test("G1B-C4: thin model labels counts without means (guard)", () => {
-  const { deps, db } = setup();
+test("G1B-C4: thin model labels counts without means (guard)", async () => {
+  const { deps, db } = await setup();
   for (let i = 0; i < 2; i++) {
-    pub(db, deps, 1, { model: { sha256: MODEL_B } });
+    await pub(db, deps, 1, { model: { sha256: MODEL_B } });
   }
-  qualify(db, deps);
-  const c = candidateOf(db, deps, MODEL_B);
+  await qualify(db, deps);
+  const c = await candidateOf(db, deps, MODEL_B);
   assert.equal(c.status, "insufficient-evidence");
   assert.equal(c.median_gen_tps, null);
   assert.equal(c.mean_gen_tps, null);
@@ -106,24 +106,24 @@ test("G1B-C4: thin model labels counts without means (guard)", () => {
   db.close();
 });
 
-test("G1B-C5: revoked rows leave candidate evidence (guard)", () => {
-  const { deps, db } = setup();
+test("G1B-C5: revoked rows leave candidate evidence (guard)", async () => {
+  const { deps, db } = await setup();
   const ids = [];
-  for (let i = 0; i < 5; i++) ids.push(pub(db, deps, (i % 3) + 1));
-  qualify(db, deps);
-  assert.equal(candidateOf(db, deps, MODEL_A).status, "published");
-  del(db, deps, `/v1/submissions/${ids[0]}`, "test-token-1");
-  const c = candidateOf(db, deps, MODEL_A);
+  for (let i = 0; i < 5; i++) ids.push(await pub(db, deps, (i % 3) + 1));
+  await qualify(db, deps);
+  assert.equal((await candidateOf(db, deps, MODEL_A)).status, "published");
+  await del(db, deps, `/v1/submissions/${ids[0]}`, "test-token-1");
+  const c = await candidateOf(db, deps, MODEL_A);
   assert.equal(c.status, "insufficient-evidence");
   assert.equal(c.matching_runs, 4);
   db.close();
 });
 
-test("G1B-C6: candidates carry no run-level details (guard)", () => {
-  const { deps, db } = setup();
-  for (let i = 0; i < 5; i++) pub(db, deps, (i % 3) + 1);
-  qualify(db, deps);
-  const res = get(db, deps, "/v1/evidence/model-candidates", {});
+test("G1B-C6: candidates carry no run-level details (guard)", async () => {
+  const { deps, db } = await setup();
+  for (let i = 0; i < 5; i++) await pub(db, deps, (i % 3) + 1);
+  await qualify(db, deps);
+  const res = await get(db, deps, "/v1/evidence/model-candidates", {});
   const serialized = JSON.stringify(res.body);
   assert.ok(!serialized.includes("install-"));
   assert.ok(!serialized.includes("token-"));
