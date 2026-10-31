@@ -18,7 +18,18 @@ import java.io.File
  * test self-checks on synthetic fixtures in a temp
  * dir and asserts the same invariants):
  * - EF_STUDY_OUT: output directory for the six study
- *   artifacts (created if missing).
+ *   artifacts (created if missing). REFUSES to write
+ *   into a directory holding a study-verdict.json.
+ * - EF_STUDY_NEW_INSTANCE=YES + EF_STUDY_INSTANCE_ID:
+ *   required to freeze into any other non-empty
+ *   directory; a new freeze is a new study.
+ * - EF_STUDY_VERIFY_DIR: read-only verification of an
+ *   existing frozen study (no writes anywhere).
+ * - EF_STUDY_SCORE_DIR + EF_STUDY_RUNS: qualified
+ *   offline scoring. EF_STUDY_RUNS is a comma-separated
+ *   list of exactly 6 exported run JSON paths.
+ *   Writes study-score.json ONCE into the study dir
+ *   (refuses if present).
  * - EF_STUDY_CORPUS: corpus manifest path (default:
  *   eval/comp-01a-corpus.json found upward from the
  *   working directory).
@@ -36,11 +47,27 @@ class EvalStudyRunnerTest {
 
     @Test
     fun ownerPreflight() {
+        val verifyDir = System.getenv("EF_STUDY_VERIFY_DIR")?.ifBlank { null }
+        if (verifyDir != null) {
+            verifyOnly(verifyDir)
+            return
+        }
+        val scoreDir = System.getenv("EF_STUDY_SCORE_DIR")?.ifBlank { null }
+        if (scoreDir != null) {
+            scoreOnly(scoreDir)
+            return
+        }
         val outDir = System.getenv("EF_STUDY_OUT")?.ifBlank { null }
         if (outDir == null) {
             selfCheck()
             return
         }
+        val dir = File(outDir)
+        val guard = EvalStudy.checkOutputDir(
+            dir,
+            System.getenv("EF_STUDY_NEW_INSTANCE") == "YES",
+            System.getenv("EF_STUDY_INSTANCE_ID")?.ifBlank { null })
+        if (guard != null) throw AssertionError(guard)
         val corpusPath = System.getenv("EF_STUDY_CORPUS")?.ifBlank { null }
             ?: findUp("eval/comp-01a-corpus.json")
             ?: throw AssertionError(
@@ -62,7 +89,6 @@ class EvalStudyRunnerTest {
             evidenceCutoffUtc = now,
             nowUtc = now
         ))
-        val dir = File(outDir)
         dir.mkdirs()
         val written = linkedMapOf<String, String>()
         fun write(name: String, content: String?) {
@@ -79,6 +105,9 @@ class EvalStudyRunnerTest {
         write("study-prompts.txt", out.promptsText)
         val verdict = SessionJson.stringify(linkedMapOf(
             "study_id" to EvalStudy.STUDY_ID,
+            "instance_id" to
+                (System.getenv("EF_STUDY_INSTANCE_ID")?.ifBlank { null }
+                    ?: "original"),
             "verdict" to out.verdict,
             "decided_at_utc" to now,
             "problems" to out.problems,
@@ -93,6 +122,102 @@ class EvalStudyRunnerTest {
         assertEquals(
             "preflight BLOCKED: ${out.problems.joinToString(" | ")}",
             EvalStudy.VERDICT_READY, out.verdict)
+    }
+
+    /**
+     * Read-only verification of an existing frozen
+     * study. Writes nothing; fails on any problem. When
+     * EDGEFIT_EVIDENCE is set, evidence bytes re-hash
+     * against the admitted artifact SHAs too.
+     */
+    private fun verifyOnly(studyDir: String) {
+        val dir = File(studyDir)
+        fun read(name: String): String {
+            val file = File(dir, name)
+            if (!file.isFile) throw AssertionError("missing $name")
+            return file.readText(Charsets.UTF_8)
+        }
+        val files = EvalStudy.FrozenFileSet(
+            manifestJson = read("study-manifest.json"),
+            decisionRJson = read("study-decision-r.json"),
+            requestM0Json = read("study-request-m0.json"),
+            requestM1Json = read("study-request-m1.json"),
+            verdictJson = read("study-verdict.json"),
+            promptsText = File(dir, "study-prompts.txt")
+                .takeIf { it.isFile }?.readText(Charsets.UTF_8)
+        )
+        var evidence: Map<String, ByteArray>? = null
+        val root = System.getenv("EDGEFIT_EVIDENCE")?.ifBlank { null }
+        if (root != null) {
+            val corpusPath = System.getenv("EF_STUDY_CORPUS")
+                ?.ifBlank { null }
+                ?: findUp("eval/comp-01a-corpus.json")
+                ?: throw AssertionError("corpus not found")
+            val manifest = EvalStudy.parseManifest(files.manifestJson)
+            val artifacts = loadCorpusArtifacts(corpusPath, root,
+                manifest.admitted.map { it.corpusId })
+            evidence = artifacts.mapNotNull { artifact ->
+                val runId = try {
+                    @Suppress("UNCHECKED_CAST")
+                    (SessionJson.parse(
+                        artifact.bytes.toString(Charsets.UTF_8))
+                        as? Map<String, Any?>)?.get("run_id") as? String
+                } catch (_: SessionJson.JsonError) {
+                    null
+                }
+                if (runId == null) null else runId to artifact.bytes
+            }.toMap()
+        }
+        val problems = EvalStudy.verifyFrozenStudy(files, evidence)
+        assertTrue(
+            "frozen study problems: ${problems.joinToString(" | ")}",
+            problems.isEmpty())
+    }
+
+    /**
+     * Qualified offline scoring over six exported run
+     * files. Writes study-score.json exactly once;
+     * refuses when it already exists (scores are
+     * immutable: re-running needs a new study dir).
+     */
+    private fun scoreOnly(studyDir: String) {
+        val dir = File(studyDir)
+        fun read(name: String): String {
+            val file = File(dir, name)
+            if (!file.isFile) throw AssertionError("missing $name")
+            return file.readText(Charsets.UTF_8)
+        }
+        val scoreFile = File(dir, "study-score.json")
+        if (scoreFile.isFile) {
+            throw AssertionError(
+                "study-score.json already exists; scores are immutable")
+        }
+        val runs = (System.getenv("EF_STUDY_RUNS")?.ifBlank { null }
+            ?: throw AssertionError(
+                "EF_STUDY_RUNS must list 6 exported run files"))
+            .split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        if (runs.size != 6) {
+            throw AssertionError(
+                "EF_STUDY_RUNS must list exactly 6 files, got ${runs.size}")
+        }
+        val inputs = runs.mapIndexed { i, path ->
+            val file = File(path)
+            if (!file.isFile) {
+                throw AssertionError("run file missing: $path")
+            }
+            EvalStudy.StudyRunInput("run-$i", file.readBytes())
+        }
+        val score = EvalStudy.scoreStudy(
+            read("study-manifest.json"),
+            listOf(
+                read("study-decision-r.json"),
+                read("study-decision-m0.json"),
+                read("study-decision-m1.json")),
+            inputs)
+        scoreFile.writeText(
+            EvalStudy.scoreJson(score, SessionManager.utcNow()),
+            Charsets.UTF_8)
+        assertTrue(score.labels.any { it.contains("exploratory") })
     }
 
     /** Same assertions on synthetic bytes; runs in every suite pass. */

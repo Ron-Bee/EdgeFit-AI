@@ -1388,3 +1388,47 @@ Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
 - EF-COMP-01B-PREP: IMPLEMENTATION PASS.
   HOST PASS. LIVE CALLS + 6 RUNS STILL NOT
   AUTHORIZED.
+
+## EF-COMP-01B-FINAL (study integrity gate; HOST ONLY)
+
+- On `implement/ef-comp-01b-final-2026-10-30` from
+  66d733f, offline only. Original freeze
+  re-verified read-only (manifest/R/requests/
+  verdict/evidence all clean; zero bytes
+  changed). Output guard: existing studies
+  immutable; new freezes need a unique
+  instance id + new directory.
+- Live adapter wraps qualified
+  HttpsMetaTransport (fixed endpoint/model,
+  no retry, key from env only, scrubbed
+  errors); per-call EF_STUDY_AUTHORIZE=YES;
+  frozen body re-hashed + bound to manifest;
+  M0/M1 citation re-checks; timestamp read
+  AFTER validation; one immutable decision
+  per arm. Verify-only exercised against the
+  real freeze; NO live call made.
+- Qualified scoring ingests 6 exported JSONs
+  from source bytes (contract/identity/
+  completion/measurements/unique run ids)
+  and enforces decision-before-START itself;
+  missing/altered/inconsistent artifacts
+  block. Metrics split 3 ways: one decision
+  record, paired errors, one regret per arm
+  (no cost/latency/regret multiplication).
+- Physical route finding: standalone UI
+  cannot select 8 threads (override offers
+  only ctx reduction); the Agent +
+  developer-Modify/repeat route executes
+  A,B,B,A,A,B with all production gates
+  intact (2 sessions x 3 approvals).
+- Owner procedure in
+  `docs/ef-comp-01b-owner-run.md` (12 steps +
+  STOP conditions); demo protocol unchanged
+  (prepared, not executed).
+- Host evidence: JVM suite green incl. new
+  Final tests; corpus/manifest/cloud green;
+  no live calls, no benchmarks, no DB writes,
+  no Agent changes.
+- EF-COMP-01B-FINAL: IMPLEMENTATION PASS.
+  HOST PASS. LIVE CALLS + 6 RUNS STILL NOT
+  AUTHORIZED (separate owner go required).

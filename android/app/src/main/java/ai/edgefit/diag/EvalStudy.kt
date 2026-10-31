@@ -1157,11 +1157,14 @@ object EvalStudy {
         ))
 
     /**
-     * Owner-authorized step (NOT run in PREP): sends one
-     * arm request through [transport], validates the
-     * reply against the study contract, and returns the
-     * immutable decision record. Study problems throw
-     * [StudyError]; transport failures propagate.
+     * Owner-authorized step: sends one arm request through
+     * [transport], validates the reply against the study
+     * contract, and returns the immutable decision record.
+     * The decision timestamp is read from [clock] AFTER
+     * receipt AND validation, so it can never predate the
+     * evidence it records. Study problems throw
+     * [StudyError]; transport failures propagate (the
+     * caller must not retry: one call, one record).
      */
     fun recordArmDecision(
         arm: String,
@@ -1169,7 +1172,7 @@ object EvalStudy {
         expectation: StudyExpectation,
         transport: StudyTransport,
         apiKey: String,
-        decidedAtUtc: String,
+        clock: () -> String,
         transportLabel: String,
         latencyMs: Long? = null
     ): StudyDecision {
@@ -1192,13 +1195,131 @@ object EvalStudy {
         val payload = MetaApi.extractJsonObject(text)
             ?: throw StudyError("STUDY_REPLY", "no JSON object in reply")
         val usage = parseUsage(result.body)
-        return validateStudyDecision(payload, raw, expectation, arm,
-            decidedAtUtc, transportLabel).copy(
+        val decision = validateStudyDecision(payload, raw, expectation, arm,
+            clock(), transportLabel)
+        // Timestamp AFTER validation: a decision that
+        // failed validation was never decided.
+        return decision.copy(
+            decidedAtUtc = clock(),
             providerRequestId = usage.providerRequestId,
             promptTokens = usage.promptTokens,
             completionTokens = usage.completionTokens,
             latencyMs = latencyMs
         )
+    }
+
+    /**
+     * FINAL Task 3: the smallest safe live adapter. Wraps
+     * the qualified [HttpsMetaTransport] unchanged
+     * (fixed allowlisted endpoint, bounded request/reply,
+     * no retries, no credential logging) and maps its
+     * IO failures to [StudyError] so the study runner
+     * fails closed with no silent retry.
+     */
+    class LiveStudyTransport(
+        private val inner: MetaTransport = HttpsMetaTransport()
+    ) : StudyTransport {
+        override fun post(apiKey: String, body: String): StudyHttpResult {
+            if (apiKey.isBlank()) {
+                throw StudyError("STUDY_KEY",
+                    "no API key supplied for the live call")
+            }
+            val result = try {
+                inner.post(apiKey, body)
+            } catch (e: java.io.IOException) {
+                throw StudyError("STUDY_PROVIDER",
+                    "transport failed: ${e.message}")
+            }
+            return StudyHttpResult(result.status, result.body)
+        }
+    }
+
+    data class FrozenRequest(
+        val arm: String,
+        val endpoint: String,
+        val model: String,
+        val body: String,
+        val bodySha256: String,
+        val builtAtUtc: String
+    )
+
+    /**
+     * Loads one frozen request artifact unchanged and
+     * verifies it: body hash recomputed, endpoint and
+     * model pinned, body bound to this manifest and
+     * candidate set. Any deviation throws.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun loadFrozenRequest(
+        requestJson: String,
+        arm: String,
+        manifest: StudyManifest
+    ): FrozenRequest {
+        val req = try {
+            SessionJson.parse(requestJson) as? Map<String, Any?>
+        } catch (_: SessionJson.JsonError) {
+            throw StudyError("STUDY_REQUEST", "request is not valid JSON")
+        } ?: throw StudyError("STUDY_REQUEST", "request is not an object")
+        if (req["study_id"] != STUDY_ID || req["arm"] != arm) {
+            throw StudyError("STUDY_REQUEST",
+                "request is not for $STUDY_ID arm $arm")
+        }
+        if (req["endpoint"] != MetaApi.ENDPOINT) {
+            throw StudyError("STUDY_REQUEST",
+                "endpoint is not the fixed Meta endpoint")
+        }
+        if (req["model"] != MetaApi.MODEL) {
+            throw StudyError("STUDY_REQUEST", "model is not " + MetaApi.MODEL)
+        }
+        val body = req["body"] as? String
+            ?: throw StudyError("STUDY_REQUEST", "body missing")
+        val sha = req["body_sha256"] as? String
+        if (sha == null || !BenchConfig.sha256Hex(
+                body.toByteArray(Charsets.UTF_8))
+                .equals(sha, ignoreCase = true)
+        ) {
+            throw StudyError("STUDY_REQUEST",
+                "frozen body changed since preflight")
+        }
+        if (!body.contains(manifest.manifestHash) ||
+            !body.contains(manifest.candidateHash)
+        ) {
+            throw StudyError("STUDY_REQUEST",
+                "body not bound to this manifest/candidate set")
+        }
+        return FrozenRequest(
+            arm = arm,
+            endpoint = MetaApi.ENDPOINT,
+            model = MetaApi.MODEL,
+            body = body,
+            bodySha256 = sha,
+            builtAtUtc = req["built_at_utc"] as? String
+                ?: throw StudyError("STUDY_REQUEST", "built_at_utc missing")
+        )
+    }
+
+    /**
+     * M1 citation re-check (defense in depth behind the
+     * contract gate): every cited id must be a manifested
+     * admitted run. M0 must cite nothing.
+     */
+    fun verifyArmCitations(
+        decision: StudyDecision,
+        manifest: StudyManifest
+    ): List<String> {
+        val admitted = manifest.admitted.map { it.runId }.toSet()
+        return if (decision.arm == EvalArms.ARM_M0) {
+            if (decision.supportingEvidenceIds.isEmpty()) {
+                emptyList()
+            } else {
+                listOf("M0 cites evidence despite empty allowlist: " +
+                    decision.supportingEvidenceIds.joinToString(","))
+            }
+        } else {
+            decision.supportingEvidenceIds
+                .filter { it !in admitted }
+                .map { "M1 cites unmanifested run $it" }
+        }
     }
 
     // ---- Task 5: run START ordering ----
@@ -1303,10 +1424,24 @@ object EvalStudy {
         val n: Int
     )
 
+    /**
+     * FINAL Task 5: three metric levels, never mixed.
+     * - [decisionReports]: ONE case per arm (selection
+     *   validity, citation grounding, one cost/latency
+     *   record per provider call). Six runs never become
+     *   six decisions.
+     * - [errorReports]: prediction-error pairs per arm
+     *   (no cost/latency/regret inputs here: a single
+     *   call's cost is not repeated per run).
+     * - [regretByArm]: exactly ONE regret observation per
+     *   arm (selection vs tested medians, n=1).
+     */
     data class StudyScore(
         val candidateA: ConfigSummary,
         val candidateB: ConfigSummary,
-        val armReports: Map<String, EvalMetrics.EvalReport>,
+        val decisionReports: Map<String, EvalMetrics.EvalReport>,
+        val errorReports: Map<String, EvalMetrics.EvalReport>,
+        val regretByArm: Map<String, EvalMetrics.MetricValue>,
         val excludedRuns: List<String>,
         /** Exploratory labeling + metric caveats. */
         val labels: List<String>
@@ -1320,9 +1455,14 @@ object EvalStudy {
      * NOT_EVALUABLE regret with an explicit reason (an
      * abstention is NOT a failed selection); unmeasured
      * configs and missing estimates yield NOT_EVALUABLE
-     * with reasons. Non-COMPLETED, off-freeze-order, or
-     * unregistered-config runs are excluded with reasons,
-     * never scored.
+     * with reasons. Non-COMPLETED runs are excluded with
+     * reasons, never scored.
+     *
+     * FINAL: this unit-level entry takes already-
+     * verified runs (tests, analysis). QUALIFIED study
+     * scoring must go through [scoreStudy], which
+     * ingests source bytes, re-validates decisions, and
+     * enforces temporal ordering itself.
      */
     fun scoreProspective(
         manifest: StudyManifest,
@@ -1384,31 +1524,46 @@ object EvalStudy {
         val tripleB = tripleOf(manifest.candidateB)
         val summaryA = summarize(tripleA)
         val summaryB = summarize(tripleB)
-        val testedOptions = mutableMapOf<Triple<Int, Int, Int>, Double>()
+        val medians = mutableMapOf<Triple<Int, Int, Int>, Double>()
         if (summaryA.medianGen.value != null) {
-            testedOptions[tripleA] = summaryA.medianGen.value!!
+            medians[tripleA] = summaryA.medianGen.value!!
         }
         if (summaryB.medianGen.value != null) {
-            testedOptions[tripleB] = summaryB.medianGen.value!!
+            medians[tripleB] = summaryB.medianGen.value!!
         }
         val knownIds = manifest.admitted.map { it.runId }.toSet()
-        val cases = mutableListOf<EvalMetrics.ProposalCase>()
+        // Decision level: exactly one case per arm. Cost,
+        // latency, and citations live HERE and only here.
+        val decisionCases = decisions.map { decision ->
+            EvalMetrics.ProposalCase(
+                arm = decision.arm,
+                proposed = decision.selection != SELECT_ABSTAIN,
+                valid = if (decision.selection == SELECT_ABSTAIN) {
+                    null
+                } else {
+                    true
+                },
+                // Study decisions pass no host refusal
+                // gate (they authorize nothing), so
+                // rejection evidence is N/A, not false.
+                rejectedByHost = null,
+                abstained = decision.selection == SELECT_ABSTAIN,
+                abstainAppropriate = null,
+                citedIds = decision.supportingEvidenceIds,
+                knownIds = knownIds,
+                latencyMs = decision.latencyMs,
+                costUsd = decision.costUsd
+            )
+        }
+        // Run level: prediction-error pairs only. No cost,
+        // latency, citations, or regret inputs: repeating
+        // them per run would multiply one observation.
+        val errorCases = mutableListOf<EvalMetrics.ProposalCase>()
         for (decision in decisions) {
             if (decision.selection == SELECT_ABSTAIN) {
                 labels.add("${decision.arm} abstained " +
                     "(${decision.abstainReason}): no regret " +
                     "computed; abstention is not a failed selection")
-                cases.add(EvalMetrics.ProposalCase(
-                    arm = decision.arm,
-                    proposed = false,
-                    valid = null,
-                    abstained = true,
-                    abstainAppropriate = null,
-                    citedIds = decision.supportingEvidenceIds,
-                    knownIds = knownIds,
-                    latencyMs = decision.latencyMs,
-                    costUsd = decision.costUsd
-                ))
                 continue
             }
             val selected = decision.selectedConfig!!
@@ -1416,42 +1571,444 @@ object EvalStudy {
                 tripleOf(it.config) == tripleOf(selected)
             }
             if (inConfig.isEmpty()) {
-                // Selected config unmeasured: regret and
-                // errors stay NOT_EVALUABLE via empty
-                // pairing, but the selection is recorded.
                 labels.add("${decision.arm} selected " +
                     "${decision.selection}, unmeasured in this study")
             }
             for (run in inConfig) {
-                cases.add(EvalMetrics.ProposalCase(
+                errorCases.add(EvalMetrics.ProposalCase(
                     arm = decision.arm,
                     proposed = true,
                     valid = true,
-                    // Study decisions pass no host
-                    // refusal gate (they authorize
-                    // nothing), so rejection evidence
-                    // is N/A, not false.
                     rejectedByHost = null,
                     abstained = false,
                     abstainAppropriate = null,
-                    citedIds = decision.supportingEvidenceIds,
-                    knownIds = knownIds,
                     predictedGen = decision.expectedGenTps,
                     predictedAtUtc = decision.decidedAtUtc,
                     measuredGen = run.genTps,
-                    measuredAtUtc = runStartUtc(run.runId),
-                    selectedTriple = tripleOf(selected),
-                    testedOptions = testedOptions,
-                    latencyMs = decision.latencyMs,
-                    costUsd = decision.costUsd
+                    measuredAtUtc = runStartUtc(run.runId)
                 ))
             }
         }
         val arms = decisions.map { it.arm }.toSet()
-        val armReports = arms.associateWith { arm ->
-            EvalMetrics.summarize(cases, arm)
+        return StudyScore(
+            candidateA = summaryA,
+            candidateB = summaryB,
+            decisionReports = arms.associateWith { arm ->
+                EvalMetrics.summarize(decisionCases, arm)
+            },
+            errorReports = arms.associateWith { arm ->
+                EvalMetrics.summarize(errorCases, arm)
+            },
+            regretByArm = arms.associateWith { arm ->
+                val decision = decisions.first { it.arm == arm }
+                studyRegret(decision, medians)
+            },
+            excludedRuns = excluded,
+            labels = labels
+        )
+    }
+
+    /**
+     * Study level: ONE regret observation per arm. Best
+     * tested median minus selected median, floored at
+     * zero; NOT_EVALUABLE with an explicit reason when
+     * the arm abstained, the selection is unmeasured, or
+     * fewer than two configs measured.
+     */
+    private fun studyRegret(
+        decision: StudyDecision,
+        medians: Map<Triple<Int, Int, Int>, Double>
+    ): EvalMetrics.MetricValue {
+        if (decision.selection == SELECT_ABSTAIN) {
+            return EvalMetrics.MetricValue.missing(
+                "${decision.arm} abstained; abstention is not " +
+                    "a failed selection")
         }
-        return StudyScore(summaryA, summaryB, armReports, excluded, labels)
+        if (medians.size < 2) {
+            return EvalMetrics.MetricValue.missing(
+                "fewer than two configs measured")
+        }
+        val selected = decision.selectedConfig!!
+        val selectedValue = medians[tripleOf(selected)]
+            ?: return EvalMetrics.MetricValue.missing(
+                "${decision.arm} selected ${decision.selection}, " +
+                    "unmeasured in this study")
+        val best = medians.values.maxOrNull()!!
+        return EvalMetrics.MetricValue.ok(
+            maxOf(0.0, best - selectedValue), 1)
+    }
+
+    // ---- FINAL Task 4: source-backed qualified scoring ----
+
+    /**
+     * One exported benchmark JSON offered for scoring:
+     * label (for error messages) plus the ACTUAL bytes.
+     * Hashes recompute from bytes; nothing is trusted
+     * from caller-supplied fields.
+     */
+    data class StudyRunInput(
+        val label: String,
+        val bytes: ByteArray
+    )
+
+    /**
+     * Qualified study scoring. Ingests the SIX exported
+     * run artifacts from source bytes (contract,
+     * identities, completion, measurements, unique run
+     * ids), re-validates the persisted M0/M1 decisions
+     * against the study contract, re-derives R, and
+     * ENFORCES decision-before-START ordering itself.
+     * Missing (< 6), altered, or inconsistent artifacts
+     * BLOCK scoring with [StudyError] — they never
+     * degrade into silent exclusions. Non-COMPLETED
+     * exported runs are legitimate outcomes: recorded in
+     * excludedRuns, never scored.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun scoreStudy(
+        manifestJson: String,
+        decisionJsons: List<String>,
+        runInputs: List<StudyRunInput>
+    ): StudyScore {
+        val manifest = try {
+            parseManifest(manifestJson)
+        } catch (e: StudyError) {
+            throw StudyError("STUDY_SCORE",
+                "manifest invalid: [${e.code}] ${e.message}")
+        }
+        if (runInputs.size != 6) {
+            throw StudyError("STUDY_SCORE",
+                "expected 6 exported run artifacts, got " +
+                    runInputs.size)
+        }
+        val decisions = decisionJsons.map {
+            revalidateDecision(it, manifest)
+        }
+        val arms = decisions.map { it.arm }.toSet()
+        if (arms != setOf(EvalArms.ARM_R, EvalArms.ARM_M0, EvalArms.ARM_M1)) {
+            throw StudyError("STUDY_SCORE",
+                "decisions must cover exactly R, M0, M1; got $arms")
+        }
+        val (usable, excluded) =
+            ingestStudyRuns(manifest, decisions, runInputs)
+        // Excluded runs ride along so their reasons
+        // surface in one place; scoreProspective
+        // re-excludes them identically.
+        return scoreProspective(manifest, decisions, usable + excluded)
+    }
+
+    /**
+     * Re-validates one persisted decision artifact: R is
+     * re-derived from manifested evidence; M0/M1 reply
+     * payloads re-validate against the study contract.
+     * Mock-synthetic decisions can never score a
+     * qualified study.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun revalidateDecision(
+        decisionJson: String,
+        manifest: StudyManifest
+    ): StudyDecision {
+        val record = try {
+            SessionJson.parse(decisionJson) as? Map<String, Any?>
+        } catch (_: SessionJson.JsonError) {
+            throw StudyError("STUDY_SCORE",
+                "decision artifact is not valid JSON")
+        } ?: throw StudyError("STUDY_SCORE",
+            "decision artifact is not an object")
+        if (record["study_id"] != STUDY_ID) {
+            throw StudyError("STUDY_SCORE",
+                "decision is not for $STUDY_ID")
+        }
+        val arm = record["arm"] as? String
+        if (arm != EvalArms.ARM_R && arm != EvalArms.ARM_M0 &&
+            arm != EvalArms.ARM_M1
+        ) {
+            throw StudyError("STUDY_SCORE", "decision arm $arm unknown")
+        }
+        val transport = record["transport"] as? String
+        if (transport == TRANSPORT_MOCK) {
+            throw StudyError("STUDY_SCORE",
+                "$arm decision is mock-synthetic; qualified " +
+                    "scoring needs the live record")
+        }
+        val selection = record["selection"] as? String
+        if (arm == EvalArms.ARM_R) {
+            if (transport != TRANSPORT_OFFLINE) {
+                throw StudyError("STUDY_SCORE",
+                    "R decision must be offline")
+            }
+            if (selection != rederiveRSelection(manifest)) {
+                throw StudyError("STUDY_SCORE",
+                    "R selection $selection != re-derived " +
+                        "from manifested evidence")
+            }
+            if ((record["decided_at_utc"] as? String) !=
+                manifest.frozenAtUtc
+            ) {
+                throw StudyError("STUDY_SCORE",
+                    "R decided_at_utc != manifest frozen_at_utc")
+            }
+            return StudyDecision(
+                arm = arm,
+                selection = selection!!,
+                selectedConfig = when (selection) {
+                    SELECT_A -> manifest.candidateA
+                    SELECT_B -> manifest.candidateB
+                    else -> null
+                },
+                abstainReason = record["abstain_reason"] as? String,
+                expectedGenTps =
+                    (record["expected_gen_tps"] as? Number)?.toDouble(),
+                expectedPrefillTps =
+                    (record["expected_prefill_tps"] as? Number)?.toDouble(),
+                uncertainty = record["uncertainty"] as? String,
+                supportingEvidenceIds = emptyList(),
+                limitations = emptyList(),
+                rawJson = record["raw_json"] as? String ?: "{}",
+                decidedAtUtc = manifest.frozenAtUtc,
+                transport = TRANSPORT_OFFLINE
+            )
+        }
+        if (transport != TRANSPORT_LIVE) {
+            throw StudyError("STUDY_SCORE",
+                "$arm decision must be a live record")
+        }
+        val raw = record["raw_json"] as? String
+            ?: throw StudyError("STUDY_SCORE",
+                "$arm decision raw_json missing")
+        val payload = try {
+            SessionJson.parse(raw) as? Map<String, Any?>
+        } catch (_: SessionJson.JsonError) {
+            throw StudyError("STUDY_SCORE",
+                "$arm raw_json is not valid JSON")
+        } ?: throw StudyError("STUDY_SCORE",
+            "$arm raw_json is not an object")
+        val expectation = StudyExpectation(
+            candidateA = manifest.candidateA,
+            candidateB = manifest.candidateB,
+            modelSha256 = manifest.constraints.modelSha256,
+            workloadId = manifest.constraints.workloadId,
+            allowedRunIds = if (arm == EvalArms.ARM_M0) {
+                emptySet()
+            } else {
+                manifest.admitted.map { it.runId }.toSet()
+            },
+            deviceMaxThreads = manifest.constraints.deviceMaxThreads
+        )
+        val decidedAt = record["decided_at_utc"] as? String
+            ?: throw StudyError("STUDY_SCORE",
+                "$arm decided_at_utc missing")
+        val revalidated = try {
+            validateStudyDecision(payload, raw, expectation, arm,
+                decidedAt, TRANSPORT_LIVE)
+        } catch (e: StudyError) {
+            throw StudyError("STUDY_SCORE",
+                "$arm decision fails contract: [${e.code}] ${e.message}")
+        }
+        if (revalidated.selection != selection) {
+            throw StudyError("STUDY_SCORE",
+                "$arm recorded selection $selection != " +
+                    "re-validated ${revalidated.selection}")
+        }
+        val citationProblems = verifyArmCitations(revalidated, manifest)
+        if (citationProblems.isNotEmpty()) {
+            throw StudyError("STUDY_SCORE",
+                citationProblems.joinToString("; "))
+        }
+        return revalidated.copy(
+            providerRequestId = record["provider_request_id"] as? String,
+            promptTokens = (record["prompt_tokens"] as? Number)?.toInt(),
+            completionTokens =
+                (record["completion_tokens"] as? Number)?.toInt(),
+            latencyMs = (record["latency_ms"] as? Number)?.toLong(),
+            costUsd = (record["cost_usd"] as? Number)?.toDouble()
+        )
+    }
+
+    /**
+     * Source-backed run ingestion. Returns usable runs
+     * plus excluded (non-COMPLETED) runs for reason
+     * reporting. THROWS on anything inconsistent: corrupt
+     * bytes, wrong contract, identity mismatch,
+     * unregistered config, unusable measurements,
+     * duplicate run ids, timestamp inversion vs ANY
+     * decision, or collected/START skew. Scoring never
+     * sees unverified values.
+     */
+    fun ingestStudyRuns(
+        manifest: StudyManifest,
+        decisions: List<StudyDecision>,
+        inputs: List<StudyRunInput>
+    ): Pair<List<NewRun>, List<NewRun>> {
+        val all = mutableListOf<NewRun>()
+        val excluded = mutableListOf<NewRun>()
+        for (input in inputs) {
+            all.add(verifyStudyRun(input, manifest, decisions, excluded))
+        }
+        // Dup ids across the whole offer block scoring.
+        val dup = all.map { it.runId }.groupingBy { it }.eachCount()
+            .filter { it.value > 1 }.keys.firstOrNull()
+        if (dup != null) {
+            throw StudyError("STUDY_RUNS", "duplicate run id $dup")
+        }
+        return all.filter {
+            it.status == BenchContract.STATUS_COMPLETED
+        } to excluded
+    }
+
+    @Suppress("UNCHECKED_CAST")
+    private fun verifyStudyRun(
+        input: StudyRunInput,
+        manifest: StudyManifest,
+        decisions: List<StudyDecision>,
+        excluded: MutableList<NewRun>
+    ): NewRun {
+        val sha = BenchConfig.sha256Hex(input.bytes)
+        val root = try {
+            SessionJson.parse(input.bytes.toString(Charsets.UTF_8))
+                as? Map<String, Any?>
+        } catch (_: SessionJson.JsonError) {
+            throw StudyError("STUDY_RUNS",
+                "${input.label}: bytes are not valid JSON")
+        } ?: throw StudyError("STUDY_RUNS",
+            "${input.label}: artifact is not an object")
+        if (root["contract"] != BenchContract.CONTRACT ||
+            (root["contract_version"] as? Number)?.toInt() !=
+            BenchContract.CONTRACT_VERSION
+        ) {
+            throw StudyError("STUDY_RUNS",
+                "${input.label}: not ${BenchContract.CONTRACT} v" +
+                    BenchContract.CONTRACT_VERSION)
+        }
+        val c = manifest.constraints
+        val runId = root["run_id"] as? String
+        if (runId.isNullOrBlank()) {
+            throw StudyError("STUDY_RUNS", "${input.label}: run id missing")
+        }
+        val model = root["model"] as? Map<String, Any?>
+        if ((model?.get("sha256") as? String)?.lowercase() !=
+            c.modelSha256.lowercase()
+        ) {
+            throw StudyError("STUDY_RUNS", "$runId: model SHA-256 mismatch")
+        }
+        val workload = root["workload"] as? Map<String, Any?>
+        if (workload?.get("id") != c.workloadId ||
+            (workload["prompt_sha256"] as? String)?.lowercase() !=
+            c.promptSha256.lowercase()
+        ) {
+            throw StudyError("STUDY_RUNS",
+                "$runId: workload/prompt mismatch")
+        }
+        val runtime = root["runtime"] as? Map<String, Any?>
+        if (runtime?.get("impl") != BenchContract.RUNTIME_IMPL ||
+            runtime["backend"] != BenchContract.BACKEND ||
+            runtime["version"] != c.runtimeVersion ||
+            runtime["abi"] != c.runtimeAbi
+        ) {
+            throw StudyError("STUDY_RUNS",
+                "$runId: runtime identity mismatch")
+        }
+        val variant = (root["x_native_build"] as? Map<String, Any?>)
+            ?.get("variant") as? String
+        if (variant != c.nativeVariant) {
+            throw StudyError("STUDY_RUNS",
+                "$runId: native variant $variant, expected " +
+                    c.nativeVariant)
+        }
+        val config = SessionBenchBridge.configData(
+            (root["config"] as? Map<String, Any?>)
+                ?: throw StudyError("STUDY_RUNS",
+                    "$runId: config block missing"))
+            ?: throw StudyError("STUDY_RUNS",
+                "$runId: config unparsable or out of bounds")
+        if (tripleOf(config) != tripleOf(manifest.candidateA) &&
+            tripleOf(config) != tripleOf(manifest.candidateB)
+        ) {
+            throw StudyError("STUDY_RUNS",
+                "$runId: config outside frozen {A, B}")
+        }
+        val status = root["status"] as? String
+        if (status != BenchContract.STATUS_COMPLETED) {
+            // Legitimate exported outcome (FAILED/TIMEOUT/
+            // CANCELLED): same identity + temporal checks,
+            // then excluded with its reason. Measurements
+            // are absent by definition (NaN), never scored.
+            val failed = NewRun(
+                runId = runId, artifactSha256 = sha, config = config,
+                genTps = Double.NaN, prefillTps = Double.NaN,
+                thermalAfter = "unknown",
+                collectedAtUtc = (root["collected_at_utc"] as? String)
+                    .orEmpty(),
+                status = status ?: "UNKNOWN")
+            checkRunTiming(failed, manifest, decisions)
+            excluded.add(failed)
+            return failed
+        }
+        val measurements = root["measurements"] as? Map<String, Any?>
+            ?: throw StudyError("STUDY_RUNS",
+                "$runId: measurements block missing")
+        val gen = (measurements["tps_gen"] as? Number)?.toDouble()
+        val prefill = (measurements["tps_prefill"] as? Number)?.toDouble()
+        if (gen == null || !gen.isFinite() || gen <= 0 ||
+            prefill == null || !prefill.isFinite() || prefill <= 0
+        ) {
+            throw StudyError("STUDY_RUNS",
+                "$runId: COMPLETED run lacks usable throughput")
+        }
+        val thermalAfter = (measurements["thermal"] as? Map<String, Any?>)
+            ?.get("after") as? String
+        if (thermalAfter.isNullOrBlank()) {
+            throw StudyError("STUDY_RUNS",
+                "$runId: terminal thermal state missing")
+        }
+        val collected = root["collected_at_utc"] as? String
+        if (collected.isNullOrBlank()) {
+            throw StudyError("STUDY_RUNS",
+                "$runId: collection timestamp missing")
+        }
+        val run = NewRun(
+            runId = runId, artifactSha256 = sha, config = config,
+            genTps = gen, prefillTps = prefill,
+            thermalAfter = thermalAfter, collectedAtUtc = collected,
+            status = BenchContract.STATUS_COMPLETED)
+        checkRunTiming(run, manifest, decisions)
+        return run
+    }
+
+    /**
+     * Temporal gate inside ingestion (not a separate
+     * optional check): START must postdate the freeze AND
+     * every arm decision, strictly; collected must agree
+     * with START within 120s.
+     */
+    private fun checkRunTiming(
+        run: NewRun,
+        manifest: StudyManifest,
+        decisions: List<StudyDecision>
+    ) {
+        val start = runStartUtc(run.runId)
+            ?: throw StudyError("STUDY_RUNS",
+                "${run.runId}: unverifiable START stamp")
+        if (!(manifest.frozenAtUtc < start)) {
+            throw StudyError("STUDY_RUNS",
+                "${run.runId}: START $start does not postdate " +
+                    "freeze ${manifest.frozenAtUtc}")
+        }
+        for (decision in decisions) {
+            if (!(decision.decidedAtUtc < start)) {
+                throw StudyError("STUDY_RUNS",
+                    "${run.runId}: ${decision.arm} decision at " +
+                        "${decision.decidedAtUtc} does not predate " +
+                        "START $start")
+            }
+        }
+        if (!withinSeconds(run.collectedAtUtc, start, 120)) {
+            throw StudyError("STUDY_RUNS",
+                "${run.runId}: collected_at_utc " +
+                    "${run.collectedAtUtc} inconsistent with " +
+                    "START stamp $start")
+        }
     }
 
     private fun medianOf(values: List<Double>): Double {
@@ -1461,6 +2018,332 @@ object EvalStudy {
             sorted[mid]
         } else {
             (sorted[mid - 1] + sorted[mid]) / 2.0
+        }
+    }
+
+    /**
+     * Serializes a [StudyScore] for the persisted
+     * study-score.json artifact (written once by the
+     * owner-executed scorer edge).
+     */
+    fun scoreJson(score: StudyScore, scoredAtUtc: String): String {
+        fun metric(m: EvalMetrics.MetricValue): Map<String, Any?> =
+            linkedMapOf(
+                "value" to m.value,
+                "status" to m.status,
+                "reason" to m.reason,
+                "n" to m.n)
+        fun summary(s: ConfigSummary): Map<String, Any?> = linkedMapOf(
+            "median_gen" to metric(s.medianGen),
+            "min_gen" to s.minGen,
+            "max_gen" to s.maxGen,
+            "n" to s.n)
+        fun report(r: EvalMetrics.EvalReport): Map<String, Any?> =
+            linkedMapOf(
+                "arm" to r.arm,
+                "n" to r.n,
+                "valid_proposal_rate" to metric(r.validProposalRate),
+                "invalid_proposal_rate" to metric(r.invalidProposalRate),
+                "host_rejection_rate" to metric(r.hostRejectionRate),
+                "host_rejection" to linkedMapOf(
+                    "total_invalid" to r.hostRejection.totalInvalid,
+                    "verified_rejected" to
+                        r.hostRejection.verifiedRejected,
+                    "verified_non_rejected" to
+                        r.hostRejection.verifiedNonRejected,
+                    "unknown" to r.hostRejection.unknown,
+                    "complete_coverage" to
+                        r.hostRejection.completeCoverage),
+                "fabricated_citation_rate" to
+                    metric(r.fabricatedCitationRate),
+                "abstention_rate" to metric(r.abstentionRate),
+                "appropriate_abstention_rate" to
+                    metric(r.appropriateAbstentionRate),
+                "mean_signed_error_tps" to
+                    metric(r.meanSignedErrorTps),
+                "mean_abs_error_tps" to metric(r.meanAbsErrorTps),
+                "mean_selection_regret_tps" to
+                    metric(r.meanSelectionRegretTps),
+                "observed_throughputs" to r.observedThroughputs,
+                "mean_latency_ms" to metric(r.meanLatencyMs),
+                "total_cost_usd" to metric(r.totalCostUsd),
+                "limitations" to r.limitations)
+        return SessionJson.stringify(linkedMapOf(
+            "study_id" to STUDY_ID,
+            "scored_at_utc" to scoredAtUtc,
+            "candidate_a" to summary(score.candidateA),
+            "candidate_b" to summary(score.candidateB),
+            "decision_reports" to score.decisionReports.mapValues {
+                report(it.value)
+            },
+            "error_reports" to score.errorReports.mapValues {
+                report(it.value)
+            },
+            "regret_by_arm" to score.regretByArm.mapValues { metric(it.value) },
+            "excluded_runs" to score.excludedRuns,
+            "labels" to score.labels
+        ))
+    }
+
+    // ---- FINAL Task 2: nondestructive freeze verification ----
+
+    /**
+     * Contents of a frozen study directory, read (never
+     * written) for verification.
+     */
+    data class FrozenFileSet(
+        val manifestJson: String,
+        val decisionRJson: String,
+        val requestM0Json: String,
+        val requestM1Json: String,
+        val verdictJson: String,
+        val promptsText: String? = null
+    )
+
+    /**
+     * Read-only verification of frozen artifacts. Re-parses
+     * the manifest (hash-checked), re-derives the R
+     * decision from the manifested evidence and compares
+     * selections, re-hashes both request bodies, checks
+     * endpoint/model/candidate identity, enforces M0
+     * measurement-freedom, and (when [evidenceBytes] maps
+     * run id -> file bytes) re-hashes the evidence files
+     * against the admitted artifact SHAs. Returns every
+     * problem found; empty means the freeze is intact.
+     * Writes nothing, regenerates nothing.
+     */
+    @Suppress("UNCHECKED_CAST")
+    fun verifyFrozenStudy(
+        files: FrozenFileSet,
+        evidenceBytes: Map<String, ByteArray>? = null
+    ): List<String> {
+        val problems = mutableListOf<String>()
+        val manifest = try {
+            parseManifest(files.manifestJson)
+        } catch (e: StudyError) {
+            return listOf("manifest: [${e.code}] ${e.message}")
+        }
+        // Verdict artifact hashes vs recomputed content.
+        try {
+            val verdict = SessionJson.parse(files.verdictJson)
+                as? Map<String, Any?>
+            val recorded = verdict?.get("artifacts") as? Map<String, Any?>
+            if (recorded == null) {
+                problems.add("verdict: artifacts map missing")
+            } else {
+                val contents = mapOf(
+                    "study-manifest.json" to files.manifestJson,
+                    "study-decision-r.json" to files.decisionRJson,
+                    "study-request-m0.json" to files.requestM0Json,
+                    "study-request-m1.json" to files.requestM1Json
+                ) + (if (files.promptsText != null) {
+                    mapOf("study-prompts.txt" to files.promptsText)
+                } else {
+                    emptyMap()
+                })
+                for ((name, content) in contents) {
+                    val expected = recorded[name] as? String
+                    if (expected == null) {
+                        problems.add("verdict: no recorded hash for $name")
+                    } else if (!BenchConfig.sha256Hex(
+                            content.toByteArray(Charsets.UTF_8))
+                            .equals(expected, ignoreCase = true)
+                    ) {
+                        problems.add("verdict: $name changed since freeze")
+                    }
+                }
+            }
+        } catch (_: SessionJson.JsonError) {
+            problems.add("verdict: not valid JSON")
+        }
+        // R decision: structural + re-derived selection.
+        try {
+            val r = SessionJson.parse(files.decisionRJson)
+                as? Map<String, Any?>
+            if (r == null || r["arm"] != EvalArms.ARM_R ||
+                r["transport"] != TRANSPORT_OFFLINE
+            ) {
+                problems.add("decision-r: not an offline R record")
+            } else {
+                val recorded = r["selection"] as? String
+                val rederived = rederiveRSelection(manifest)
+                if (recorded != rederived) {
+                    problems.add("decision-r: recorded selection " +
+                        "$recorded != re-derived $rederived")
+                }
+                if ((r["decided_at_utc"] as? String) !=
+                    manifest.frozenAtUtc
+                ) {
+                    problems.add("decision-r: decided_at_utc != " +
+                        "manifest frozen_at_utc")
+                }
+            }
+        } catch (_: SessionJson.JsonError) {
+            problems.add("decision-r: not valid JSON")
+        }
+        // Request bodies: hash, endpoint, model, study binding.
+        for ((arm, content) in listOf(
+            EvalArms.ARM_M0 to files.requestM0Json,
+            EvalArms.ARM_M1 to files.requestM1Json
+        )) {
+            try {
+                val req = SessionJson.parse(content)
+                    as? Map<String, Any?>
+                if (req == null) {
+                    problems.add("request-$arm: not a JSON object")
+                    continue
+                }
+                val body = req["body"] as? String
+                if (body == null) {
+                    problems.add("request-$arm: body missing")
+                    continue
+                }
+                val sha = req["body_sha256"] as? String
+                if (sha == null || !BenchConfig.sha256Hex(
+                        body.toByteArray(Charsets.UTF_8))
+                        .equals(sha, ignoreCase = true)
+                ) {
+                    problems.add("request-$arm: body hash mismatch")
+                }
+                if (req["endpoint"] != MetaApi.ENDPOINT) {
+                    problems.add("request-$arm: endpoint mismatch")
+                }
+                if (req["model"] != MetaApi.MODEL) {
+                    problems.add("request-$arm: model mismatch")
+                }
+                if (!body.contains(manifest.manifestHash) ||
+                    !body.contains(manifest.candidateHash)
+                ) {
+                    problems.add("request-$arm: not bound to this " +
+                        "manifest/candidate set")
+                }
+            } catch (_: SessionJson.JsonError) {
+                problems.add("request-$arm: not valid JSON")
+            }
+        }
+        // M0/M1 evidence separation on the frozen bodies.
+        try {
+            val m0body = ((SessionJson.parse(files.requestM0Json)
+                as? Map<String, Any?>)?.get("body") as? String).orEmpty()
+            val m1body = ((SessionJson.parse(files.requestM1Json)
+                as? Map<String, Any?>)?.get("body") as? String).orEmpty()
+            problems.addAll(verifyM0Clean(m0body, manifest))
+            for (e in manifest.admitted) {
+                if (!m1body.contains(e.runId)) {
+                    problems.add("request-M1: admitted run ${e.runId} " +
+                        "missing from payload")
+                }
+            }
+        } catch (_: SessionJson.JsonError) {
+            // Already reported above; no duplicate.
+        }
+        // Evidence bytes vs admitted SHAs (when supplied).
+        if (evidenceBytes != null) {
+            for (e in manifest.admitted) {
+                val bytes = evidenceBytes[e.runId]
+                if (bytes == null) {
+                    problems.add("evidence: no bytes for ${e.runId}")
+                } else if (!BenchConfig.sha256Hex(bytes)
+                        .equals(e.artifactSha256, ignoreCase = true)
+                ) {
+                    problems.add("evidence: ${e.runId} bytes changed " +
+                        "since freeze")
+                }
+            }
+        }
+        return problems
+    }
+
+    /**
+     * M0 contamination sweep: the frozen M0 body must name
+     * no admitted run id and carry no admitted throughput
+     * figure. Returns problems (empty = clean).
+     */
+    fun verifyM0Clean(body: String, manifest: StudyManifest): List<String> {
+        val problems = mutableListOf<String>()
+        for (e in manifest.admitted) {
+            if (body.contains(e.runId)) {
+                problems.add("request-M0: leaks run id ${e.runId}")
+            }
+            // Throughput figures render via Double.toString
+            // both in packs and here, so exact matching is
+            // sound (no rounding layer in between). Guards
+            // stop "7.0" matching inside "0.7.0-dev".
+            for ((label, fig) in listOf(
+                "gen_tps" to e.genTps.toString(),
+                "prefill_tps" to e.prefillTps.toString()
+            )) {
+                val guarded = Regex("(?<![0-9.])" +
+                    Regex.escape(fig) + "(?![0-9.])")
+                if (guarded.containsMatchIn(body)) {
+                    problems.add("request-M0: leaks $label $fig")
+                }
+            }
+        }
+        if (!body.contains("withheld")) {
+            problems.add("request-M0: withholding notice missing")
+        }
+        return problems
+    }
+
+    /**
+     * Output-directory guard for new freezes. A directory
+     * holding a study-verdict.json is an existing study
+     * and is NEVER written into. Any other non-empty
+     * directory needs an explicit new-instance request
+     * (unique instance id); a new freeze is a new study,
+     * not a continuation. Returns the problem, or null
+     * when writing is allowed.
+     */
+    fun checkOutputDir(
+        dir: java.io.File,
+        newInstance: Boolean,
+        instanceId: String?
+    ): String? {
+        if (java.io.File(dir, "study-verdict.json").isFile) {
+            return "output holds study-verdict.json: an existing " +
+                "study is immutable; choose a new directory"
+        }
+        val existing = dir.isDirectory &&
+            (dir.list()?.isNotEmpty() == true)
+        if (existing && !newInstance) {
+            return "output directory is not empty; set " +
+                "EF_STUDY_NEW_INSTANCE=YES with EF_STUDY_INSTANCE_ID " +
+                "to start a new study there"
+        }
+        if (newInstance && instanceId.isNullOrBlank()) {
+            return "EF_STUDY_NEW_INSTANCE=YES needs " +
+                "EF_STUDY_INSTANCE_ID"
+        }
+        return null
+    }
+
+    /**
+     * Re-derives the R selection from manifested evidence
+     * (same code path as preflight). Used to detect
+     * altered decision artifacts.
+     */
+    fun rederiveRSelection(manifest: StudyManifest): String {
+        val evidence = manifest.admitted.groupBy {
+            Triple(it.config.nCtx, it.config.nThreads, it.config.nPredict)
+        }.map { (_, records) ->
+            EvalBaseline.CandidateEvidence(
+                config = records.first().config,
+                genSamples = records.map { it.genTps },
+                elevatedThermal = records.count {
+                    it.thermalAfter != "none"
+                },
+                cohortKey = manifest.manifestHash
+            )
+        }
+        val r = EvalBaseline.decide(
+            listOf(manifest.candidateA, manifest.candidateB),
+            evidence, manifest.constraints.deviceMaxThreads)
+        return when {
+            r.abstained -> SELECT_ABSTAIN
+            r.selected == manifest.candidateA -> SELECT_A
+            r.selected == manifest.candidateB -> SELECT_B
+            else -> "OUT_OF_SET"
         }
     }
 }

@@ -1,5 +1,8 @@
 # EF-COMP-01B Stage B: Prospective Exploratory Protocol (PRE-REGISTERED, NOT AUTHORIZED TO RUN)
 
+Owner-executable steps (verify/live/score commands):
+`docs/ef-comp-01b-owner-run.md`.
+
 Two-configuration, six-run exploratory comparison of
 Baseline R vs Muse M0/M1 on the Galaxy S22 Ultra. This
 document freezes the design BEFORE any new measurement.

@@ -447,7 +447,7 @@ class EvalStudyTest {
         val decision = EvalStudy.recordArmDecision(
             EvalArms.ARM_M1, "{}", expectation(setOf(
                 "BENCH-20261027T170002Z-aaaa0001")),
-            EvalStudy.MockStudyTransport(canned), "mock-key", NOW,
+            EvalStudy.MockStudyTransport(canned), "mock-key", { NOW },
             EvalStudy.TRANSPORT_MOCK, latencyMs = 1234L)
         assertEquals("B", decision.selection)
         assertEquals(EvalStudy.TRANSPORT_MOCK, decision.transport)
@@ -462,7 +462,7 @@ class EvalStudyTest {
             EvalStudy.recordArmDecision(
                 EvalArms.ARM_M1, "{}", expectation(),
                 EvalStudy.MockStudyTransport(badCanned), "mock-key",
-                NOW, EvalStudy.TRANSPORT_MOCK)
+                { NOW }, EvalStudy.TRANSPORT_MOCK)
             fail("contract-violating reply accepted")
         } catch (e: EvalStudy.StudyError) {
             assertEquals("STUDY_SELECTION", e.code)
@@ -579,20 +579,23 @@ class EvalStudyTest {
         assertEquals(12.5, score.candidateB.medianGen.value!!, 1e-9)
         assertTrue(score.excludedRuns.isEmpty())
         // R and M1 picked the better median (regret 0);
-        // M0 picked B (regret 16 - 12.5 = 3.5).
-        assertEquals(0.0, score.armReports["R"]!!
-            .meanSelectionRegretTps.value!!, 1e-9)
-        assertEquals(3.5, score.armReports["M0"]!!
-            .meanSelectionRegretTps.value!!, 1e-9)
-        // Prediction errors pair each decision against
+        // M0 picked B (regret 16 - 12.5 = 3.5), each a
+        // single study-level observation (n=1).
+        assertEquals(0.0, score.regretByArm["R"]!!.value!!, 1e-9)
+        assertEquals(1, score.regretByArm["R"]!!.n)
+        assertEquals(3.5, score.regretByArm["M0"]!!.value!!, 1e-9)
+        assertEquals(1, score.regretByArm["M0"]!!.n)
+        // Decision level: exactly one case per arm.
+        assertEquals(1, score.decisionReports["M0"]!!.n)
+        // Run level: errors pair each decision against
         // runs of its selected config only.
-        assertEquals(3, score.armReports["M0"]!!.meanAbsErrorTps.n)
+        assertEquals(3, score.errorReports["M0"]!!.meanAbsErrorTps.n)
         assertTrue(score.labels.any { it.contains("exploratory") })
         // Study decisions authorize nothing: rejection
         // evidence is N/A, so enforcement stays
         // NOT_EVALUABLE rather than 0% or 100%.
-        assertEquals(EvalMetrics.NOT_EVALUABLE, score.armReports["R"]!!
-            .hostRejectionRate.status)
+        assertEquals(EvalMetrics.NOT_EVALUABLE,
+            score.decisionReports["R"]!!.hostRejectionRate.status)
     }
 
     @Test
@@ -603,10 +606,10 @@ class EvalStudyTest {
             listOf(studyDecision("M0", "abstain", NOW)),
             listOf(newRun("BENCH-20261030T130000Z-aaaa0001",
                 "2026-10-30T13:00:00Z", gen = 15.0)))
-        val report = score.armReports["M0"]!!
         assertEquals(EvalMetrics.NOT_EVALUABLE,
-            report.meanSelectionRegretTps.status)
-        assertEquals(1.0, report.abstentionRate.value!!, 1e-9)
+            score.regretByArm["M0"]!!.status)
+        assertEquals(1.0, score.decisionReports["M0"]!!
+            .abstentionRate.value!!, 1e-9)
         assertTrue(score.labels.any {
             it.contains("abstention is not a failed selection")
         })
@@ -638,10 +641,404 @@ class EvalStudyTest {
         assertTrue(score.excludedRuns.any { it.contains("unregistered") })
         assertTrue(score.excludedRuns.any { it.contains("unusable") })
         // B unmeasured: median NOT_EVALUABLE, regret needs
-        // >= 2 tested options so it withholds too.
+        // two measured medians so it withholds too.
         assertEquals(EvalMetrics.NOT_EVALUABLE,
             score.candidateB.medianGen.status)
         assertEquals(EvalMetrics.NOT_EVALUABLE,
-            score.armReports["R"]!!.meanSelectionRegretTps.status)
+            score.regretByArm["R"]!!.status)
+    }
+
+    // ---- FINAL Task 2: freeze verification ----
+
+    private fun frozenFiles(): EvalStudy.FrozenFileSet {
+        val out = EvalStudy.runPreflight(preflightInput(twoRunOffer()))
+        assertEquals(EvalStudy.VERDICT_READY, out.verdict)
+        val files = EvalStudy.FrozenFileSet(
+            manifestJson = out.manifestJson!!,
+            decisionRJson = out.decisionRJson!!,
+            requestM0Json = out.requestM0Json!!,
+            requestM1Json = out.requestM1Json!!,
+            verdictJson = SessionJson.stringify(linkedMapOf(
+                "study_id" to EvalStudy.STUDY_ID,
+                "verdict" to EvalStudy.VERDICT_READY,
+                "artifacts" to linkedMapOf(
+                    "study-manifest.json" to BenchConfig.sha256Hex(
+                        out.manifestJson!!.toByteArray(Charsets.UTF_8)),
+                    "study-decision-r.json" to BenchConfig.sha256Hex(
+                        out.decisionRJson!!.toByteArray(Charsets.UTF_8)),
+                    "study-request-m0.json" to BenchConfig.sha256Hex(
+                        out.requestM0Json!!.toByteArray(Charsets.UTF_8)),
+                    "study-request-m1.json" to BenchConfig.sha256Hex(
+                        out.requestM1Json!!.toByteArray(Charsets.UTF_8)),
+                    "study-prompts.txt" to BenchConfig.sha256Hex(
+                        out.promptsText!!.toByteArray(Charsets.UTF_8))))),
+            promptsText = out.promptsText)
+        assertTrue(EvalStudy.verifyFrozenStudy(files).isEmpty())
+        return files
+    }
+
+    @Test
+    fun frozenStudyVerificationDetectsTampering() {
+        val clean = frozenFiles()
+        // Manifest byte edit: hash check fires.
+        assertTrue(EvalStudy.verifyFrozenStudy(
+            clean.copy(manifestJson = clean.manifestJson
+                .replace("14.0", "94.0")))
+            .any { it.contains("manifest:") })
+        // Decision selection flip: re-derivation disagrees.
+        assertTrue(EvalStudy.verifyFrozenStudy(
+            clean.copy(decisionRJson = clean.decisionRJson
+                .replace("\"selection\":\"A\"",
+                    "\"selection\":\"B\"")))
+            .any { it.contains("decision-r:") })
+        // Request body edit: body hash fires.
+        assertTrue(EvalStudy.verifyFrozenStudy(
+            clean.copy(requestM0Json = clean.requestM0Json
+                .replace("CANDIDATE_A", "CANDIDATE_X")))
+            .any { it.contains("body hash") })
+        // Endpoint swap refuses even with recomputed hash.
+        val swapped = clean.requestM0Json
+            .replace(MetaApi.ENDPOINT, "https://evil.example/v1/responses")
+        assertTrue(EvalStudy.verifyFrozenStudy(
+            clean.copy(requestM0Json = swapped))
+            .any { it.contains("endpoint") })
+        // M0 contamination: inject an admitted run id and
+        // re-hash the wrapper so ONLY the sweep fires.
+        val dirtyBody = (SessionJson.parse(clean.requestM0Json)
+            as Map<String, Any?>)["body"] as String +
+            " BENCH-20261027T170002Z-aaaa0001"
+        val dirtyReq = SessionJson.stringify(linkedMapOf(
+            "study_id" to EvalStudy.STUDY_ID,
+            "arm" to EvalArms.ARM_M0,
+            "endpoint" to MetaApi.ENDPOINT,
+            "model" to MetaApi.MODEL,
+            "built_at_utc" to NOW,
+            "body_sha256" to BenchConfig.sha256Hex(
+                dirtyBody.toByteArray(Charsets.UTF_8)),
+            "body" to dirtyBody))
+        assertTrue(EvalStudy.verifyFrozenStudy(
+            clean.copy(requestM0Json = dirtyReq))
+            .any { it.contains("leaks run id") })
+    }
+
+    @Test
+    fun outputDirGuardsProtectExistingStudies() {
+        val fresh = temp.newFolder("fresh")
+        assertNull(EvalStudy.checkOutputDir(fresh, false, null))
+        val study = temp.newFolder("study")
+        java.io.File(study, "study-verdict.json").writeText("{}")
+        assertTrue(EvalStudy.checkOutputDir(study, false, null)!!
+            .contains("immutable"))
+        // Even an explicit new instance never writes into
+        // an existing study directory.
+        assertTrue(EvalStudy.checkOutputDir(study, true, "x")!!
+            .contains("immutable"))
+        val cluttered = temp.newFolder("cluttered")
+        java.io.File(cluttered, "notes.txt").writeText("x")
+        assertTrue(EvalStudy.checkOutputDir(cluttered, false, null)!!
+            .contains("EF_STUDY_NEW_INSTANCE"))
+        assertTrue(EvalStudy.checkOutputDir(cluttered, true, null)!!
+            .contains("EF_STUDY_INSTANCE_ID"))
+        assertNull(EvalStudy.checkOutputDir(cluttered, true, "s2"))
+    }
+
+    // ---- FINAL Task 3: live capture paths (offline) ----
+
+    @Test
+    fun decisionTimestampIsReadAfterValidation() {
+        val events = mutableListOf<String>()
+        val transport = object : EvalStudy.StudyTransport {
+            override fun post(
+                apiKey: String,
+                body: String
+            ): EvalStudy.StudyHttpResult {
+                events.add("post")
+                return EvalStudy.StudyHttpResult(200,
+                    SessionJson.stringify(linkedMapOf(
+                        "output_text" to SessionJson.stringify(
+                            reply("A")))))
+            }
+        }
+        val decision = EvalStudy.recordArmDecision(
+            EvalArms.ARM_M0, "{}", expectation(), transport,
+            "mock-key", { events.add("clock"); NOW },
+            EvalStudy.TRANSPORT_MOCK)
+        assertEquals(NOW, decision.decidedAtUtc)
+        // POST first, clock only after receipt+validation.
+        assertEquals(listOf("post", "clock", "clock"), events)
+    }
+
+    @Test
+    fun frozenRequestLoadingEnforcesIdentity() {
+        val out = EvalStudy.runPreflight(preflightInput(twoRunOffer()))
+        val manifest = EvalStudy.parseManifest(out.manifestJson!!)
+        val frozen = EvalStudy.loadFrozenRequest(
+            out.requestM1Json!!, EvalArms.ARM_M1, manifest)
+        assertEquals(MetaApi.MODEL, frozen.model)
+        // Body edit without hash update: caught.
+        try {
+            EvalStudy.loadFrozenRequest(
+                out.requestM1Json!!.replace(
+                    "CANDIDATE_A", "CANDIDATE_X"),
+                EvalArms.ARM_M1, manifest)
+            fail("edited body accepted")
+        } catch (e: EvalStudy.StudyError) {
+            assertEquals("STUDY_REQUEST", e.code)
+        }
+        // Body from another manifest: unbound.
+        val other = EvalStudy.freezeStudy(constraints(), candidateA(),
+            candidateB(),
+            listOf(twoRunOffer().first().copy(corpusId = "solo")),
+            CUTOFF, NOW)
+        try {
+            EvalStudy.loadFrozenRequest(
+                out.requestM1Json!!, EvalArms.ARM_M1, other)
+            fail("unbound body accepted")
+        } catch (e: EvalStudy.StudyError) {
+            assertEquals("STUDY_REQUEST", e.code)
+        }
+    }
+
+    @Test
+    fun armCitationRechecksCatchForgery() {
+        val manifest = frozenManifest()
+        val admitted = manifest.admitted.first().runId
+        val m0clean = studyDecision("M0", "A", NOW)
+        assertTrue(EvalStudy.verifyArmCitations(m0clean, manifest)
+            .isEmpty())
+        val m0dirty = m0clean.copy(
+            supportingEvidenceIds = listOf(admitted))
+        assertTrue(EvalStudy.verifyArmCitations(m0dirty, manifest)
+            .single().contains("M0 cites"))
+        val m1good = studyDecision("M1", "A", NOW).copy(
+            supportingEvidenceIds = listOf(admitted))
+        assertTrue(EvalStudy.verifyArmCitations(m1good, manifest)
+            .isEmpty())
+        val m1forged = m1good.copy(
+            supportingEvidenceIds = listOf("BENCH-FORGED"))
+        assertTrue(EvalStudy.verifyArmCitations(m1forged, manifest)
+            .single().contains("unmanifested"))
+    }
+
+    // ---- FINAL Task 4: qualified scoring ----
+
+    private fun liveDecision(
+        arm: String,
+        selection: String,
+        decidedAt: String,
+        manifest: EvalStudy.StudyManifest,
+        cited: List<String> = emptyList(),
+        gen: Double? = 15.0,
+        cost: Double? = null,
+        latency: Long? = null
+    ): String {
+        val payload = reply(selection, cited = cited, gen = gen,
+            reason = if (selection == "abstain") "thin" else null)
+        val raw = SessionJson.stringify(payload)
+        val allowed = if (arm == EvalArms.ARM_M0) {
+            emptySet()
+        } else {
+            manifest.admitted.map { it.runId }.toSet()
+        }
+        val decision = EvalStudy.validateStudyDecision(
+            payload, raw,
+            EvalStudy.StudyExpectation(
+                candidateA = manifest.candidateA,
+                candidateB = manifest.candidateB,
+                modelSha256 = manifest.constraints.modelSha256,
+                workloadId = manifest.constraints.workloadId,
+                allowedRunIds = allowed,
+                deviceMaxThreads =
+                    manifest.constraints.deviceMaxThreads),
+            arm, decidedAt, EvalStudy.TRANSPORT_LIVE)
+            .copy(costUsd = cost, latencyMs = latency)
+        return EvalStudy.decisionJson(decision)
+    }
+
+    private fun sixRunInputs(): List<EvalStudy.StudyRunInput> {
+        val specs = listOf(
+            Triple("BENCH-20261030T130000Z-aaaa0001",
+                "2026-10-30T13:00:00Z", 4 to 15.0),
+            Triple("BENCH-20261030T131000Z-bbbb0001",
+                "2026-10-30T13:10:00Z", 8 to 12.0),
+            Triple("BENCH-20261030T132000Z-bbbb0002",
+                "2026-10-30T13:20:00Z", 8 to 13.0),
+            Triple("BENCH-20261030T133000Z-aaaa0002",
+                "2026-10-30T13:30:00Z", 4 to 17.0),
+            Triple("BENCH-20261030T134000Z-aaaa0003",
+                "2026-10-30T13:40:00Z", 4 to 16.0),
+            Triple("BENCH-20261030T135000Z-bbbb0003",
+                "2026-10-30T13:50:00Z", 8 to 12.5)
+        )
+        return specs.mapIndexed { i, (runId, collected, config) ->
+            val (threads, gen) = config
+            EvalStudy.StudyRunInput("run-$i",
+                artifactJson(runId, gen = gen, collected = collected,
+                    threads = threads)
+                    .toByteArray(Charsets.UTF_8))
+        }
+    }
+
+    private fun qualifiedScore(): EvalStudy.StudyScore {
+        val out = EvalStudy.runPreflight(preflightInput(twoRunOffer()))
+        val manifest = EvalStudy.parseManifest(out.manifestJson!!)
+        return EvalStudy.scoreStudy(
+            out.manifestJson!!,
+            listOf(
+                out.decisionRJson!!,
+                liveDecision("M0", "B", "2026-10-30T12:05:00Z",
+                    manifest, gen = 18.0, cost = 0.05,
+                    latency = 2000L),
+                liveDecision("M1", "A", "2026-10-30T12:10:00Z",
+                    manifest,
+                    cited = listOf(manifest.admitted.first().runId),
+                    gen = 14.5, cost = 0.07, latency = 3000L)
+            ),
+            sixRunInputs())
+    }
+
+    @Test
+    fun qualifiedScoringIngestsSourceBytesEndToEnd() {
+        val score = qualifiedScore()
+        assertEquals(16.0, score.candidateA.medianGen.value!!, 1e-9)
+        assertEquals(12.5, score.candidateB.medianGen.value!!, 1e-9)
+        assertEquals(0.0, score.regretByArm["M1"]!!.value!!, 1e-9)
+        assertEquals(3.5, score.regretByArm["M0"]!!.value!!, 1e-9)
+        // One cost/latency record per provider call: M0's
+        // single $0.05 call is not tripled over 3 runs.
+        val m0 = score.decisionReports["M0"]!!
+        assertEquals(0.05, m0.totalCostUsd.value!!, 1e-9)
+        assertEquals(1, m0.totalCostUsd.n)
+        assertEquals(2000.0, m0.meanLatencyMs.value!!, 1e-9)
+        assertEquals(EvalMetrics.NOT_EVALUABLE,
+            score.errorReports["M0"]!!.totalCostUsd.status)
+        // Six trials are not six decisions.
+        assertEquals(1, m0.n)
+        assertEquals(3, score.errorReports["M0"]!!.n)
+    }
+
+    @Test
+    fun qualifiedScoringBlocksOnBadArtifacts() {
+        val out = EvalStudy.runPreflight(preflightInput(twoRunOffer()))
+        val manifest = EvalStudy.parseManifest(out.manifestJson!!)
+        val m0 = liveDecision("M0", "B", "2026-10-30T12:05:00Z",
+            manifest, gen = 18.0)
+        val m1 = liveDecision("M1", "A", "2026-10-30T12:10:00Z",
+            manifest, cited = listOf(manifest.admitted.first().runId),
+            gen = 14.5)
+        val decisions = listOf(out.decisionRJson!!, m0, m1)
+        fun expectBlock(
+            label: String,
+            decs: List<String> = decisions,
+            runs: List<EvalStudy.StudyRunInput> = sixRunInputs(),
+            fragment: String
+        ) {
+            try {
+                EvalStudy.scoreStudy(out.manifestJson!!, decs, runs)
+                fail("scoring accepted $label")
+            } catch (e: EvalStudy.StudyError) {
+                assertTrue("$label: ${e.message}",
+                    e.message!!.contains(fragment))
+            }
+        }
+        // Missing export.
+        expectBlock("5 runs", runs = sixRunInputs().take(5),
+            fragment = "expected 6")
+        // Corrupt bytes.
+        expectBlock("corrupt run", runs = sixRunInputs().toMutableList()
+            .also { it[0] = EvalStudy.StudyRunInput("run-0", "{bad".toByteArray()) },
+            fragment = "not valid JSON")
+        // Wrong model identity.
+        val wrongModel = artifactJson("BENCH-20261030T130000Z-aaaa0001",
+            gen = 15.0, collected = "2026-10-30T13:00:00Z",
+            modelSha = "00".repeat(32))
+        expectBlock("wrong model", runs = sixRunInputs().toMutableList()
+            .also {
+                it[0] = EvalStudy.StudyRunInput("run-0",
+                    wrongModel.toByteArray(Charsets.UTF_8))
+            },
+            fragment = "model SHA-256 mismatch")
+        // Wrong runtime.
+        val wrongRuntime = artifactJson(
+            "BENCH-20261030T130000Z-aaaa0001",
+            gen = 15.0, collected = "2026-10-30T13:00:00Z")
+            .replace(""""version":"0.7.0-dev"""",
+                """"version":"9.9.9"""")
+        expectBlock("wrong runtime", runs = sixRunInputs().toMutableList()
+            .also {
+                it[0] = EvalStudy.StudyRunInput("run-0",
+                    wrongRuntime.toByteArray(Charsets.UTF_8))
+            },
+            fragment = "runtime identity mismatch")
+        // Duplicate run ids.
+        expectBlock("dup ids", runs = sixRunInputs().toMutableList()
+            .also { it[1] = it[0] }, fragment = "duplicate run id")
+        // Decision inversion: a run STARTs before M1 decided.
+        val early = artifactJson("BENCH-20261030T120500Z-eeee0001",
+            gen = 15.0, collected = "2026-10-30T12:05:00Z")
+        expectBlock("inversion", runs = sixRunInputs().toMutableList()
+            .also {
+                it[0] = EvalStudy.StudyRunInput("run-0",
+                    early.toByteArray(Charsets.UTF_8))
+            },
+            fragment = "does not predate START")
+        // Collected/START skew.
+        val skewed = artifactJson("BENCH-20261030T130000Z-aaaa0001",
+            gen = 15.0, collected = "2026-10-30T15:00:00Z")
+        expectBlock("skew", runs = sixRunInputs().toMutableList()
+            .also {
+                it[0] = EvalStudy.StudyRunInput("run-0",
+                    skewed.toByteArray(Charsets.UTF_8))
+            },
+            fragment = "inconsistent with START")
+        // Altered M0 selection (record says B, payload says A).
+        val altered = m0.replace("\"selection\":\"B\"",
+            "\"selection\":\"A\"")
+        expectBlock("altered decision",
+            decs = listOf(out.decisionRJson!!, altered, m1),
+            fragment = "re-validated")
+        // Mock-synthetic decisions can never qualify.
+        val mock = m0.replace("\"transport\":\"live\"",
+            "\"transport\":\"mock-synthetic\"")
+        expectBlock("mock decision",
+            decs = listOf(out.decisionRJson!!, mock, m1),
+            fragment = "mock-synthetic")
+        // Missing arm.
+        expectBlock("missing arm",
+            decs = listOf(out.decisionRJson!!, m0),
+            fragment = "exactly R, M0, M1")
+        // R selection flipped: re-derivation disagrees.
+        val rFlip = out.decisionRJson!!.replace("\"selection\":\"A\"",
+            "\"selection\":\"B\"")
+        expectBlock("R flip",
+            decs = listOf(rFlip, m0, m1), fragment = "re-derived")
+    }
+
+    @Test
+    fun qualifiedScoringExcludesFailedRunsWithoutBlocking() {
+        val out = EvalStudy.runPreflight(preflightInput(twoRunOffer()))
+        val manifest = EvalStudy.parseManifest(out.manifestJson!!)
+        val failed = artifactJson("BENCH-20261030T135000Z-bbbb0003",
+            gen = 12.5, collected = "2026-10-30T13:50:00Z",
+            threads = 8).replace(
+            """"status":"COMPLETED"""", """"status":"FAILED"""")
+        val score = EvalStudy.scoreStudy(
+            out.manifestJson!!,
+            listOf(
+                out.decisionRJson!!,
+                liveDecision("M0", "B", "2026-10-30T12:05:00Z",
+                    manifest, gen = 18.0),
+                liveDecision("M1", "A", "2026-10-30T12:10:00Z",
+                    manifest,
+                    cited = listOf(manifest.admitted.first().runId),
+                    gen = 14.5)),
+            sixRunInputs().toMutableList().also {
+                it[5] = EvalStudy.StudyRunInput("run-5",
+                    failed.toByteArray(Charsets.UTF_8))
+            })
+        assertEquals(1, score.excludedRuns.size)
+        assertTrue(score.excludedRuns.single().contains("not COMPLETED"))
+        // B still scores from its 2 surviving runs.
+        assertEquals(2, score.candidateB.medianGen.n)
     }
 }
