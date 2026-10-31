@@ -37,6 +37,13 @@ Every response carries `api_version: "1.x"`.
 Codes: `bad_request`, `unauthorized`, `forbidden`, `not_found`,
 `conflict`, `too_large`, `unsupported_contract`, `quota_exceeded`
 (429 + `Retry-After`), `unprocessable` (itemized validation errors).
+G1B implementation notes (no status change): the host backend also
+uses `body_too_large`, `malformed_json`, `invalid_submission`
+(itemized), `method_not_allowed`, `runs_disclosure_disabled`,
+`internal` (500, generic message, nothing internal leaks), and
+`temporarily_unavailable` (503 + `Retry-After: 1` on transient
+database contention). Every response carries a `headers` map
+(`{}` when empty).
 
 ## Endpoints
 
@@ -64,7 +71,9 @@ Returns `200` with the new state.
 
 Query: `model_sha` (required), `config_hash?`, `build?`
 (`effective_opt` + status, required to distinguish builds),
-`device_class?`, `workload_id?` (default `edgefit-prompt-v1`).
+`device_class?`, `workload_id?` (default `edgefit-prompt-v1`),
+`prompt_sha?` (G1B: isolates exact prompt bytes within a workload).
+Cohort identity always includes `prompt_sha`; cohort objects echo it.
 Response: `{"groups": [{"model_sha", "config_hash", "build",
 "device_class", "mean_tps", "median_tps", "n", "install_count",
 "mean_abs_pct_error|null", "updated_at_utc"}]}`.
@@ -119,6 +128,13 @@ model artifact catalog and the benchmark evidence/aggregate
 store remain distinct data domains even if deployed in one
 database; a family label is never a substitute for an exact
 artifact SHA-256.
+G1B rule (implements ef-stats-01 cross-model reads): each
+exact cohort qualifies independently under the 5-run /
+3-install quorum; a candidate without a quorum-passing cohort
+returns `insufficient_evidence` with null means; published
+candidates report statistics from ONE representative
+quorum-passing cohort (largest, deterministic tie-break),
+never a pooled cross-cohort mean.
 
 ### Internal: evidence_retrieve (not HTTP)
 
@@ -145,6 +161,11 @@ reads. Every stored row keeps source hash, app/collector versions,
 receipt time, and eligibility history. Anomaly bounds per group
 reject implausible throughput; velocity caps flag device floods
 for quarantine review.
+G1B: quota is claimed atomically (one statement; concurrent
+uploads cannot over-admit); rejected claims roll back and answer
+`429` with `Retry-After` to the next UTC midnight; invalid
+bodies never consume quota. Global per-IP read limits remain a
+deployment-edge responsibility, not implemented in the handler.
 
 ## Worked example: public aggregate
 

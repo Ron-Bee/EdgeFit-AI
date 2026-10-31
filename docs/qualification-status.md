@@ -1499,3 +1499,91 @@ Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
 - EF-COMP-01B-GATE-1A: DOCS PASS. PHONE
   UI ACCEPTANCE BLOCKED on ROUTE install +
   GGUF staging (owner actions).
+
+## EF-GLOBAL-01-G1B (evidence integrity correction; HOST ONLY)
+
+- Agent-executed corrections on
+  `implement/ef-global-01-2026-10-30` from 7a30853,
+  closing G1 audit defects D1-D8 in `cloud/` only
+  (no Android, methodology, Agent, ADR, or infra
+  changes): canonical v2 cohort identity
+  (`cloud/cohort.js`, one shared grouping unit for
+  aggregates/candidates/Muse retrieval; prompt_sha
+  a full member; unambiguous serialization; v1
+  `cohort_hash` values withdrawn as invalid, no
+  production data to migrate); per-cohort candidate
+  quorum with representative-cohort statistics and
+  no pooled means; atomic quota-claim + submission
+  and compare-and-swap eligibility/revocation
+  transactions (`db.transaction`, BEGIN IMMEDIATE,
+  busy_timeout); validation-before-quota ordering;
+  bounded id-collision retries; sanitized 500/503
+  envelopes with `retry-after` headers; corrupt-row
+  holds that never abort a pass. Contract + README
+  + traceability N/O/P clarified; all ADRs keep
+  their PROPOSED/ACCEPTED status.
+- Host evidence: `npm test` 77/77 PASS twice
+  (38 original unmodified + 31 RED counterexamples
+  recorded failing first + 8 independent
+  challenges), Node 24, zero deps; RED baseline
+  50/69 with all 19 designed failures for cause.
+  Interleave harness (two connections, shared temp
+  file, self-cleaning) proves terminal revocation,
+  quota-edge admission, duplicate races, and
+  UNIQUE/id-collision handling. No synthetic
+  evidence path exists; every PUBLISHED test row
+  owns a full promotion chain.
+- NOT deployed: D1 semantics UNVERIFIED (no D1
+  test; batch/error/contention/budgets need
+  staging); no Cloudflare resources, DNS,
+  accounts, tokens, or community data. Open gates:
+  ADR-009 choice, quorum activation, consent
+  policy, token ops, migration runner, edge rate
+  limits, Explorer scope, physical multi-device
+  evidence (all owner-gated).
+- EF-GLOBAL-01-G1B: IMPLEMENTATION PASS.
+  HOST PASS. DEPLOYMENT STILL STOPPED
+  (owner-gated).
+
+## EF-GLOBAL-01-G2A (local staging-compat; HOST ONLY, no deploys)
+
+- Agent-executed engineering under owner
+  decision G2-A (H1-H13 direction; local source,
+  fixtures, D1-compatible design, migrations,
+  docs, offline qual ONLY): the three atomic
+  units converted from transaction callbacks to
+  D1-batch-compatible guarded writes
+  (`db.batch`, array in / results out, no
+  mid-batch reads; quota verdict by conditional
+  INSERT change count with in-batch counter
+  compensation; CAS transitions and revocation
+  by guarded UPDATE + conditional history);
+  adapter interface is now
+  { get, all, run, exec, batch, close };
+  versioned migrations started
+  (`migrations/001_init.sql`, drift-guarded);
+  D1-shape interface-conformance suite added
+  (adapter parity, error-contract mapping point,
+  app subset re-proven through the D1-shape
+  adapter). G1B race tests kept with equivalent
+  deterministic scenarios (same-install quota
+  race with exact counts; duplicate race to
+  duplicate:true; vanishing-UNIQUE to 503);
+  lock-timing contention stays covered by the
+  injected-busy tests. No ADR change; no
+  Android, methodology, Agent, or infra change.
+- Host evidence: `npm test` 93/93 PASS
+  (77 prior + 16 G2), Node 24, zero deps.
+  D1-shape suite proves INTERFACE compatibility
+  only; D1 service behavior (error text,
+  limits, contention, replication) is
+  UNVERIFIED by design and needs staging.
+- NOT authorized and NOT done: Cloudflare
+  provisioning, deployment, DNS, billing, live
+  database, real-device uploads, public
+  statistics, Meta keys, push. Staging design
+  recorded in
+  `docs/ef-global-01-g2-staging-design.md`.
+- EF-GLOBAL-01-G2A: IMPLEMENTATION PASS.
+  HOST PASS. STAGING STILL STOPPED
+  (owner-gated).

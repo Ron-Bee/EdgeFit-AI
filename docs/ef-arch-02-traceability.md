@@ -165,20 +165,31 @@ status reflects the strongest evidence actually recorded in
 ## N. Global evidence qualification
 
 - Requirement/doc: EF-CLOUD-01 eligibility pipeline (PROPOSED).
-- Implementation: none.
-- Qualified evidence: none.
-- Missing: backend, rules engine, quarantine, revocation.
+- Implementation: `cloud/` host foundation (EF-CLOUD-01A) with
+  G1B corrections: atomic quota-claim + submission transactions,
+  compare-and-swap SUBMITTED→VALIDATED→QUALIFIED→PUBLISHED with
+  history, terminal revocation, anomaly/velocity holds.
+- Qualified evidence: HOST QUALIFIED (node:test 77/77 incl.
+  interleave-harness revocation/quota/duplicate races; synthetic
+  fixtures only, nothing deployed).
+- Missing: deployment (hosting choice, D1 binding, token ops,
+  consent policy, migration runner), staging drills.
 - v2 requirement: reconciled contract (Phase 5).
 - Acceptance test: staged SUBMITTED→PUBLISHED + revoke/tombstone.
-- Dependency: EF-CLOUD-01 (PROPOSED).
+- Dependency: EF-CLOUD-01 (PROPOSED); EF-GLOBAL-01 deployment gates.
 
 ## O. Public statistical aggregation
 
 - Requirement/doc: EF-CLOUD-01 aggregates vs EF-STATS-01 cohorts.
-- Implementation: none.
-- Qualified evidence: none. The 2 S22 Ultra rows are NOT community
+- Implementation: `cloud/cohort.js` canonical v2 identity shared by
+  aggregates, per-cohort candidates, and retrieval (G1B); quorum
+  5 runs / 3 installs enforced per exact cohort.
+- Qualified evidence: HOST QUALIFIED (node:test 77/77 incl.
+  prompt-sha/delimiter/pooling counterexamples + quorum
+  boundaries). The 2 S22 Ultra rows are NOT community
   statistics and must never be presented as such.
-- Missing: methodology decision, quorum, device counting, API.
+- Missing: methodology activation decision, deployment, physical
+  multi-device evidence, Evidence Explorer.
 - v2 requirement: one reconciled stats methodology + API (Phase 5).
 - Acceptance test: thin cohort → insufficient-evidence; else exact
   mean/median/n with fixtures.
@@ -188,9 +199,14 @@ status reflects the strongest evidence actually recorded in
 ## P. Global evidence retrieval by Meta
 
 - Requirement/doc: ADR-008 (PROPOSED); cloud contract §Internal.
-- Implementation: none (workstation EF-META-05/06 only).
-- Qualified evidence: none at global scope.
-- Missing: server dispatcher, pinned global value sets.
+- Implementation: `cloud/retrieval.js` fixed allowlisted query over
+  quorum-passing PUBLISHED cohorts (host function only; no server
+  dispatcher, no Muse wiring). Workstation EF-META-05/06 unchanged.
+- Qualified evidence: HOST QUALIFIED for the function (allowlist,
+  caps, quorum, injection matrix on fixtures, parity with public
+  aggregates); none at deployed global scope.
+- Missing: server dispatcher, production pinned value sets,
+  staging-data acceptance.
 - v2 requirement: extend qualified patterns; aggregates only.
 - Acceptance test: tool-cap + injection matrix on staging data.
 - Dependency: EF-CLOUD-01.
@@ -387,8 +403,8 @@ G. EF-DEMO-01 (qualified-functionality recording only; claims
 
 - PHYSICALLY QUALIFIED: A, B, C, E (bench path), F (imports),
   K (scoped loop).
-- HOST QUALIFIED: D (impl), G, H, I, J.
-- PROPOSED / NOT STARTED: L, M, N, O, P, Q, R, S, T (data), U,
+- HOST QUALIFIED: D (impl), G, H, I, J, N, O, P (host fns only).
+- PROPOSED / NOT STARTED: L, M, Q, R, S, T (data), U,
   V, W, X, Y, Z, AA.
 - BLOCKED on phone/live: D physical, G live, J live,
   K termination paths, T data.

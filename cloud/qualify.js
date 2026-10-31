@@ -1,9 +1,13 @@
-// EF-CLOUD-01A eligibility engine. Transitions run through
-// rules only: SUBMITTED -> VALIDATED (schema recheck) ->
-// QUALIFIED (anomaly/velocity suite) -> PUBLISHED (consent
-// current). REVOKED is terminal. runQualification processes
-// one pass and reports promotions plus holds; holds leave
-// no history row (nothing transitioned).
+// EF-CLOUD-01A eligibility engine, G1B atomicity (D4/D7).
+// Transitions run through rules only: SUBMITTED -> VALIDATED
+// (schema recheck) -> QUALIFIED (anomaly/velocity suite) ->
+// PUBLISHED (consent current). REVOKED is terminal. Each single
+// transition is one compare-and-swap batch: a row changed
+// concurrently (notably REVOKED by its owner) is never promoted,
+// never resurrected, and gains no history row. runQualification
+// reports promotions, holds, and deferred rows; holds and
+// deferrals leave no history row (nothing transitioned).
+// Corrupt stored JSON always holds its row, never aborts a pass.
 
 import { MAX_PLAUSIBLE_TPS, validateSubmission } from "./validate.js";
 
@@ -15,15 +19,47 @@ function utcNow(nowMs) {
   return new Date(nowMs).toISOString();
 }
 
+function safeParse(text) {
+  try {
+    const value = JSON.parse(text);
+    return { ok: true, value };
+  } catch {
+    return { ok: false, value: null };
+  }
+}
+
+/**
+ * Conditional single-step transition in one atomic batch. The guard
+ * names the expected from-state and every follow-on write is
+ * conditional on the transition having applied, so the unit stays
+ * valid on D1 batch() (no mid-batch reads). Returns true when the
+ * guarded UPDATE applied exactly one row.
+ */
 function transition(db, submissionId, from, to, reason, at) {
-  db.run("UPDATE submissions SET eligibility = ? WHERE submission_id = ?",
-    to, submissionId);
-  db.run(
-    `INSERT INTO eligibility_history
-       (submission_id, from_state, to_state, reason, at)
-     VALUES (?, ?, ?, ?, ?)`,
-    submissionId, from, to, reason, at,
-  );
+  const statements = [
+    {
+      sql: `UPDATE submissions SET eligibility = ?
+            WHERE submission_id = ? AND eligibility = ?`,
+      params: [to, submissionId, from],
+    },
+    {
+      sql: `INSERT INTO eligibility_history
+              (submission_id, from_state, to_state, reason, at)
+            SELECT ?, ?, ?, ?, ?
+            WHERE (SELECT eligibility FROM submissions
+                   WHERE submission_id = ?) = ?`,
+      params: [submissionId, from, to, reason, at, submissionId, to],
+    },
+  ];
+  if (to === "PUBLISHED") {
+    statements.push({
+      sql: `UPDATE submissions SET published_at = ?
+            WHERE submission_id = ? AND eligibility = 'PUBLISHED'`,
+      params: [at, submissionId],
+    });
+  }
+  const [updated] = db.batch(statements);
+  return updated.changes === 1;
 }
 
 /**
@@ -76,87 +112,132 @@ export function runQualification(db, nowMs, deps) {
   const at = utcNow(nowMs);
   const promoted = [];
   const held = [];
+  const deferred = [];
+  // The snapshot is a worklist only: every step below re-reads its
+  // row outside the batch and the batch re-guards on from-state,
+  // yielding to concurrent writers.
   const pending = db.all(
     `SELECT * FROM submissions
      WHERE eligibility IN ('SUBMITTED', 'VALIDATED', 'QUALIFIED')
      ORDER BY received_at ASC, submission_id ASC LIMIT ?`,
     BATCH_LIMIT,
   );
-  for (const row of pending) {
-    if (row.eligibility === "SUBMITTED") {
-      let result;
-      try {
-        result = JSON.parse(row.result_json);
-      } catch {
-        held.push({
-          submission_id: row.submission_id,
-          state: "SUBMITTED",
-          reason: "stored result is not JSON",
-        });
-        continue;
+  for (const snap of pending) {
+    try {
+      const id = snap.submission_id;
+      const live = db.get(
+        "SELECT * FROM submissions WHERE submission_id = ?", id);
+      if (!live || live.eligibility === "REVOKED") continue;
+      if (live.eligibility === "SUBMITTED") {
+        const parsed = safeParse(live.result_json);
+        const consent = safeParse(live.consent_scopes);
+        if (!parsed.ok) {
+          held.push({
+            submission_id: id,
+            state: "SUBMITTED",
+            reason: "stored result is not JSON",
+          });
+          continue;
+        }
+        if (!consent.ok) {
+          held.push({
+            submission_id: id,
+            state: "SUBMITTED",
+            reason: "stored consent record is not JSON",
+          });
+          continue;
+        }
+        const envelope = {
+          result: parsed.value,
+          consent: {
+            policy_version: live.consent_policy_version,
+            accepted_at: live.consent_accepted_at,
+            scopes: consent.value,
+          },
+        };
+        const checked = validateSubmission(envelope, nowMs, deps);
+        if (!checked.ok) {
+          held.push({
+            submission_id: id,
+            state: "SUBMITTED",
+            reason: `schema recheck: ${checked.rejections[0].field} ${checked.rejections[0].reason}`,
+          });
+          continue;
+        }
+        if (!transition(db, id, "SUBMITTED", "VALIDATED",
+          "schema recheck passed", at)) {
+          deferred.push({
+            submission_id: id,
+            reason: "concurrent modification; retry next pass",
+          });
+          continue;
+        }
+        live.eligibility = "VALIDATED";
+        promoted.push({ submission_id: id, from: "SUBMITTED", to: "VALIDATED" });
       }
-      const envelope = {
-        result,
-        consent: {
-          policy_version: row.consent_policy_version,
-          accepted_at: row.consent_accepted_at,
-          scopes: JSON.parse(row.consent_scopes),
-        },
-      };
-      const checked = validateSubmission(envelope, nowMs, deps);
-      if (!checked.ok) {
-        held.push({
-          submission_id: row.submission_id,
-          state: "SUBMITTED",
-          reason: `schema recheck: ${checked.rejections[0].field} ${checked.rejections[0].reason}`,
-        });
-        continue;
+      if (live.eligibility === "VALIDATED") {
+        const parsed = safeParse(live.result_json);
+        if (!parsed.ok) {
+          held.push({
+            submission_id: id,
+            state: "VALIDATED",
+            reason: "stored result is not JSON",
+          });
+          continue;
+        }
+        const hold = anomalyHold(db, live, parsed.value, nowMs, deps);
+        if (hold !== null) {
+          held.push({ submission_id: id, state: "VALIDATED", reason: hold });
+          continue;
+        }
+        if (!transition(db, id, "VALIDATED", "QUALIFIED",
+          "anomaly suite passed", at)) {
+          deferred.push({
+            submission_id: id,
+            reason: "concurrent modification; retry next pass",
+          });
+          continue;
+        }
+        live.eligibility = "QUALIFIED";
+        promoted.push({ submission_id: id, from: "VALIDATED", to: "QUALIFIED" });
       }
-      transition(db, row.submission_id, "SUBMITTED", "VALIDATED",
-        "schema recheck passed", at);
-      row.eligibility = "VALIDATED";
-      promoted.push({
-        submission_id: row.submission_id, from: "SUBMITTED", to: "VALIDATED",
-      });
-    }
-    if (row.eligibility === "VALIDATED") {
-      const result = JSON.parse(row.result_json);
-      const hold = anomalyHold(db, row, result, nowMs, deps);
-      if (hold !== null) {
-        held.push({
-          submission_id: row.submission_id,
-          state: "VALIDATED",
-          reason: hold,
-        });
-        continue;
+      if (live.eligibility === "QUALIFIED") {
+        const consent = safeParse(live.consent_scopes);
+        if (!consent.ok) {
+          held.push({
+            submission_id: id,
+            state: "QUALIFIED",
+            reason: "stored consent record is not JSON",
+          });
+          continue;
+        }
+        if (!consent.value.includes("aggregates")) {
+          held.push({
+            submission_id: id,
+            state: "QUALIFIED",
+            reason: "aggregate consent scope missing",
+          });
+          continue;
+        }
+        if (!transition(db, id, "QUALIFIED", "PUBLISHED",
+          "consent current; published", at)) {
+          deferred.push({
+            submission_id: id,
+            reason: "concurrent modification; retry next pass",
+          });
+          continue;
+        }
+        promoted.push({ submission_id: id, from: "QUALIFIED", to: "PUBLISHED" });
       }
-      transition(db, row.submission_id, "VALIDATED", "QUALIFIED",
-        "anomaly suite passed", at);
-      row.eligibility = "QUALIFIED";
-      promoted.push({
-        submission_id: row.submission_id, from: "VALIDATED", to: "QUALIFIED",
-      });
-    }
-    if (row.eligibility === "QUALIFIED") {
-      const scopes = JSON.parse(row.consent_scopes);
-      if (!scopes.includes("aggregates")) {
-        held.push({
-          submission_id: row.submission_id,
-          state: "QUALIFIED",
-          reason: "aggregate consent scope missing",
-        });
-        continue;
-      }
-      transition(db, row.submission_id, "QUALIFIED", "PUBLISHED",
-        "consent current; published", at);
-      db.run(
-        "UPDATE submissions SET published_at = ? WHERE submission_id = ?",
-        at, row.submission_id,
-      );
-      promoted.push({
-        submission_id: row.submission_id, from: "QUALIFIED", to: "PUBLISHED",
+    } catch {
+      // One poison row (or a transient failure) retains its state
+      // and its generic hold; the pass continues (D7).
+      held.push({
+        submission_id: snap.submission_id,
+        state: snap.eligibility,
+        reason: "qualification error; retained for review",
       });
     }
   }
-  return { promoted, held, processed: pending.length };
+  return { promoted, held, deferred, processed: pending.length };
 }

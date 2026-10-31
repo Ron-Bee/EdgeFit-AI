@@ -1,7 +1,9 @@
-// EF-CLOUD-01A versioned HTTP foundation. Runtime-agnostic:
-// handleRequest takes plain values and returns a plain
-// { status, body }; a Workers/D1 entry point maps fetch
-// events onto it. No deployment exists in this milestone.
+// EF-CLOUD-01A versioned HTTP foundation, G1B corrections applied:
+// canonical shared cohorts (D1/D2/D8), per-cohort candidates (D3),
+// atomic submission + revocation writes (D4/D5), sanitized failures
+// with Retry-After (D6/D7). Runtime-agnostic: handleRequest takes
+// plain values and returns { status, body, headers }; a Workers/D1
+// entry point maps fetch events onto it. No deployment exists here.
 //
 // deps: { sha256hex(text)->hex, newId()->"SUB-...",
 //         installSalt, quorumRuns=5, quorumInstalls=3,
@@ -15,6 +17,7 @@ import {
   configHashFor,
 } from "./validate.js";
 import { mean, median, iqr } from "./stats.js";
+import { groupCohorts, passesQuorum, saltedInstall } from "./cohort.js";
 
 export const DEFAULTS = {
   quorumRuns: 5,
@@ -24,6 +27,9 @@ export const DEFAULTS = {
   maxModels: 500,
 };
 
+/** Bounded regeneration when newId() collides on the primary key. */
+export const SUBMISSION_ID_ATTEMPTS = 3;
+
 const SHA64 = /^[0-9a-f]{64}$/;
 const BUILD_KEY = /^[A-Za-z0-9]+:[a-z_]+$/;
 
@@ -31,6 +37,38 @@ function err(code, message, details) {
   const body = { error: { code, message } };
   if (details !== undefined) body.error.details = details;
   return body;
+}
+
+// node:sqlite reports every engine failure as code ERR_SQLITE_ERROR,
+// so classification reads message/errstr text. D1 error shapes are
+// UNVERIFIED and must be mapped in future D1 adapter work, not here.
+function errorText(e) {
+  return `${e?.code ?? ""} ${e?.errcode ?? ""} ${e?.message ?? ""} ${e?.errstr ?? ""}`;
+}
+
+function isBusyError(e) {
+  const text = errorText(e);
+  return e?.errcode === 5 || /SQLITE_BUSY/i.test(text) ||
+    /database is locked/i.test(text);
+}
+
+function isUniqueConflict(e, table, column) {
+  const pattern = new RegExp(`UNIQUE constraint failed: ${table}\\.${column}`);
+  return pattern.test(errorText(e));
+}
+
+function busyResponse() {
+  return {
+    status: 503,
+    body: err("temporarily_unavailable", "database busy; retry shortly"),
+    headers: { "retry-after": "1" },
+  };
+}
+
+/** Seconds from nowMs until the next UTC midnight (quota window). */
+function retryAfterSecs(nowMs) {
+  const dayStart = Date.parse(`${utcDay(nowMs)}T00:00:00Z`);
+  return Math.max(1, Math.ceil((dayStart + 24 * 60 * 60 * 1000 - nowMs) / 1000));
 }
 
 function bearerToken(headers) {
@@ -48,23 +86,6 @@ function findInstall(db, deps, headers) {
   );
   if (!row || row.revoked_at !== null) return null;
   return row.install_id;
-}
-
-function saltedInstall(deps, installId) {
-  return deps.sha256hex(`${installId}:${deps.installSalt}`);
-}
-
-function history(db, submissionId, from, to, reason, at) {
-  db.run(
-    `INSERT INTO eligibility_history
-       (submission_id, from_state, to_state, reason, at)
-     VALUES (?, ?, ?, ?, ?)`,
-    submissionId,
-    from,
-    to,
-    reason,
-    at,
-  );
 }
 
 function utcDay(nowMs) {
@@ -86,18 +107,6 @@ function postSubmissions(req) {
       body: err("unauthorized", "valid per-install upload token required"),
     };
   }
-  const day = utcDay(nowMs);
-  const used = db.get(
-    "SELECT count FROM daily_counts WHERE install_id = ? AND day = ?",
-    installId,
-    day,
-  );
-  if (used && used.count >= deps.quotaPerDay) {
-    return {
-      status: 429,
-      body: err("quota_exceeded", "daily upload quota exceeded"),
-    };
-  }
   if (Buffer.byteLength(bodyText, "utf8") > MAX_BODY_BYTES) {
     return {
       status: 413,
@@ -110,6 +119,7 @@ function postSubmissions(req) {
   } catch {
     return { status: 400, body: err("malformed_json", "body is not JSON") };
   }
+  // Validation precedes quota accounting: invalid bodies never burn quota.
   const validated = validateSubmission(envelope, nowMs, deps);
   if (!validated.ok) {
     return {
@@ -119,67 +129,139 @@ function postSubmissions(req) {
     };
   }
   const row = validated.row;
-  const dupe = db.get(
+  // Fast-path dedup outside the atomic batch: replays cost no quota.
+  const seen = db.get(
     "SELECT submission_id, eligibility FROM submissions WHERE content_hash = ?",
     row.content_hash,
   );
-  if (dupe) {
+  if (seen) {
     return {
       status: 200,
       body: {
-        submission_id: dupe.submission_id,
-        eligibility: dupe.eligibility,
+        submission_id: seen.submission_id,
+        eligibility: seen.eligibility,
         duplicate: true,
       },
     };
   }
-  const submissionId = deps.newId();
+  const day = utcDay(nowMs);
   const receivedAt = utcNow(nowMs);
-  db.run(
-    `INSERT INTO submissions (
-       submission_id, install_id, content_hash, result_json, run_id,
-       device_class, model_sha, model_size_bytes, quantization_label,
-       workload_id, prompt_sha, n_ctx, n_threads, n_predict, sampler,
-       config_hash, runtime_impl, runtime_backend, runtime_version,
-       effective_opt, effective_opt_status, build_key, status,
-       tps_gen, tps_prefill, gen_tokens, prompt_tokens,
-       collected_at, app_version,
-       mem_avail_pct_start, mem_below_advisory, mem_low_memory,
-       consent_policy_version, consent_accepted_at, consent_scopes,
-       eligibility, received_at, published_at
-     ) VALUES (
-       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'SUBMITTED', ?, NULL
-     )`,
-    submissionId, installId, row.content_hash, row.result_json, row.run_id,
-    row.device_class, row.model_sha, row.model_size_bytes,
-    row.quantization_label, row.workload_id, row.prompt_sha,
-    row.n_ctx, row.n_threads, row.n_predict, row.sampler,
-    row.config_hash, row.runtime_impl, row.runtime_backend,
-    row.runtime_version, row.effective_opt, row.effective_opt_status,
-    row.build_key, row.status, row.tps_gen, row.tps_prefill,
-    row.gen_tokens, row.prompt_tokens, row.collected_at, row.app_version,
-    row.mem_avail_pct_start, row.mem_below_advisory, row.mem_low_memory,
-    row.consent_policy_version, row.consent_accepted_at, row.consent_scopes,
-    receivedAt,
-  );
-  history(db, submissionId, null, "SUBMITTED", "received", receivedAt);
-  db.run(
-    `INSERT INTO daily_counts (install_id, day, count)
-     VALUES (?, ?, 1)
-     ON CONFLICT (install_id, day)
-     DO UPDATE SET count = count + 1`,
-    installId,
-    day,
-  );
-  return {
-    status: 201,
-    body: {
-      submission_id: submissionId,
-      eligibility: "SUBMITTED",
-      duplicate: false,
-    },
-  };
+  for (let attempt = 1; attempt <= SUBMISSION_ID_ATTEMPTS; attempt += 1) {
+    const submissionId = deps.newId();
+    // Row values in column order; the batch below appends its own
+    // guard parameters after these (adapter contract: values first).
+    const values = [
+      submissionId, installId, row.content_hash, row.result_json, row.run_id,
+      row.device_class, row.model_sha, row.model_size_bytes,
+      row.quantization_label, row.workload_id, row.prompt_sha,
+      row.n_ctx, row.n_threads, row.n_predict, row.sampler,
+      row.config_hash, row.runtime_impl, row.runtime_backend,
+      row.runtime_version, row.effective_opt, row.effective_opt_status,
+      row.build_key, row.status, row.tps_gen, row.tps_prefill,
+      row.gen_tokens, row.prompt_tokens, row.collected_at, row.app_version,
+      row.mem_avail_pct_start, row.mem_below_advisory, row.mem_low_memory,
+      row.consent_policy_version, row.consent_accepted_at, row.consent_scopes,
+      receivedAt,
+    ];
+    let admitted;
+    try {
+      // One atomic batch; every decision is encoded in SQL because
+      // D1 batch() cannot return mid-batch reads to JavaScript.
+      // The quota verdict is the conditional INSERT's change count:
+      // admitted rows insert exactly one row; rejected claims are
+      // compensated in-batch, leaving the counter exact (G2).
+      const results = db.batch([
+        {
+          sql: `INSERT INTO daily_counts (install_id, day, count)
+                VALUES (?, ?, 1)
+                ON CONFLICT (install_id, day) DO UPDATE
+                SET count = daily_counts.count + 1`,
+          params: [installId, day],
+        },
+        {
+          sql: `INSERT INTO submissions (
+                  submission_id, install_id, content_hash, result_json, run_id,
+                  device_class, model_sha, model_size_bytes, quantization_label,
+                  workload_id, prompt_sha, n_ctx, n_threads, n_predict, sampler,
+                  config_hash, runtime_impl, runtime_backend, runtime_version,
+                  effective_opt, effective_opt_status, build_key, status,
+                  tps_gen, tps_prefill, gen_tokens, prompt_tokens,
+                  collected_at, app_version,
+                  mem_avail_pct_start, mem_below_advisory, mem_low_memory,
+                  consent_policy_version, consent_accepted_at, consent_scopes,
+                  eligibility, received_at, published_at
+                )
+                SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                       ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                       ?, ?, ?, ?, ?, 'SUBMITTED', ?, NULL
+                WHERE (SELECT count FROM daily_counts
+                       WHERE install_id = ? AND day = ?) <= ?`,
+          params: [...values, installId, day, deps.quotaPerDay],
+        },
+        {
+          sql: `INSERT INTO eligibility_history
+                  (submission_id, from_state, to_state, reason, at)
+                SELECT ?, NULL, ?, ?, ?
+                WHERE EXISTS (SELECT 1 FROM submissions
+                              WHERE submission_id = ?)`,
+          params: [submissionId, "SUBMITTED", "received", receivedAt,
+            submissionId],
+        },
+        {
+          sql: `UPDATE daily_counts SET count = count - 1
+                WHERE install_id = ? AND day = ?
+                  AND NOT EXISTS (SELECT 1 FROM submissions
+                                  WHERE submission_id = ?)`,
+          params: [installId, day, submissionId],
+        },
+      ]);
+      admitted = results[1].changes === 1;
+    } catch (e) {
+      if (isUniqueConflict(e, "submissions", "content_hash")) {
+        // Lost a duplicate race: the winner committed first. The
+        // rolled-back claim cost nothing; resolve against committed rows.
+        const winner = db.get(
+          "SELECT submission_id, eligibility FROM submissions WHERE content_hash = ?",
+          row.content_hash,
+        );
+        if (winner) {
+          return {
+            status: 200,
+            body: {
+              submission_id: winner.submission_id,
+              eligibility: winner.eligibility,
+              duplicate: true,
+            },
+          };
+        }
+        return busyResponse();
+      }
+      if (isUniqueConflict(e, "submissions", "submission_id")) {
+        continue; // Regenerate once more, bounded above.
+      }
+      throw e; // Dispatcher maps to a sanitized 500/503 (D6).
+    }
+    if (!admitted) {
+      // The batch committed with zero inserted rows: quota spent,
+      // counter already compensated. Nothing was stored.
+      return {
+        status: 429,
+        body: err("quota_exceeded", "daily upload quota exceeded"),
+        headers: { "retry-after": String(retryAfterSecs(nowMs)) },
+      };
+    }
+    return {
+      status: 201,
+      body: {
+        submission_id: submissionId,
+        eligibility: "SUBMITTED",
+        duplicate: false,
+      },
+    };
+  }
+  // newId() keeps colliding: fail closed without storing anything.
+  return { status: 500, body: err("internal", "temporary backend failure") };
 }
 
 // ---------- GET / DELETE /v1/submissions/{id} ----------
@@ -248,64 +330,57 @@ function deleteSubmission(req, submissionId, nowMs) {
     };
   }
   const at = utcNow(nowMs);
-  db.run("UPDATE submissions SET eligibility = 'REVOKED' WHERE submission_id = ?",
-    submissionId);
-  history(db, submissionId, owned.row.eligibility, "REVOKED",
-    "consent withdrawn by owner", at);
+  // Atomic + idempotent in batch-compatible form: read outside, then
+  // one guarded batch. The guard names the observed from-state, so an
+  // applied revoke records exact history (eligibility moves forward
+  // only: no ABA). A lost race retries once against fresh state (G2).
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const fresh = db.get(
+      "SELECT eligibility FROM submissions WHERE submission_id = ?",
+      submissionId,
+    );
+    if (!fresh || fresh.eligibility === "REVOKED") break;
+    const [updated] = db.batch([
+      {
+        sql: `UPDATE submissions SET eligibility = 'REVOKED'
+              WHERE submission_id = ? AND eligibility = ?`,
+        params: [submissionId, fresh.eligibility],
+      },
+      {
+        sql: `INSERT INTO eligibility_history
+                (submission_id, from_state, to_state, reason, at)
+              SELECT ?, ?, 'REVOKED', ?, ?
+              WHERE (SELECT eligibility FROM submissions
+                     WHERE submission_id = ?) = 'REVOKED'`,
+        params: [submissionId, fresh.eligibility,
+          "consent withdrawn by owner", at, submissionId],
+      },
+    ]);
+    if (updated.changes === 1) break;
+  }
+  const final = db.get(
+    "SELECT eligibility FROM submissions WHERE submission_id = ?",
+    submissionId,
+  );
   return {
     status: 200,
-    body: { submission_id: submissionId, eligibility: "REVOKED" },
+    body: { submission_id: submissionId, eligibility: final.eligibility },
   };
 }
 
 // ---------- public aggregates ----------
 
-function cohortOf(row) {
-  return {
-    model_sha: row.model_sha,
-    quantization: row.quantization_label,
-    device_class: row.device_class,
-    workload_id: row.workload_id,
-    runtime_impl: row.runtime_impl,
-    runtime_backend: row.runtime_backend,
-    build: row.build_key,
-    config: {
-      n_ctx: row.n_ctx,
-      n_threads: row.n_threads,
-      n_predict: row.n_predict,
-      sampler: row.sampler,
-    },
-  };
-}
-
-function cohortKey(row) {
-  return [
-    row.model_sha, row.quantization_label, row.device_class,
-    row.workload_id, row.runtime_impl, row.runtime_backend,
-    row.build_key, row.config_hash,
-  ].join("|");
-}
-
 function aggregateRows(rows, deps) {
-  const byCohort = new Map();
-  for (const row of rows) {
-    const key = cohortKey(row);
-    if (!byCohort.has(key)) byCohort.set(key, { sample: row, rows: [] });
-    byCohort.get(key).rows.push(row);
-  }
   const groups = [];
-  for (const { sample, rows: members } of byCohort.values()) {
-    const gens = members.map((r) => r.tps_gen);
-    const installs = new Set(members.map((r) => saltedInstall(deps, r.install_id)));
-    const cohort = cohortOf(sample);
+  for (const g of groupCohorts(rows, deps)) {
     const entry = {
-      cohort,
-      cohort_hash: deps.sha256hex(cohortKey(sample)),
-      n: members.length,
-      installs: installs.size,
+      cohort: g.cohort,
+      cohort_hash: g.cohort_hash,
+      n: g.n,
+      installs: g.installs,
     };
-    if (members.length >= deps.quorumRuns &&
-        installs.size >= deps.quorumInstalls) {
+    if (passesQuorum(g, deps)) {
+      const gens = g.members.map((r) => r.tps_gen);
       const spread = iqr(gens);
       entry.status = "published";
       entry.aggregates = {
@@ -327,7 +402,6 @@ function aggregateRows(rows, deps) {
     }
     groups.push(entry);
   }
-  groups.sort((a, b) => (a.cohort_hash < b.cohort_hash ? -1 : 1));
   return groups;
 }
 
@@ -386,11 +460,22 @@ function getAggregates(req) {
     filters.push("workload_id = ?");
     params.push(query.workload_id);
   }
+  if (query.prompt_sha !== undefined) {
+    if (typeof query.prompt_sha !== "string" ||
+        !SHA64.test(query.prompt_sha)) {
+      return {
+        status: 400,
+        body: err("bad_request", "prompt_sha must be 64 lowercase hex"),
+      };
+    }
+    filters.push("prompt_sha = ?");
+    params.push(query.prompt_sha);
+  }
   // Throughput aggregates use completed measurements only;
   // failed attempts stay stored evidence, never averages.
   const rows = db.all(
     `SELECT model_sha, quantization_label, device_class, workload_id,
-            runtime_impl, runtime_backend, build_key, config_hash,
+            prompt_sha, runtime_impl, runtime_backend, build_key, config_hash,
             n_ctx, n_threads, n_predict, sampler, tps_gen, install_id
      FROM submissions
      WHERE eligibility = 'PUBLISHED' AND status = 'COMPLETED'
@@ -510,9 +595,15 @@ function getCandidates(req) {
   }
   // v1 has no catalog table: candidates derive from observed
   // published artifacts. License and source URL are unknown
-  // until catalog curation; the response says so.
+  // until catalog curation; the response says so. Catalog facts
+  // (size, license, provenance) stay distinct from measured
+  // cohort evidence below: means always come from ONE exact
+  // quorum-passing cohort, never from a pooled set (D3).
   const rows = db.all(
-    `SELECT model_sha, model_size_bytes, tps_gen, install_id, collected_at
+    `SELECT model_sha, model_size_bytes, tps_gen, install_id, collected_at,
+            quantization_label, device_class, workload_id, prompt_sha,
+            runtime_impl, runtime_backend, build_key, config_hash,
+            n_ctx, n_threads, n_predict, sampler
      FROM submissions WHERE ${filters.join(" AND ")}`,
     ...params,
   );
@@ -529,6 +620,8 @@ function getCandidates(req) {
         saltedInstall(deps, r.install_id)));
       const newest = members.reduce((a, b) =>
         a.collected_at > b.collected_at ? a : b);
+      const cohorts = groupCohorts(members, deps);
+      const qualifying = cohorts.filter((g) => passesQuorum(g, deps));
       const entry = {
         model_sha,
         size_bytes: newest.model_size_bytes,
@@ -536,11 +629,20 @@ function getCandidates(req) {
         license: "unknown",
         matching_runs: members.length,
         installs: installs.size,
+        qualifying_cohorts: qualifying.length,
       };
-      if (members.length >= deps.quorumRuns &&
-          installs.size >= deps.quorumInstalls) {
-        const gens = members.map((r) => r.tps_gen);
+      if (qualifying.length > 0) {
+        // Representative cohort: the largest quorum-passing exact
+        // cohort, deterministic tie-break on cohort_hash. Thin
+        // cohorts contribute no statistics (D3).
+        const rep = [...qualifying].sort((a, b) =>
+          (b.n - a.n) || (a.cohort_hash < b.cohort_hash ? -1 : 1))[0];
+        const gens = rep.members.map((r) => r.tps_gen);
         entry.status = "published";
+        entry.cohort = rep.cohort;
+        entry.cohort_hash = rep.cohort_hash;
+        entry.cohort_runs = rep.n;
+        entry.cohort_installs = rep.installs;
         entry.median_gen_tps = median(gens);
         entry.mean_gen_tps = mean(gens);
       } else {
@@ -570,8 +672,7 @@ export function withDefaults(deps) {
   return { ...DEFAULTS, ...deps };
 }
 
-export function handleRequest(input) {
-  const req = { ...input, deps: withDefaults(input.deps) };
+function dispatch(req) {
   const { method, path } = req;
   if (method === "POST" && path === "/v1/submissions") {
     return postSubmissions(req);
@@ -601,6 +702,25 @@ export function handleRequest(input) {
     };
   }
   return { status: 404, body: err("not_found", "no such route") };
+}
+
+export function handleRequest(input) {
+  const req = { ...input, deps: withDefaults(input.deps) };
+  let res;
+  try {
+    res = dispatch(req);
+  } catch (e) {
+    // Backstop (D6): database and unexpected failures surface as
+    // bounded envelopes. Internal text (SQL, paths, ids) NEVER
+    // leaves the backend; contention is retryable, the rest is not.
+    if (isBusyError(e)) return busyResponse();
+    return {
+      status: 500,
+      body: err("internal", "temporary backend failure"),
+      headers: {},
+    };
+  }
+  return { status: res.status, body: res.body, headers: res.headers ?? {} };
 }
 
 export { configHashFor };
