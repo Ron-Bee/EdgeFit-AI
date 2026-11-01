@@ -100,6 +100,28 @@ std::string error_json(const std::string & message) {
     return "{\"ok\":false,\"error\":\"" + json_escape(message) + "\"}";
 }
 
+// EF-BENCH-STALL-01: ggml-cpu polls this per graph node, so a user
+// cancel or watchdog timeout interrupts even the monolithic prefill
+// decode. Lock-free atomic read; no JNI, no allocation, safe on any
+// ggml worker thread. The cancel pointer outlives every decode call.
+bool cancel_requested(void * data) {
+    auto * cancel = static_cast<std::atomic<uint8_t> *>(data);
+    return cancel && cancel->load(std::memory_order_relaxed) != 0;
+}
+
+// Cancelled outcome with genuine partial counts (zeros when nothing
+// was produced). Never success, never invented measurements.
+std::string cancelled_json(int generated, long long prefill_ms,
+                           long long gen_ms, size_t prefill_tokens) {
+    char out[256];
+    std::snprintf(out, sizeof(out),
+                  "{\"ok\":true,\"cancelled\":true,\"generated_tokens\":%d,"
+                  "\"prefill_ms\":%lld,\"gen_ms\":%lld,\"prefill_tokens\":%zu,"
+                  "\"eos_stop\":false,\"meta\":{}}",
+                  generated, prefill_ms, gen_ms, prefill_tokens);
+    return std::string(out);
+}
+
 int tokenize_all(const llama_vocab * vocab, const char * text,
                  std::vector<llama_token> & out) {
     const int n_max = 8192;
@@ -154,6 +176,11 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
     cparams.n_batch = 512;
     cparams.n_threads = n_threads;
     cparams.n_threads_batch = n_threads;
+    // EF-BENCH-STALL-01: without this, cancel is only honored between
+    // decode calls, so a slow or stuck prefill is unstoppable and the
+    // UI sits at "Processing prompt" with a dead Cancel button.
+    cparams.abort_callback = cancel_requested;
+    cparams.abort_callback_data = cancel;
     llama_context * ctx = llama_init_from_model(model, cparams);
     if (!ctx) {
         llama_model_free(model);
@@ -193,9 +220,7 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
         llama_free(ctx);
         llama_model_free(model);
         pwrite(progress, PROG_STAGE, PSTAGE_NATIVE_DONE);
-        return "{\"ok\":true,\"cancelled\":true,\"generated_tokens\":0,"
-               "\"prefill_ms\":0,\"gen_ms\":0,\"prefill_tokens\":0,"
-               "\"eos_stop\":false,\"meta\":{}}";
+        return cancelled_json(0, 0, 0, 0);
     }
 
     // Ownership: llama_batch_get_one returns a NON-OWNING view of caller
@@ -204,12 +229,19 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
     const long long t_pref0 = now_ms();
     llama_batch batch = llama_batch_get_one(prompt_tokens.data(),
                                             static_cast<int32_t>(prompt_tokens.size()));
-    bool decode_ok = llama_decode(ctx, batch) == 0;
+    const int dec_ret = llama_decode(ctx, batch);
     const long long prefill_ms = now_ms() - t_pref0;
-    if (!decode_ok) {
+    if (dec_ret != 0) {
         llama_sampler_free(sampler);
         llama_free(ctx);
         llama_model_free(model);
+        if (cancel->load(std::memory_order_relaxed) != 0) {
+            // Abort callback fired: user cancel or watchdog
+            // timeout interrupted prefill. Honest cancelled
+            // outcome, not an error.
+            pwrite(progress, PROG_STAGE, PSTAGE_NATIVE_DONE);
+            return cancelled_json(0, 0, 0, 0);
+        }
         pwrite(progress, PROG_STAGE, PSTAGE_NATIVE_ERROR);
         pwrite(progress, PROG_ERROR, PERR_PREFILL_DECODE);
         return error_json("prefill decode failed");
@@ -235,12 +267,23 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
         }
         generated++;
         llama_batch step = llama_batch_get_one(const_cast<llama_token *>(&id), 1);
-        const bool step_ok = llama_decode(ctx, step) == 0;
+        const int step_ret = llama_decode(ctx, step);
         // Non-owning view: do not free (see note at prefill above).
-        if (!step_ok) {
+        if (step_ret != 0) {
+            const long long gen_ms_now = now_ms() - t_gen0;
             llama_sampler_free(sampler);
             llama_free(ctx);
             llama_model_free(model);
+            if (cancel->load(std::memory_order_relaxed) != 0) {
+                // Mid-generation abort: genuine partial counts,
+                // cancelled outcome, never success.
+                pwrite(progress, PROG_GENERATED, generated);
+                pwrite(progress, PROG_GEN_MS,
+                       static_cast<int32_t>(gen_ms_now));
+                pwrite(progress, PROG_STAGE, PSTAGE_NATIVE_DONE);
+                return cancelled_json(generated, prefill_ms, gen_ms_now,
+                                      prompt_tokens.size());
+            }
             pwrite(progress, PROG_STAGE, PSTAGE_NATIVE_ERROR);
             pwrite(progress, PROG_ERROR, PERR_GEN_DECODE);
             return error_json("generation decode failed");

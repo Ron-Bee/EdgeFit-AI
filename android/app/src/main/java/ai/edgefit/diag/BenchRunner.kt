@@ -305,10 +305,13 @@ class BenchRunner(private val context: Context) {
                     livePssKb = processPssKb()
                 }
                 emitLive()
-                if (elapsed >= config.timeoutMs) {
-                    timedOut.set(true)
+                // EF-BENCH-STALL-01: after a timeout the watchdog keeps
+                // emitting live updates until the worker finishes, so the
+                // elapsed clock and state stay live while native unwinds
+                // (native now aborts promptly on cancel; this covers any
+                // unforeseen stall without freezing the UI).
+                if (elapsed >= config.timeoutMs && !timedOut.getAndSet(true)) {
                     cancel()
-                    return@Thread
                 }
             }
         }, "edgefit-bench-watchdog")
