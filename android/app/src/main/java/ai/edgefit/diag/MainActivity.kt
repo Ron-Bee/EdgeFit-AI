@@ -2571,11 +2571,12 @@ class MainActivity : Activity() {
                             }
                             refreshEvidenceLine()
                         }
-                    }, "edgefit-global").start(),
+                    }, "edgefit-global").start()
+                },
                 CardDialog.Action("Delete local result") {
                     deleteLocalResult(id, wasShared = true)
                 }
-                }))
+                ))
     }
 
     @Suppress("DEPRECATION")
