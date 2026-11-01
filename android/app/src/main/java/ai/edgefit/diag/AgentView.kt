@@ -102,6 +102,25 @@ object AgentView {
      */
     data class ExperimentItem(val status: String, val text: String)
 
+    /**
+     * EF-AGENT-REPAIR-01: per-experiment bootstrap action. Unmeasured
+     * children (no benchmark yet) offer the designed first step from
+     * this screen instead of stranding the user at a blocked
+     * proposal gate. Null when the experiment already ran —
+     * measured or failed runs use proposals or recovery. Pure.
+     */
+    data class RunAction(val label: String, val needsPrediction: Boolean)
+
+    fun runActionFor(child: SessionRecord): RunAction? {
+        if (child.benchmark != null) return null
+        val seq = child.experimentSeq ?: return null
+        return if (child.prediction == null) {
+            RunAction("Predict & Run Exp $seq", true)
+        } else {
+            RunAction("Run Exp $seq", false)
+        }
+    }
+
     fun experimentLines(detail: AgentDetail): List<String> =
         experimentItems(detail).map { it.text }
 
@@ -251,7 +270,10 @@ object AgentView {
         onClose: (() -> Unit)? = null,
         // EF-AGENT-REVIEW-01: developer Modify action for a
         // pending proposal; null hides the button.
-        onModify: ((String) -> Unit)? = null
+        onModify: ((String) -> Unit)? = null,
+        // EF-AGENT-REPAIR-01: per-experiment bootstrap
+        // (parentId, childId); null hides the buttons.
+        onRunExperiment: ((String, String) -> Unit)? = null
     ) {
         var dialog: AlertDialog? = null
         var selected = initialId
@@ -314,7 +336,8 @@ object AgentView {
                 textSize = 13f
                 setPadding(0, dp(8), 0, 0)
             })
-            for (item in experimentItems(snapshot)) {
+            for ((child, item) in snapshot.children.zip(
+                experimentItems(snapshot))) {
                 // One card per experiment: number, config,
                 // prediction, outcome stay grouped.
                 val card = LinearLayout(activity).apply {
@@ -329,6 +352,24 @@ object AgentView {
                     SemanticUi.accentColor(activity,
                         InsightCards.statusAccent(item.status)))
                 card.addView(row)
+                // EF-AGENT-REPAIR-01: unmeasured experiments offer
+                // the designed first step in place (see
+                // runActionFor); measured or failed runs use
+                // proposals or recovery instead.
+                val runAction = runActionFor(child)
+                if (runAction != null && onRunExperiment != null &&
+                    agentStatus(snapshot.parent) ==
+                        AgentManager.STATUS_ACTIVE
+                ) {
+                    card.addView(Button(activity).apply {
+                        text = runAction.label
+                        setOnClickListener {
+                            dialog?.dismiss()
+                            onRunExperiment.invoke(
+                                snapshot.parent.sessionId, child.sessionId)
+                        }
+                    })
+                }
                 val params = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT)

@@ -3953,7 +3953,10 @@ class MainActivity : Activity() {
             onReject = { id -> rejectAgentProposal(id) },
             onFinish = { id -> finishAgentSession(id) },
             onClose = { agentDialogOpen = false },
-            onModify = { id -> modifyAgentProposal(id) }
+            onModify = { id -> modifyAgentProposal(id) },
+            onRunExperiment = { parentId, childId ->
+                runAgentExperiment(parentId, childId)
+            }
         )
     }
 
@@ -4067,8 +4070,8 @@ class MainActivity : Activity() {
                 baseConfig = currentBenchConfig()
             )
             "Agent ${parent.sessionId} created with experiment 1 shell. " +
-                "Run experiment 1 via Sessions (Predict), then request " +
-                "a proposal here."
+                "Predict and run experiment 1 from this screen, then " +
+                "request a proposal."
         } catch (e: Exception) {
             "Agent creation failed: ${e.message}"
         }
@@ -4404,6 +4407,41 @@ class MainActivity : Activity() {
      * values are kept but flagged stale. No Meta call, no
      * budget charge — a local revision of a pending review.
      */
+    /**
+     * EF-AGENT-REPAIR-01: per-experiment bootstrap from the Agent
+     * screen. Prediction-less children take the existing live
+     * prediction path (Meta authorization, authorize, bind);
+     * predicted children bind directly. Never auto-runs.
+     */
+    private fun runAgentExperiment(parentId: String, childId: String) {
+        val child = try {
+            sessionManager.get(childId)
+        } catch (e: Exception) {
+            statusText("Experiment unavailable: ${e.message}")
+            return
+        }
+        if (child.parentSessionId != parentId) {
+            statusText("Experiment does not belong to this agent session.")
+            return
+        }
+        if (child.benchmark != null) {
+            statusText("Experiment already ran; request a proposal for the next step.")
+            showAgent(parentId)
+            return
+        }
+        if (child.prediction == null) {
+            startLivePrediction(childId)
+            return
+        }
+        val message = bindSession(childId)
+        statusText(message)
+        if (activeSessionId == childId) {
+            selectTab(NavTab.BENCHMARK)
+        } else {
+            showAgent(parentId)
+        }
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun modifyAgentProposal(parentId: String) {
         val parent = try {

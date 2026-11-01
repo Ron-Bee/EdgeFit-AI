@@ -1,6 +1,8 @@
 package ai.edgefit.diag
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -199,5 +201,44 @@ class AgentViewTest {
         val line = AgentView.experimentLines(detail).single()
         assertTrue(line.contains("no measurement (run FAILED)"))
         assertTrue(!line.contains("0.0 tok/s"))
+    }
+
+    private fun agentShell(): SessionRecord {
+        val manager = SessionManager(temp.newFolder()) { "2026-10-28T00:00:00Z" }
+        val agent = AgentManager(manager) { "2026-10-28T00:00:00Z" }
+        val created = agent.createAgent(
+            deviceModel = "SM-S908U", profileSha256 = null,
+            modelSha256 = "0".repeat(64), modelSizeBytes = 100L,
+            modelDisplay = "mock.gguf", workloadId = BenchContract.WORKLOAD_ID,
+            promptSha256 = "1".repeat(64), baseConfig = BenchConfig.default())
+        return agent.childrenOf(created.sessionId).single()
+    }
+
+    @Test
+    fun runActionOffersPredictAndRunForFreshShell() {
+        val action = AgentView.runActionFor(agentShell())!!
+        assertEquals("Predict & Run Exp 1", action.label)
+        assertTrue(action.needsPrediction)
+    }
+
+    @Test
+    fun runActionOffersRunForPredictedChild() {
+        val child = agentShell().copy(
+            prediction = mapOf("predicted_gen_tps" to 15.0))
+        val action = AgentView.runActionFor(child)!!
+        assertEquals("Run Exp 1", action.label)
+        assertFalse(action.needsPrediction)
+    }
+
+    @Test
+    fun runActionHiddenAfterRun() {
+        val measured = agentShell().copy(
+            benchmark = mapOf("run_id" to "BENCH-1"))
+        assertNull(AgentView.runActionFor(measured))
+        val failed = agentShell().copy(
+            benchmark = mapOf(
+                "run_id" to "BENCH-f",
+                "status" to BenchContract.STATUS_FAILED))
+        assertNull(AgentView.runActionFor(failed))
     }
 }

@@ -541,4 +541,37 @@ class AgentManagerTest {
             BenchConfig.default().copy(nThreads = 6))
         assertEquals(6, agent.currentConfig(parent.sessionId).nThreads)
     }
+
+    @Test
+    @Suppress("UNCHECKED_CAST")
+    fun afterExperimentTrailingIsIdempotent() {
+        setup()
+        val parent = createParent()
+        val child = agent.childrenOf(parent.sessionId).single().sessionId
+        runChild(child, result("BENCH-1", 5000L))
+        agent.afterExperiment(parent.sessionId)
+        agent.afterExperiment(parent.sessionId)
+        val reloaded = agent.getParent(parent.sessionId)
+        assertEquals(1, reloaded.budgetUsed)
+        val trailed = (reloaded.agent as Map<String, Any?>)["experiments"]
+            as List<*>
+        assertEquals(1, trailed.size)
+    }
+
+    @Test
+    fun standaloneMeasurementNeverJoinsAgentPack() {
+        setup()
+        val parent = createParent()
+        // A completed run with no session binding persists as its
+        // own standalone record; the agent pack must not discover it.
+        val standalone = SessionBenchBridge.recordStandalone(
+            manager, result("BENCH-standalone", 5000L))
+        assertNull(standalone.parentSessionId)
+        val children = agent.childrenOf(parent.sessionId)
+        assertEquals(1, children.size)
+        assertTrue(children.none { it.sessionId == standalone.sessionId })
+        assertTrue(agent.buildPack(parent.sessionId).comparable.isEmpty())
+        val gate = agent.proposalGate(parent.sessionId)
+        assertFalse(gate.first)
+    }
 }
