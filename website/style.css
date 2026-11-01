@@ -213,6 +213,57 @@ ul.tight li, ol.tight li { margin-bottom: 0.35rem; }
   margin-top: 0.6rem;
 }
 
+/* ---- dashboard ---- */
+.kpi .k { color: var(--muted); font-size: 0.85rem; }
+.kpi .v {
+  font-size: 1.9rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  margin: 0.15rem 0;
+}
+.kpi .note { color: var(--muted); font-size: 0.82rem; }
+.chart svg { width: 100%; height: auto; display: block; }
+.chart .bar { fill: var(--accent); }
+.chart .bar.thin { fill: none; stroke: var(--muted); stroke-width: 1.5; }
+.chart .whisker { stroke: var(--ink); stroke-width: 2; }
+.chart .quorum { stroke: var(--warn); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.chart text { fill: var(--ink); font-size: 13px; }
+.chart .chart-label { fill: var(--muted); font-size: 12px; }
+.chart-data { margin-top: 0.75rem; }
+.chart-data summary { cursor: pointer; color: var(--accent); }
+.chart-data table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+  margin-top: 0.5rem;
+  font-variant-numeric: tabular-nums;
+}
+.chart-data th, .chart-data td {
+  text-align: left;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+}
+.chart-data th { color: var(--muted); font-weight: 600; }
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.75rem;
+}
+.filters label { display: block; font-weight: 600; font-size: 0.9rem; }
+.filters select {
+  width: 100%;
+  margin-top: 0.25rem;
+  padding: 0.55rem;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg-raise);
+  color: var(--ink);
+  font-size: 1rem;
+}
+.filters .caption { grid-column: 1 / -1; text-align: left; }
+.dash-state h3 { margin-top: 0; }
+button.btn { font: inherit; cursor: pointer; }
+
 /* ---- responsive ---- */
 @media (max-width: 48rem) {
   .hero { grid-template-columns: 1fr; }

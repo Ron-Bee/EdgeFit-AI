@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evidence dashboard — EdgeFit AI</title>
+<meta name="description" content="EdgeFit AI global evidence dashboard: qualified benchmark statistics, exact-cohort charts, and publication status. Currently awaiting a public evidence source.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<nav aria-label="Main">
+<a class="brand" href="index.html"><b>EdgeFit</b> AI</a>
+<a href="methodology.html">Methodology</a>
+<a href="evidence.html">Evidence status</a>
+<a href="dashboard.html" aria-current="page">Dashboard</a>
+</nav>
+</header>
+<main id="dashboard">
+<h1>Global evidence dashboard</h1>
+<p class="standfirst">Qualified benchmark statistics, once a genuine
+public source is authorized. Today the dashboard shows its structure
+and honest empty states — nothing estimated, nothing filled in.</p>
+<p><button class="btn btn-ghost" id="dash-refresh" type="button">Refresh</button>
+<span class="caption" id="dash-meta">Source: unavailable.</span></p>
+
+<h2>Summary</h2>
+<div id="dash-kpis"></div>
+
+<h2>Charts</h2>
+<div id="dash-charts"></div>
+
+<h2>Reading this dashboard</h2>
+<div class="card">
+<ul class="tight">
+<li>Every statistic belongs to one <strong>exact cohort</strong>
+(model, build, runtime, workload, configuration all equal).
+Cohorts are never averaged together.</li>
+<li>Throughput means <strong>tokens per second</strong> of measured
+on-device generation. Whiskers span observed min–max, not error bars.</li>
+<li><strong>n</strong> counts qualified runs; <strong>i</strong> counts
+contributing installations in that cohort. Installation counts cannot
+be honestly summed across models.</li>
+<li>Below-quorum cohorts show counts without statistics. Synthetic
+test data is excluded from every figure on this page.</li>
+<li>This dashboard is <strong>not live</strong>: it refreshes only on
+request, and only from an explicitly authorized public endpoint.</li>
+</ul>
+</div>
+<noscript><div class="card"><p>Dashboard charts need JavaScript. The
+facts above it hold regardless: no public evidence source is active,
+and zero verified global aggregates are published.</p></div></noscript>
+</main>
+<footer>
+<p>EdgeFit AI — hackathon prototype. No published global statistics yet.</p>
+</footer>
+<script type="module" src="js/dashboard.js"></script>
+</body>
+</html>
