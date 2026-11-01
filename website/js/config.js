@@ -11,4 +11,4 @@
 // NEVER a staging URL, NEVER credentials, NEVER a hypothetical
 // placeholder presented as live. HttpProvider itself refuses
 // non-https URLs and the staging host (defense in depth).
-export const EVIDENCE_BASE = null;
+export const EVIDENCE_BASE = "https://edgefit-evidence-public.ronbaute92.workers.dev";

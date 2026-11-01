@@ -330,9 +330,11 @@ export function initDashboard(root, provider) {
     const kpi = $("dash-kpis"), charts = $("dash-charts"),
       meta = $("dash-meta"), filtersBox = $("dash-filters");
     try {
-      const [models, candidates] = await Promise.all([
-        prov.listModels(), prov.getCandidates(),
-      ]);
+      // Sequential: HttpProvider enforces one in-flight request
+      // (refresh guard), so a single load must not fire concurrent
+      // provider calls.
+      const models = await prov.listModels();
+      const candidates = await prov.getCandidates();
       const summary = summarizeModels(models.artifacts);
       const qual = candidates.candidates
         .reduce((s, c) => s + (c.qualifying_cohorts || 0), 0);
