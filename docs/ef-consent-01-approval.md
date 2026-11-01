@@ -1,8 +1,10 @@
 # Consent approval record — ef-consent-01 (APPROVAL ARTIFACT)
 
-This record is PREPARED, not approved. No field below is filled
-on behalf of the owner. The publication allowlist stays EMPTY
-until the approval in section 3 is granted AND the section 5
+This record had PREPARED, unapproved fields until Collection
+Approval A was recorded below from the owner's explicit
+confirmation in the EF-GLOBAL-P0-TOKEN-01 directive. Publication
+Approval B remains NOT APPROVED. The publication allowlist stays
+EMPTY until the section 3.B approval is granted AND the section 5
 deployment step is separately executed.
 
 ## 1. Policy identity (fixed)
@@ -34,10 +36,12 @@ pending approvals; re-hash and re-approve.
 
 ## 3. Owner approval (FILL ONLY BY THE OWNER)
 
-- [ ] A. COLLECTION APPROVED — genuine-device uploads stamping
+- [x] A. COLLECTION APPROVED — genuine-device uploads stamping
       `ef-consent-01` may be collected into staging:
-  - Owner: _NOT APPROVED_
-  - Date (UTC): _BLANK_
+  - Owner: Owner — explicit confirmation in EF-GLOBAL-P0-TOKEN-01
+    directive (recorded by MUSE-B, nothing backdated; no prior
+    historical A record existed)
+  - Date (UTC): 2026-11-01 (recorded 2026-11-01T23:00:56Z)
 - [ ] B. PUBLICATION APPROVED — rows meeting version + origin +
       quorum + revocation rules may appear in public aggregates:
   - Owner: _NOT APPROVED_
