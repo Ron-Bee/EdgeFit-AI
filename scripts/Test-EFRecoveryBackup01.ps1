@@ -191,6 +191,16 @@ Assert-True ((-not $c10.Ok) -and ($c10.Reason -match 'list failed')) 'tar.reject
 $c11 = Test-BackupArchive $tarExe $goodTar $members @('SES-aaaaaaaaaaaaaaaa.json', 'SES-dddddddddddddddd.json') $expEv
 Assert-True ((-not $c11.Ok) -and ($c11.Reason -match 'dddddddddddddddd')) 'tar.reject-missing' $c11.Reason
 
+# 11b. null inventory arguments create no phantom missing entries
+# (the INSTALL-05 failure: `$null | Where-Object` runs once).
+$c11b = Test-BackupArchive $tarExe $emptyTar $members3 $null $null
+Assert-True ($c11b.Ok) 'tar.null-inventory-ok' $c11b.Reason
+
+# 11c. blank inventory entries are dropped, never treated as files.
+$c11c = Test-BackupArchive $tarExe $emptyTar $members3 @('', '  ') @()
+Assert-True ($c11c.Ok) 'tar.blank-inventory-ok' $c11c.Reason
+Assert-True ((@($c11c.Sessions | Where-Object { "$_".Trim() -eq '' }).Count -eq 0)) 'tar.no-blank-sessions'
+
 # 12. missing requested member rejected.
 $c12 = Test-BackupArchive $tarExe $emptyTar $members @() @()
 Assert-True ((-not $c12.Ok) -and ($c12.Reason -match 'missing member')) 'tar.reject-missing-member' $c12.Reason
@@ -216,6 +226,43 @@ $absTar = Join-Path $Tmp 'abs.tar'
 Set-TarBlockName $goodTar $absTar 'C:/evil/'
 $c14b = Test-BackupArchive $tarExe $absTar $members $expSes $expEv
 Assert-True ((-not $c14b.Ok) -and ($c14b.Reason -match 'unsafe')) 'tar.reject-absolute' $c14b.Reason
+
+# 14c. mock adb for inventory tests: no device needed.
+$mockAdb = Join-Path $Tmp 'mock-adb.ps1'
+Set-Content $mockAdb @'
+$joined = $args -join ' '
+if ($joined -match 'boom') { Write-Output 'mock-adb: request failed'; exit 1 }
+if ($joined -match 'files/sessions-quarantine') { exit 0 }
+if ($joined -match 'files/evidence') { exit 0 }
+if ($joined -match 'files/sessions') {
+    Write-Output 'SES-aaaaaaaaaaaaaaaa.json'
+    Write-Output 'SES-bbbbbbbbbbbbbbbb.json'
+    exit 0
+}
+exit 0
+'@
+
+# 14d. empty inventory returns a real zero-length array, never $null
+# (the INSTALL-05 producer: bare `return @()` collapses to $null).
+$r14d = Get-AppList $mockAdb 'SERIAL-X' 'ai.edgefit.diag' 'evidence'
+Assert-True ($r14d -is [array]) 'applist.empty-is-array'
+Assert-True ($r14d.Count -eq 0) 'applist.empty-count-zero'
+Assert-True ($null -ne $r14d) 'applist.empty-not-null'
+
+# 14e. nonempty inventory passes names through exactly.
+$r14e = Get-AppList $mockAdb 'SERIAL-X' 'ai.edgefit.diag' 'sessions'
+Assert-True (($r14e.Count -eq 2) -and ($r14e[0] -eq 'SES-aaaaaaaaaaaaaaaa.json') -and ($r14e[1] -eq 'SES-bbbbbbbbbbbbbbbb.json')) 'applist.nonempty-exact'
+
+# 14f. tool failure surfaces the inventory error (Fail stubbed).
+function Fail([string]$FailMessage) { throw "FAIL-STUB:$FailMessage" }
+$failFired = $false
+try { Get-AppList $mockAdb 'SERIAL-X' 'ai.edgefit.diag' 'boom' | Out-Null }
+catch { $failFired = ($_.Exception.Message -match 'FAIL-STUB.*run-as inventory') }
+Assert-True $failFired 'applist.failure-surfaced'
+
+# 14g. end-to-end: empty producer output feeds the verifier cleanly.
+$chain = Test-BackupArchive $tarExe $emptyTar $members3 (Get-AppList $mockAdb 'SERIAL-X' 'ai.edgefit.diag' 'evidence') @()
+Assert-True ($chain.Ok) 'chain.empty-ok' $chain.Reason
 
 # 15. package parse keeps diagnostics out of identity names.
 $pmLines = @(

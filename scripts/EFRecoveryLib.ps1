@@ -117,6 +117,10 @@ function Test-BackupArchive(
     [string[]]$ExpectedSessions,
     [string[]]$ExpectedEvidence
 ) {
+    $ExpectedSessions = @($ExpectedSessions |
+        Where-Object { $_ -ne $null -and "$_".Trim() -ne '' })
+    $ExpectedEvidence = @($ExpectedEvidence |
+        Where-Object { $_ -ne $null -and "$_".Trim() -ne '' })
     $fail = { param($why) return @{ Ok = $false; Reason = $why;
         Sessions = @(); Evidence = @(); Entries = 0 } }
     if ([string]::IsNullOrWhiteSpace($TarExe) -or -not (Test-Path $TarExe)) {
@@ -246,4 +250,25 @@ function Get-EdgeFitPackages(
     $found = $pkgs -contains $ExpectedAppId
     $sibs = @($pkgs | Where-Object { $_ -ne $ExpectedAppId })
     return @{ Found = $found; Siblings = $sibs; Diagnostics = $diags }
+}
+
+# Lists one app-private directory via run-as. ALWAYS returns a real
+# string array, even when empty: a bare `return @()` would collapse
+# to $null for the caller, and `$null | Where-Object {...}` runs
+# once with $_=$null, fabricating phantom missing-file entries
+# downstream (INSTALL-05). Text capture goes through
+# Invoke-ToolText so tool stderr can never throw here.
+function Get-AppList(
+    [string]$AdbExe,
+    [string]$DeviceSerial,
+    [string]$AppId,
+    [string]$Dir
+) {
+    $r = Invoke-ToolText $AdbExe @('-s', $DeviceSerial, 'shell',
+        "run-as $AppId ls files/$Dir")
+    if ($r.Exit -ne 0) {
+        Fail "run-as inventory of files/$Dir failed (debuggable build required)"
+    }
+    return ,@($r.Lines | ForEach-Object { "$_".Trim() } |
+        Where-Object { $_ -ne '' })
 }

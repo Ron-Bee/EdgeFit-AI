@@ -316,16 +316,9 @@ Note 'signing: MATCH'
 # ---------- 6. baseline inventory (read-only) ----------
 
 Step '6. Baseline evidence inventory (read-only)'
-function Get-AppList([string]$dir) {
-    $out = & $adb -s $Serial shell "run-as $ExpectedAppId ls files/$dir" 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        Fail "run-as inventory of files/$dir failed (debuggable build required)"
-    }
-    return @($out | ForEach-Object { $_.Trim() } | Where-Object { $_ })
-}
-$baseSessions = Get-AppList 'sessions'
-$baseEvidence = Get-AppList 'evidence'
-$baseQuar = Get-AppList 'sessions-quarantine'
+$baseSessions = Get-AppList $adb $Serial $ExpectedAppId 'sessions'
+$baseEvidence = Get-AppList $adb $Serial $ExpectedAppId 'evidence'
+$baseQuar = Get-AppList $adb $Serial $ExpectedAppId 'sessions-quarantine'
 Note "baseline sessions: $($baseSessions.Count)"
 Note "baseline evidence: $($baseEvidence.Count)"
 Note "baseline quarantine: $($baseQuar.Count)"
@@ -382,9 +375,9 @@ if ($instText -notmatch 'Success') {
 # ---------- 8. post-install validation ----------
 
 Step '8. Post-install validation'
-$postSessions = Get-AppList 'sessions'
-$postEvidence = Get-AppList 'evidence'
-$postQuar = Get-AppList 'sessions-quarantine'
+$postSessions = Get-AppList $adb $Serial $ExpectedAppId 'sessions'
+$postEvidence = Get-AppList $adb $Serial $ExpectedAppId 'evidence'
+$postQuar = Get-AppList $adb $Serial $ExpectedAppId 'sessions-quarantine'
 $postSessions | Out-File (Join-Path $ReportDir 'postinstall-sessions.txt')
 $missing = @($baseSessions | Where-Object { $postSessions -notcontains $_ })
 $vanished = @($baseEvidence | Where-Object {
@@ -438,7 +431,7 @@ if (($LASTEXITCODE -ne 0) -or (-not $pid2) -or (-not "$pid2".Trim())) {
 if ("$pid2".Trim() -eq "$pid1".Trim()) {
     Fail 'relaunch was not cold (pid unchanged after force-stop)'
 }
-$coldSessions = Get-AppList 'sessions'
+$coldSessions = Get-AppList $adb $Serial $ExpectedAppId 'sessions'
 $coldMissing = @($baseSessions | Where-Object { $coldSessions -notcontains $_ })
 if ($coldMissing.Count -gt 0) {
     Fail "sessions missing after cold relaunch: $($coldMissing -join ', ')"
