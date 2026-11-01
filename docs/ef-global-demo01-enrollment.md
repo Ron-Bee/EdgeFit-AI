@@ -10,7 +10,11 @@ operator through this procedure plus the issuance mechanics in
 1. Consent text `ef-consent-01` approved by the owner
    (`docs/ef-consent-01-policy.md`). The version stamped at upload
    can never be changed after the fact.
-2. Ingestion route approved (section 4 below). No route exists today.
+2. Ingestion route deployed: the DEMO-02 dedicated gateway at
+   `https://edgefit-evidence-ingest-demo.ronbaute92.workers.dev`
+   (per-install Bearer auth, no Access token needed). The old
+   "no route exists" note and the section 4 Service Auth plan are
+   SUPERSEDED (kept below as history).
 3. Android uploader ready in the separate workstream
    (`docs/ef-global-demo01-android-handoff.md`).
 4. Target device physically verified by the owner (section 1).
@@ -82,11 +86,15 @@ Status values: NOT ISSUED / ACTIVE / REVOKED. Revocation follows
 the operator doc (revoked_at; submissions NOT cascade-withdrawn —
 withdraw affected rows individually when required).
 
-## 4. Ingestion route decision (OWNER APPROVAL REQUIRED)
+## 4. Ingestion route decision (SUPERSEDED — history only)
+
+SUPERSEDED by EF-GLOBAL-DEMO-02: the dedicated ingest gateway
+above is deployed and qualified; do NOT follow the Service Auth
+exposure plan below. Original DEMO-01 text preserved:
 
 The staging worker is nonpublic (`workers_dev=false`) and behind
 an owner-only Cloudflare Access policy. No device-reachable
-authenticated write route exists today.
+authenticated write route exists today. (Stale as of DEMO-02.)
 
 RECOMMENDED (smallest, reuses qualified code): temporary,
 demo-window-only Service Auth on the EXISTING staging worker,
