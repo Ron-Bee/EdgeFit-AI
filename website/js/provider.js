@@ -294,9 +294,21 @@ export class HttpProvider {
       throw new ProviderError(STATE.SOURCE_ERROR,
         "aggregates payload exceeds safe maximum");
     }
+    // Prefer the server-advertised quorum; fall back to the v1
+    // contract constants only when the source omits it.
+    let quorum = null;
+    if (isPlainObject(body.quorum) &&
+        Number.isInteger(body.quorum.min_runs) &&
+        body.quorum.min_runs > 0 &&
+        Number.isInteger(body.quorum.min_installs) &&
+        body.quorum.min_installs > 0) {
+      quorum = { minRuns: body.quorum.min_runs,
+        minInstalls: body.quorum.min_installs };
+    }
     return {
       groups: body.groups.map(cleanGroup),
       truncated: body.truncated === true,
+      quorum,
     };
   }
   async getCandidates() {

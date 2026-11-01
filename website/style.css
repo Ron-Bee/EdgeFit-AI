@@ -131,6 +131,7 @@ h2 { font-size: 1.25rem; margin-top: 2.25rem; }
   border-radius: 18px;
 }
 .caption { color: var(--muted); font-size: 0.85rem; text-align: center; }
+.caption.warn { color: var(--warn); }
 
 /* ---- cards, grids, panels ---- */
 .card {
