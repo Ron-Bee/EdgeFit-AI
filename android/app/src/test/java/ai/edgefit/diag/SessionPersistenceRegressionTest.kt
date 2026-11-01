@@ -171,7 +171,67 @@ class SessionPersistenceRegressionTest {
         assertEquals(1, manager(root).listSessions().size)
     }
 
-    // D6/D9: measurements byte-identical across reinit + recovery.
+    /**
+     * JSON-contract-aware deep equality. SessionJson decodes every
+     * integer token as Long and every decimal token as Double, so
+     * Kotlin Int/Float wrappers do NOT survive a persist/load cycle.
+     * Numbers compare by exact double value; maps require identical
+     * key sets; lists require identical size; strings, booleans,
+     * and nulls compare exactly (a String "512" never equals 512).
+     */
+    private fun assertJsonEquivalent(
+        expected: Any?,
+        actual: Any?,
+        path: String = "$"
+    ) {
+        if (expected is Number && actual is Number) {
+            assertEquals("numeric mismatch at $path",
+                expected.toDouble(), actual.toDouble(), 0.0)
+            return
+        }
+        if (expected is Map<*, *> && actual is Map<*, *>) {
+            assertEquals("key set at $path", expected.keys, actual.keys)
+            for (key in expected.keys) {
+                assertJsonEquivalent(expected[key], actual[key], "$path[$key]")
+            }
+            return
+        }
+        if (expected is List<*> && actual is List<*>) {
+            assertEquals("list size at $path", expected.size, actual.size)
+            expected.forEachIndexed { index, item ->
+                assertJsonEquivalent(item, actual[index], "$path[$index]")
+            }
+            return
+        }
+        assertEquals("value mismatch at $path", expected, actual)
+    }
+
+    // The codec contract behind D6, pinned explicitly: integer
+    // tokens decode as Long, decimals as Double. Values survive;
+    // Kotlin wrappers do not. A direct assertEquals across the
+    // boundary would be a test bug, never a production signal.
+
+    @Test
+    fun jsonCodecNormalizesIntegersToLongWithoutLosingValue() {
+        val original = linkedMapOf<String, Any?>(
+            "int" to 512,
+            "long" to 807694464L,
+            "double" to 16.0,
+            "negative" to -3,
+            "zero_double" to 0.0,
+            "nested" to linkedMapOf<String, Any?>(
+                "n" to 4, "list" to listOf(1, 2L, 3.0)))
+        val parsed = SessionJson.parse(SessionJson.stringify(original))
+        assertJsonEquivalent(original, parsed)
+        @Suppress("UNCHECKED_CAST")
+        val map = parsed as Map<String, Any?>
+        assertTrue(map["int"] is Long)
+        assertEquals(512L, map["int"])
+        assertTrue(map["double"] is Double)
+    }
+
+    // D6/D9: measurements value-identical across reinit + recovery
+    // under the JSON numeric contract (Int normalizes to Long).
 
     @Test
     fun measurementsPreservedAcrossReinitAndRecovery() {
@@ -181,14 +241,20 @@ class SessionPersistenceRegressionTest {
         val before = measured.benchmark
         val second = manager(root)
         second.recoverOnLaunch()
-        val after = second.get(measured.sessionId).benchmark
-        assertEquals(before, after)
+        val reloaded = second.get(measured.sessionId)
+        // Every key survives with an equivalent value; nothing is
+        // dropped, added, or silently changed by the cycle.
+        assertJsonEquivalent(before, reloaded.benchmark)
         @Suppress("UNCHECKED_CAST")
-        val bench = after as Map<String, Any?>
+        val bench = reloaded.benchmark as Map<String, Any?>
         assertEquals(runId, bench["run_id"])
-        assertEquals(
-            measured.sessionId,
-            second.get(measured.sessionId).sessionId)
+        // Model/config/workload identity persists exactly.
+        assertEquals(measured.modelSha256, reloaded.modelSha256)
+        assertEquals(measured.workloadId, reloaded.workloadId)
+        assertEquals(measured.modelSizeBytes, reloaded.modelSizeBytes)
+        assertJsonEquivalent(measured.config, reloaded.config)
+        assertEquals(measured.history, reloaded.history)
+        assertEquals(measured.sessionId, reloaded.sessionId)
     }
 
     // D7: first-launch recovery preserves inventory count + ids.
