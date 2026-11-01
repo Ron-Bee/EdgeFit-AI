@@ -10,45 +10,61 @@
 <body>
 <header>
 <nav aria-label="Main">
-<a class="brand" href="index.html">EdgeFit AI</a>
+<a class="brand" href="index.html"><b>EdgeFit</b> AI</a>
 <a href="methodology.html" aria-current="page">Methodology</a>
 <a href="evidence.html">Evidence status</a>
 </nav>
 </header>
-<main>
+<main class="prose">
 <h1>Methodology</h1>
+<p class="standfirst">Five gates stand between a phone run and a published
+number. Each one exists because skipping it corrupts the statistics.</p>
 
-<h2>Physical measurement first</h2>
-<p>Every candidate measurement starts as a real benchmark run on a real
-phone: tokens generated, milliseconds elapsed, device class, runtime, and
-workload recorded together. Self-reported files that cannot prove physical
-execution are never admitted to the qualified population.</p>
+<div class="card">
+<h3><span class="step-num">1</span>Physical measurement</h3>
+<p>Every candidate starts as a real run on a real phone: tokens, elapsed
+time, device class, runtime, and workload recorded together. Self-reported
+files that cannot prove physical execution never enter the qualified
+population.</p>
+</div>
 
-<h2>Exact cohorts, never pooled averages</h2>
-<p>A cohort is the set of runs sharing the exact model hash, device class,
-runtime, backend, quantization, workload, prompt hash, context length,
-thread count, token count, sampler, optimization, and build provenance.
-Runs that differ in any of these are never averaged together. Averages
-across incompatible runs are the defect this design exists to prevent.</p>
+<div class="card">
+<h3><span class="step-num">2</span>Validation and deduplication</h3>
+<p>Submissions are schema-checked, hash-verified, and deduplicated by
+content: re-sending identical bytes returns the original receipt instead
+of a second row. Malformed or oversized envelopes are rejected before
+they can consume quota.</p>
+</div>
 
-<h2>Quorum before publication</h2>
-<p>A cohort publishes statistics only when it holds at least 5 eligible
-runs from at least 3 independent installations. Below that, the cohort is
-listed as <em>insufficient evidence</em>: counts visible, statistics
-withheld — never zeros, never partial means.</p>
+<div class="card">
+<h3><span class="step-num">3</span>Consent and withdrawal</h3>
+<p>Contribution needs explicit per-submission consent after previewing the
+exact shared fields. Withdrawal is terminal: revoked rows are tombstoned
+and excluded from every surface. Consent policy content is still under
+review — no real consent version is approved yet.</p>
+</div>
 
-<h2>Consent and withdrawal</h2>
-<p>Contribution requires explicit per-submission consent after previewing
-the exact shared fields. Consent can be withdrawn at any time; withdrawal
-is terminal. Revoked evidence is tombstoned and excluded from every
-statistical surface. Consent policy content is still under review, so no
-real consent version is approved yet.</p>
+<div class="card">
+<h3><span class="step-num">4</span>Exact-cohort grouping</h3>
+<p>Runs are grouped only when they match on every comparability field:
+model hash, device class, runtime, backend, quantization, workload,
+prompt hash, context, threads, tokens, sampler, optimization, and build
+provenance. Differ in one field, and the runs are never averaged
+together.</p>
+</div>
+
+<div class="card">
+<h3><span class="step-num">5</span>Quorum-gated publication</h3>
+<p>A cohort publishes only with 5+ eligible runs from 3+ independent
+installations. Below that: <em>insufficient evidence</em> — counts
+visible, statistics withheld. Never zeros, never partial means, never a
+pooled average across incompatible runs.</p>
+</div>
 
 <h2>Synthetic data stays synthetic</h2>
-<p>The staging backend runs on synthetic test fixtures. Synthetic rows are
-marked as test-only, can never satisfy genuine quorum, and are excluded
-from every public aggregate. No synthetic measurement is ever presented
-as device evidence.</p>
+<p>Staging runs on synthetic fixtures marked test-only. They can never
+satisfy genuine quorum and are filtered from every public aggregate. No
+synthetic measurement is ever presented as device evidence.</p>
 </main>
 <footer>
 <p>EdgeFit AI — hackathon prototype. No published global statistics yet.</p>

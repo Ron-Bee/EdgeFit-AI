@@ -10,49 +10,108 @@
 <body>
 <header>
 <nav aria-label="Main">
-<a class="brand" href="index.html">EdgeFit AI</a>
+<a class="brand" href="index.html"><b>EdgeFit</b> AI</a>
 <a href="methodology.html">Methodology</a>
 <a href="evidence.html">Evidence status</a>
 </nav>
 </header>
 <main>
-<h1>Evidence-based on-device inference</h1>
-<p class="standfirst">EdgeFit AI is a prototype built for the Meta Global AI
-Developer Hackathon. It measures real language-model inference on physical
-Android phones and works toward a global evidence network where only
-verified, consented, comparable measurements count as evidence.</p>
+<div class="hero">
+<div>
+<h1>Know what your phone can actually run</h1>
+<p class="lede">EdgeFit AI measures real language-model inference on
+physical Android phones — then proves which results are comparable.
+A prototype built for the Meta Global AI Developer Hackathon.</p>
+<div class="cta-row">
+<a class="btn btn-primary" href="evidence.html">See evidence status</a>
+<a class="btn btn-ghost" href="methodology.html">How it works</a>
+</div>
+</div>
+<div>
+<div class="phone" role="img" aria-label="Placeholder for the EdgeFit Android Home screenshot (pending)">
+<div class="screen">Android Home screenshot pending — physical device capture, not a mockup.</div>
+</div>
+<p class="caption">EdgeFitDiag on Android <span class="status-tag pending">screenshot pending</span></p>
+</div>
+</div>
 
-<h2>How it works</h2>
-<ol>
-<li><strong>Measure on the phone.</strong> The EdgeFitDiag Android app runs
-inference benchmarks on the physical device and exports a signed-shape JSON
-profile. No permissions, no network, no telemetry.</li>
-<li><strong>Review and consent.</strong> Contributors preview exactly what
-would be shared and grant explicit per-submission consent before anything
-leaves the phone.</li>
-<li><strong>Submit for qualification.</strong> Consented results enter a
-server pipeline that validates, deduplicates, and qualifies them through
-audited eligibility states.</li>
-<li><strong>Publish exact cohorts only.</strong> Statistics are published
-only for exact cohorts — same model, build, runtime, workload, and
-configuration — once 5 eligible runs from 3 independent installations
-agree the cohort is real.</li>
+<hr class="rule">
+
+<h2>Hardware-aware, like the app</h2>
+<p>The Android app starts from your device, not from a leaderboard. The
+same idea, on the web:</p>
+<div class="card">
+<h3>Example device profile <span class="demo-tag">DEMONSTRATION</span></h3>
+<p>Illustrative values for a phone of this class — not measured from
+your browser, which cannot see your hardware.</p>
+<div class="metric-grid">
+<div class="metric"><div class="k">Device</div><div class="v">SM-S908U class</div></div>
+<div class="metric"><div class="k">CPU cores</div><div class="v">8</div></div>
+<div class="metric"><div class="k">Total RAM</div><div class="v">12 GB</div></div>
+<div class="metric"><div class="k">Free memory</div><div class="v">~3.2 GB (illustrative)</div></div>
+<div class="metric"><div class="k">Thermal</div><div class="v">nominal (illustrative)</div></div>
+<div class="metric"><div class="k">ABI</div><div class="v">arm64-v8a</div></div>
+</div>
+</div>
+
+<h2>Try the model-fit check <span class="demo-tag">DEMONSTRATION</span></h2>
+<div class="card demo" id="demo">
+<p>Pick a model size to see how EdgeFit reasons about fit
+<em>before</em> any benchmark runs. Sizes are public model facts;
+memory figures are illustrative. This is arithmetic, not a measurement —
+EdgeFit shows throughput only from real qualified runs.</p>
+<label for="modelpick">Model file (GGUF)</label>
+<select id="modelpick">
+<option value="0.8|1B class">Llama-3.2-1B Q4_K_M — ~0.8 GB</option>
+<option value="2.0|3B class">Qwen2.5-3B Q4_K_M — ~2.0 GB</option>
+<option value="4.9|8B class">Llama-3.1-8B Q4_K_M — ~4.9 GB</option>
+</select>
+<output id="demoout" aria-live="polite"></output>
+<noscript><p>Enable JavaScript for the interactive check; the reasoning
+is simple size-versus-memory arithmetic.</p></noscript>
+</div>
+
+<h2>The Android workflow</h2>
+<div class="card">
+<ol class="tight">
+<li><span class="step-num">1</span>Select a GGUF model file on the phone.</li>
+<li><span class="step-num">2</span>Configure inference: context, threads, prompt.</li>
+<li><span class="step-num">3</span>Run a physical benchmark; results stay on-device.</li>
+<li><span class="step-num">4</span>Review measured throughput per session.</li>
+<li><span class="step-num">5</span>Optionally contribute with explicit consent
+<em>(in development; staging backend under test, not publicly
+queryable)</em>.</li>
 </ol>
+</div>
+<div>
+<div class="phone" role="img" aria-label="Placeholder for the EdgeFit Android Benchmark screenshot (pending)">
+<div class="screen">Android Benchmark screenshot pending — physical device capture, not a mockup.</div>
+</div>
+<p class="caption">Benchmark workflow <span class="status-tag pending">screenshot pending</span></p>
+</div>
 
-<h2>Current status</h2>
-<p>Staging backend under test. <strong>No verified global aggregates have
-been published yet.</strong> See the
-<a href="evidence.html">evidence status page</a> for what exists today and
-what does not.</p>
+<h2>Meta Muse Spark, honestly scoped</h2>
+<p>EdgeFit uses Meta's Muse Spark model to help <em>analyze</em> validated
+evidence: a validated tool request runs one fixed read-only query over
+local SQLite, and the model reasons over the returned rows. No live model
+outputs are shown on this site, and nothing here implies endorsement by
+Meta.</p>
+
+<h2>Global evidence, gated by proof</h2>
+<p>The long-term goal is a global network where only verified, consented,
+comparable phone measurements count. Today: <strong>zero verified global
+aggregates published.</strong> The <a href="evidence.html">evidence status
+page</a> tracks exactly what exists and what publication requires.</p>
 
 <h2>Provenance honesty</h2>
-<p>All EdgeFit AI source and functionality in this repository is new work
-started October 26, 2026, for this hackathon. Honey LLM and BeeBench are
-pre-existing independent projects; EdgeFit does not reuse their code or
-present their results as its own.</p>
+<p>All EdgeFit AI source in this repository is new work started October 26,
+2026, for this hackathon. Honey LLM and BeeBench are pre-existing
+independent projects; EdgeFit does not reuse their code or present their
+results as its own.</p>
 </main>
 <footer>
 <p>EdgeFit AI — hackathon prototype. No published global statistics yet.</p>
 </footer>
+<script src="demo.js" defer></script>
 </body>
 </html>

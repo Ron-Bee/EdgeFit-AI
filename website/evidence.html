@@ -10,43 +10,58 @@
 <body>
 <header>
 <nav aria-label="Main">
-<a class="brand" href="index.html">EdgeFit AI</a>
+<a class="brand" href="index.html"><b>EdgeFit</b> AI</a>
 <a href="methodology.html">Methodology</a>
 <a href="evidence.html" aria-current="page">Evidence status</a>
 </nav>
 </header>
-<main>
-<h1>Evidence status: insufficient evidence</h1>
-<p class="standfirst">EdgeFit AI has published <strong>zero</strong> verified
-global aggregates. This page explains why, and what has to happen before
-any number appears here.</p>
+<main class="prose">
+<h1>Evidence status</h1>
 
-<h2>What exists today</h2>
-<ul>
-<li>A staging backend (Cloudflare Workers + D1) under active test. It is
-private and not publicly queryable; this page makes no calls to it.</li>
-<li>Synthetic test fixtures used to qualify the pipeline. They are
-test-only and excluded from genuine statistics by design.</li>
-<li>Physical Android measurements collected locally during development.
-They are single-device, unqualified runs — interesting to the developers,
-not evidence yet.</li>
-</ul>
+<div class="card">
+<h3><span class="dot warn"></span>Verified global aggregates:
+<strong>0 published</strong> <span class="status-tag pending">insufficient evidence</span></h3>
+<p>No cohort has met the publication bar yet. Everything below explains
+the current state honestly — what is real, what is test data, and what
+has to happen before a number appears here.</p>
+<div class="metric-grid">
+<div class="metric"><div class="k">Published cohorts</div><div class="v">0</div></div>
+<div class="metric"><div class="k">Quorum required</div><div class="v">5 runs / 3 installs</div></div>
+<div class="metric"><div class="k">Staging rows</div><div class="v">synthetic, test-only</div></div>
+<div class="metric"><div class="k">Run drill-down</div><div class="v">disabled (policy pending)</div></div>
+</div>
+</div>
 
-<h2>What publication requires</h2>
-<ul>
+<div class="card">
+<h3><span class="dot good"></span>Staging backend <span class="status-tag ok">under test</span></h3>
+<p>Cloudflare Workers + D1, private and not publicly queryable. This page
+makes no calls to it. The pipeline it runs — validate, deduplicate,
+qualify, audit — is the same one genuine contributions will use.</p>
+</div>
+
+<div class="card">
+<h3><span class="dot warn"></span>Physical measurements <span class="status-tag pending">unqualified</span></h3>
+<p>Real benchmark runs collected locally during development on physical
+Android phones. Single-device and pre-consent-policy, so interesting to
+the developers — not evidence yet.</p>
+</div>
+
+<div class="card">
+<h3>What publication requires</h3>
+<ul class="tight">
 <li>An approved consent policy (still under review).</li>
-<li>Genuine device contributions through explicit per-submission consent.</li>
-<li>At least 5 eligible runs from at least 3 independent installations in
-the same exact cohort.</li>
-<li>Individual-run drill-down stays disabled until its disclosure policy
-is approved. Public viewers will only ever see authorized aggregates.</li>
+<li>Genuine contributions through explicit per-submission consent.</li>
+<li>5+ eligible runs from 3+ independent installs in one exact cohort.</li>
+<li>Run-level drill-down stays disabled until its disclosure policy is approved.</li>
 </ul>
+</div>
 
-<h2>What you will see when a cohort qualifies</h2>
+<div class="card">
+<h3>What you will see when a cohort qualifies</h3>
 <p>A model table with median throughput, sample and installation counts,
-and the full cohort identity — one representative cohort per model, never
-a pooled mean across incompatible runs. Until then: counts without
-statistics, honestly labeled.</p>
+and full cohort identity — one representative cohort per model, never a
+pooled mean. Until then: counts without statistics, honestly labeled.</p>
+</div>
 </main>
 <footer>
 <p>EdgeFit AI — hackathon prototype. No published global statistics yet.</p>
