@@ -7,11 +7,11 @@
   Runs, in order: source safety gates, Gradle compile/tests/assemble,
   APK identity + signing validation, physical device identity,
   installed-vs-candidate certificate match, baseline evidence
-  inventory, a verified run-as backup of app-private sessions and
-  evidence, in-place `adb install -r` (ONLY when every gate passes),
-  launch/health checks, and post-install + cold-relaunch preservation
-  verification. Never uninstalls, clears data, downgrades, or retries
-  an incompatible install.
+  inventory, a verified binary-safe run-as backup of app-private
+  sessions and evidence, in-place `adb install -r` (ONLY when every
+  gate passes), launch/health checks, and post-install + cold-relaunch
+  preservation verification. Never uninstalls, clears data,
+  downgrades, or retries an incompatible install.
 
   Reports VERDICT: PASS or VERDICT: BLOCKED and exits 0 / 1.
 
@@ -40,6 +40,7 @@ $script:failures = @()
 # script lives in <repo>/scripts/ and every path below is relative.
 $script:repoRoot = Split-Path $PSScriptRoot -Parent
 Push-Location $script:repoRoot
+. (Join-Path $PSScriptRoot 'EFRecoveryLib.ps1')
 
 function Step([string]$name) {
     Write-Host ''
@@ -74,6 +75,12 @@ function Invoke-Signer([string[]]$SignerArgs) {
     }
     return & $script:signerPath @SignerArgs 2>&1
 }
+
+# Any unexpected terminating fault (including a native tool's
+# stderr, which Windows PowerShell 5.1 raises as terminating even
+# past redirections) becomes an honest BLOCKED verdict: never a
+# crash without one, never a false PASS.
+trap { Fail "unexpected fault: $($_.Exception.Message)" }
 
 # ---------- 0. repo + report dir ----------
 
@@ -211,6 +218,7 @@ if (-not $adb) {
     $adb = $pt
 }
 else { $adb = $adb.Source }
+$script:adbExe = $adb
 & $adb -s $Serial wait-for-device 2>&1 | Out-Null
 $state = (& $adb -s $Serial get-state 2>&1) | Select-Object -First 1
 if ($state -ne 'device') { Fail "device state '$state' (need 'device')" }
@@ -230,20 +238,28 @@ if ($userNum -ne $ExpectedUser) {
     Fail "android user '$userNum' != '$ExpectedUser'"
 }
 Note "device: $Serial $("$model".Trim()) user $userNum state $state"
-$pkgs = & $adb -s $Serial shell pm list packages 'ai.edgefit.diag'
-Note "installed edgefit packages: $($pkgs -join ', ')"
-$siblings = @($pkgs | ForEach-Object { ($_ -split ':')[-1].Trim() } |
-    Where-Object { $_ -like 'ai.edgefit.diag*' -and $_ -ne $ExpectedAppId })
-foreach ($sib in $siblings) {
-    $sibLs = & $adb -s $Serial shell "run-as $sib ls files/sessions" 2>$null
-    if ($LASTEXITCODE -eq 0) {
-        $sibN = @($sibLs | ForEach-Object { "$_".Trim() } |
+$pmList = Invoke-ToolText $adb @('-s', $Serial, 'shell', 'pm', 'list',
+    'packages', '--user', "$ExpectedUser", 'ai.edgefit.diag')
+$pkgInfo = Get-EdgeFitPackages $pmList.Lines $ExpectedAppId
+$foundNames = @()
+if ($pkgInfo.Found) { $foundNames += $ExpectedAppId }
+$foundNames += $pkgInfo.Siblings
+if ($foundNames.Count -eq 0) { $foundNames += '(none)' }
+Note "installed edgefit packages (user $ExpectedUser): $($foundNames -join ', ')"
+foreach ($diag in ($pkgInfo.Diagnostics | Select-Object -First 3)) {
+    Note "package query diagnostic: $diag"
+}
+foreach ($sib in $pkgInfo.Siblings) {
+    $sibLs = Invoke-ToolText $adb @('-s', $Serial, 'shell',
+        "run-as $sib ls files/sessions")
+    if ($sibLs.Exit -eq 0) {
+        $sibN = @($sibLs.Lines | ForEach-Object { "$_".Trim() } |
             Where-Object { $_ -match '\.json$' }).Count
         Note "sibling $sib sessions: $sibN (separate identity; untouched)"
     }
     else { Note "sibling $sib sessions: unreadable (noted, untouched)" }
 }
-if ($pkgs -match 'ai\.edgefit\.diag\.bench') {
+if ($pkgInfo.Siblings -contains 'ai.edgefit.diag.bench') {
     Note 'WARNING: benchmark variant also installed; confirm target!'
 }
 
@@ -331,34 +347,26 @@ Step '6b. Verified device backup (read-only on device)'
 $tarExe = Get-Command tar -ErrorAction SilentlyContinue
 if (-not $tarExe) { Fail 'tar.exe not found (needed to verify backup)' }
 $backupTar = Join-Path $ReportDir 'app-data-backup.tar'
-$adbQ = '"' + $adb + '"'
-$outQ = '"' + $backupTar + '"'
-# cmd.exe redirection preserves the tar stream byte-exactly;
-# PowerShell capture would corrupt binary stdout as text.
-cmd /c "$adbQ -s $Serial exec-out run-as $ExpectedAppId tar -c files/sessions files/evidence files/sessions-quarantine files/install.json > $outQ"
-$tarList = & $tarExe.Source -tf $backupTar 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Fail 'backup tarball unreadable (no install performed)'
+# Request only members proven present by the baseline inventory: a
+# missing member would make tar diagnose on stderr, and no
+# diagnostic text may ever reach the archive stream.
+$tarMembers = @('files/sessions', 'files/evidence',
+    'files/sessions-quarantine')
+if ($baseInstallId) { $tarMembers += 'files/install.json' }
+$memberArgs = $tarMembers -join ' '
+$backup = Invoke-NativeBinary $script:adbExe "-s $Serial exec-out run-as $ExpectedAppId tar -c $memberArgs" $backupTar 120
+if ($backup.Exit -ne 0) {
+    $tail = "$($backup.Stderr)".Trim()
+    if ($tail.Length -gt 500) { $tail = $tail.Substring(0, 500) + '...' }
+    Fail "device backup command failed (exit $($backup.Exit)): $tail"
 }
-$tarSessions = @($tarList |
-    Where-Object { $_ -match 'files/sessions/SES-.*\.json$' } |
-    ForEach-Object { ($_ -split '/')[-1] })
-$tarEvidence = @($tarList |
-    Where-Object { $_ -match 'files/evidence/.*\.json$' } |
-    ForEach-Object { ($_ -split '/')[-1] })
-$missTar = @($baseSessions | Where-Object { $tarSessions -notcontains $_ })
-if ($missTar.Count -gt 0) {
-    Fail "backup missing sessions: $($missTar -join ', ')"
-}
-$missEv = @($baseEvidence | Where-Object { $tarEvidence -notcontains $_ })
-if ($missEv.Count -gt 0) {
-    Fail "backup missing evidence: $($missEv -join ', ')"
-}
+$check = Test-BackupArchive $tarExe.Source $backupTar $tarMembers $baseSessions $baseEvidence
+if (-not $check.Ok) { Fail "backup verification failed: $($check.Reason)" }
 $tarHash = (Get-FileHash $backupTar -Algorithm SHA256).Hash
 Set-Content (Join-Path $ReportDir 'MANIFEST.sha256') "$tarHash  app-data-backup.tar"
 Note "backup: $backupTar"
 Note "backup sha256: $tarHash"
-Note "backup sessions: $($tarSessions.Count) evidence: $($tarEvidence.Count)"
+Note "backup sessions: $($check.Sessions.Count) evidence: $($check.Evidence.Count) entries: $($check.Entries)"
 Note 'backup excludes key material by design (Meta/Global secrets stay on device)'
 
 # ---------- 7. in-place install ----------
@@ -383,9 +391,11 @@ $vanished = @($baseEvidence | Where-Object {
     $_ -notlike '*.withdraw.json' -and $postEvidence -notcontains $_ })
 $postTomb = @($postEvidence | Where-Object { $_ -like '*.withdraw.json' })
 $lostTomb = @($baseTomb | Where-Object { $postTomb -notcontains $_ })
+$missingQuar = @($baseQuar | Where-Object { $postQuar -notcontains $_ })
 Note "post sessions: $($postSessions.Count) (missing: $($missing.Count))"
 Note "post evidence: $($postEvidence.Count) (vanished: $($vanished.Count))"
 Note "post tombstones: $($postTomb.Count) (lost: $($lostTomb.Count))"
+Note "post quarantine: $($postQuar.Count) (missing: $($missingQuar.Count))"
 if ($missing.Count -gt 0) {
     Fail "session files missing after install: $($missing -join ', ')"
 }
@@ -394,6 +404,9 @@ if ($vanished.Count -gt 0) {
 }
 if ($lostTomb.Count -gt 0) {
     Fail "withdrawal tombstones lost: $($lostTomb -join ', ')"
+}
+if ($missingQuar.Count -gt 0) {
+    Fail "quarantine files missing after install: $($missingQuar -join ', ')"
 }
 $postJson = & $adb -s $Serial shell "run-as $ExpectedAppId cat files/install.json" 2>&1
 if ($baseInstallId -and ($postJson -match '"install_id"\s*:\s*"([^"]+)"')) {
@@ -422,12 +435,15 @@ $pid2 = (& $adb -s $Serial shell pidof $ExpectedAppId 2>$null) |
 if (($LASTEXITCODE -ne 0) -or (-not $pid2) -or (-not "$pid2".Trim())) {
     Fail 'app not running after cold relaunch'
 }
+if ("$pid2".Trim() -eq "$pid1".Trim()) {
+    Fail 'relaunch was not cold (pid unchanged after force-stop)'
+}
 $coldSessions = Get-AppList 'sessions'
 $coldMissing = @($baseSessions | Where-Object { $coldSessions -notcontains $_ })
 if ($coldMissing.Count -gt 0) {
     Fail "sessions missing after cold relaunch: $($coldMissing -join ', ')"
 }
-Note "cold relaunch: pid $($pid2.Trim()), sessions stable ($($coldSessions.Count))"
+Note "cold relaunch: pid $($pid2.Trim()) (was $($pid1.Trim())), sessions stable ($($coldSessions.Count))"
 $fatals = & $adb -s $Serial logcat -d -t 400 2>&1 |
     Where-Object { $_ -match 'FATAL EXCEPTION' -and $_ -match 'edgefit' }
 if ($fatals) { Fail "fatal exceptions in logcat: $($fatals -join ' | ')" }
