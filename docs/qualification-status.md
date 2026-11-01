@@ -1469,7 +1469,8 @@ Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
 ## EF-COMP-01B-GATE-1A (readiness gate; DOCS ONLY)
 
 - On `implement/ef-comp-01b-gate-1a-2026-10-30` from
-  61d7bd6. Read-only ADB against S22 R5CT604K33V
+  61d7bd6. Read-only ADB against the S22 study phone
+  (device serial redacted for publication)
   only; emulator untouched; no app writes, no
   runs, no calls.
 - Installed phone build is NOT the ROUTE APK:

@@ -1,0 +1,48 @@
+# Demo
+
+## Demo video
+
+**Demo video coming soon.** No video URL is published yet. When the
+recording is ready, the owner will add the verified link here and in
+the README.
+
+## Five-minute demonstration flow
+
+Designed for a live walkthrough on the Galaxy S22 Ultra with the
+workstation alongside. Steps 1–2 and 5 are fully offline; steps 3–4
+need a Meta API key only if run live (otherwise narrate over the
+recorded session evidence).
+
+**0:00–0:45 — Home: the device tells the truth.**
+Open EdgeFit AI. Point out the device card (model, Android level,
+cores, RAM), live telemetry (battery, temperature, available RAM),
+and the staged-model state. Note: zero permissions, zero network.
+
+**0:45–2:00 — Benchmark: measure, don't guess.**
+Stage the GGUF, run the memory-readiness check, select a config, and
+run. Show the live token chart, then the completed result: measured
+prefill/generation tok/s with thermal and memory conditions.
+Emphasize the run id — every number is traceable.
+
+**2:00–3:00 — Predict first, then compare.**
+Show a session where the Muse prediction was recorded *before* the
+benchmark, then the deterministic comparison (signed error and
+percentage computed by the host). Open the measured-vs-predicted
+detail cards and the UTC evidence block.
+
+**3:00–4:00 — Agent loop with a human gate.**
+Request an agent proposal, show the cited baseline evidence, then
+approve or reject explicitly. Stress the budget and termination rules:
+nothing runs without approval.
+
+**4:00–4:45 — Contribute with consent.**
+Open the Global contribution review for a finished run: provenance,
+hashes, what is sent, and the aggregates-only scope. (No backend is
+deployed, so submission stops at the insistence on a configured
+origin — say so plainly.)
+
+**4:45–5:00 — Close on evidence.**
+Recap the loop on one slide: predict → measure → compare → contribute.
+Cite the comp-01b medians (A 16.52 vs B 10.49 tok/s) and the honest
+M0/M1 abstentions as the punchline: the system refuses to claim more
+than its evidence supports.

@@ -1,0 +1,47 @@
+# Offline validation: existing suites only, no credentials, no network.
+name: validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  offline:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Python offline suites
+        run: |
+          python scripts/ef_data_01.py
+          python scripts/test_ef_meta_05.py
+          python scripts/test_ef_android_01.py
+          python scripts/test_ef_data_02.py
+          python scripts/test_ef_bench_01.py
+          python scripts/test_ef_bench_native_01.py
+          python scripts/test_ef_data_03.py
+          python scripts/test_ef_meta_06.py
+          python scripts/test_ef_loop_01.py
+          python scripts/test_ef_session_parity.py
+          python scripts/test_ef_android_ui_01.py
+
+      - name: PowerShell validator suites
+        run: |
+          powershell -ExecutionPolicy Bypass -File scripts/Test-EF-META-04.ps1
+          powershell -ExecutionPolicy Bypass -File scripts/Test-EFScience01A.ps1
+
+      - name: Cloud foundation tests
+        run: npm test --prefix cloud
+
+      - name: Study manifest regression
+        run: node scripts/ef-comp-01a-manifest.test.mjs

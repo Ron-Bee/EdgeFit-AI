@@ -34,3 +34,7 @@ edgefit-bench-*.json
 # Generated CMake build outputs and local model weights (EF-LOOP-01)
 android/app/.cxx/
 *.gguf
+# Kotlin build cache, stray caches, local JS installs
+android/.kotlin/
+Microsoft/
+node_modules/
