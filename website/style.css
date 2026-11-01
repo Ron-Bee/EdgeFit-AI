@@ -230,7 +230,7 @@ ul.tight li, ol.tight li { margin-bottom: 0.35rem; }
 .chart .quorum { stroke: var(--warn); stroke-width: 1.5; stroke-dasharray: 5 4; }
 .chart text { fill: var(--ink); font-size: 13px; }
 .chart .chart-label { fill: var(--muted); font-size: 12px; }
-.chart-data { margin-top: 0.75rem; }
+.chart-data { margin-top: 0.75rem; overflow-x: auto; }
 .chart-data summary { cursor: pointer; color: var(--accent); }
 .chart-data table {
   width: 100%;

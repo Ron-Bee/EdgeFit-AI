@@ -6,7 +6,8 @@
 "use strict";
 import { STATE, QUORUM_RUNS, QUORUM_INSTALLS, summarizeModels,
   countPublishedGroups, facetValues, applyFacets,
-  EmptyProvider } from "./provider.js";
+  EmptyProvider, HttpProvider } from "./provider.js";
+import { EVIDENCE_BASE } from "./config.js";
 
 export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
@@ -102,18 +103,35 @@ export function kpiHtml(summary, qualifyingCohorts, opts) {
 function cohortLabel(g) {
   const c = g.cohort;
   const full = `${shortHash(c.model_sha)} · ${c.device_class || "?"} · ` +
-    `${c.workload_id || "?"} · ${c.quantization_label || "?"}`;
+    `${c.workload_id || "?"} · ${c.quantization || "?"}`;
   return full.length > 34 ? `${full.slice(0, 33)}…` : full;
+}
+
+// Compact config identity for tables: ctx/threads/predict/sampler.
+// Missing pieces render as "?", never as zeros or guesses.
+export function formatConfig(cfg) {
+  if (cfg === null || cfg === undefined) return "n/a";
+  const part = (v) => Number.isInteger(v) ? String(v) : "?";
+  const samp = typeof cfg.sampler === "string" ? cfg.sampler : "?";
+  return `${part(cfg.n_ctx)}/${part(cfg.n_threads)}/` +
+    `${part(cfg.n_predict)}/${samp}`;
 }
 
 export function cohortTitle(g) {
   const c = g.cohort;
+  const cfg = c.config;
+  const config = cfg === null || cfg === undefined
+    ? "?"
+    : `ctx=${Number.isInteger(cfg.n_ctx) ? cfg.n_ctx : "?"} ` +
+      `threads=${Number.isInteger(cfg.n_threads) ? cfg.n_threads : "?"} ` +
+      `pred=${Number.isInteger(cfg.n_predict) ? cfg.n_predict : "?"} ` +
+      `sampler=${typeof cfg.sampler === "string" ? cfg.sampler : "?"}`;
   return ["model", "device", "workload", "quant", "prompt", "runtime",
     "backend", "build", "config"]
     .map((k, i) => `${k}=${[
       c.model_sha, c.device_class, c.workload_id,
-      c.quantization_label, c.prompt_sha, c.runtime_impl,
-      c.runtime_backend, c.build_key, c.config_hash][i] || "?"}`)
+      c.quantization, c.prompt_sha, c.runtime_impl,
+      c.runtime_backend, c.build, config][i] || "?"}`)
     .join(" ");
 }
 
@@ -157,6 +175,7 @@ export function throughputChart(groups, opts) {
     `<tr><td>${escapeHtml(cohortLabel(g))}</td>` +
     `<td>${g.cohort_hash === null ? "n/a"
       : escapeHtml(g.cohort_hash)}</td>` +
+    `<td>${escapeHtml(formatConfig(g.cohort.config))}</td>` +
     `<td>${escapeHtml(formatTps(g.aggregates.median_gen_tps))}</td>` +
     `<td>${g.n}</td><td>${g.installs}</td></tr>`).join("");
   const truncNote = opts && opts.truncated
@@ -166,7 +185,7 @@ export function throughputChart(groups, opts) {
     `<span class="demo-tag">tok/s</span></h3>${svg}` +
     `<details class="chart-data"><summary>Chart data table</summary>` +
     `<table><thead><tr><th>Cohort</th><th>Cohort hash</th>` +
-    `<th>Median</th><th>Runs</th>` +
+    `<th>Config</th><th>Median</th><th>Runs</th>` +
     `<th>Installs</th></tr></thead><tbody>${rows}</tbody></table>` +
     `</details><p class="caption">One bar per published exact ` +
     `cohort; whiskers span min–max. ${thin} below-quorum ` +
@@ -237,7 +256,8 @@ export function filterHtml(models, facets, selected) {
     `</label>` +
     facetSelect("device_class", "Device class") +
     facetSelect("workload_id", "Workload") +
-    facetSelect("quantization_label", "Quantization") +
+    facetSelect("quantization", "Quantization") +
+    facetSelect("n_ctx", "Context size") +
     `<p><button type="button" class="btn btn-ghost" ` +
     `data-action="reset-filters">Reset filters</button></p>` +
     `<p class="caption">Filters subset exact cohorts; they never ` +
@@ -265,7 +285,8 @@ export function mountFilters(box, models, groups, selected, hooks) {
   box.innerHTML = filterHtml(models, {
     device_class: facetValues(groups, "device_class"),
     workload_id: facetValues(groups, "workload_id"),
-    quantization_label: facetValues(groups, "quantization_label"),
+    quantization: facetValues(groups, "quantization"),
+    n_ctx: facetValues(groups, "n_ctx"),
   }, sel);
   if (typeof box.querySelector !== "function") return;
   const form = box.querySelector("form");
@@ -296,10 +317,13 @@ export function mountFilters(box, models, groups, selected, hooks) {
   }
 }
 
-// Browser wiring. Ships against EmptyProvider: renders structure +
-// NO_SOURCE states, offers manual refresh (re-checks + timestamps).
+// Browser wiring. Provider selection is the one-line config
+// boundary: EVIDENCE_BASE null (today) means EmptyProvider and
+// truthful NO_SOURCE states; a future authorized URL selects
+// HttpProvider. Manual refresh re-checks + timestamps.
 export function initDashboard(root, provider) {
-  const prov = provider || new EmptyProvider();
+  const prov = provider ||
+    (EVIDENCE_BASE ? new HttpProvider(EVIDENCE_BASE) : new EmptyProvider());
   const $ = (id) => root.querySelector(`#${id}`);
   const state = { facets: {}, checkedAt: null };
   async function load() {

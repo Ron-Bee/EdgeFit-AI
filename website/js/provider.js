@@ -46,12 +46,39 @@ function numOrNull(v) {
   return typeof v === "number" && Number.isFinite(v) ? v : null;
 }
 
-// Allowlisted cohort identity parts (cohort v2 contract). Unknown
-// keys are dropped, never rendered: private/unapproved fields
-// cannot leak through future server changes.
-const COHORT_KEYS = ["model_sha", "quantization_label", "device_class",
+// Allowlisted cohort identity parts: the EXACT server shape from
+// cloud/cohort.js cohortOf() (v2 contract). Unknown keys are
+// dropped, never rendered: private/unapproved fields cannot leak
+// through future server changes. config_hash is NOT echoed by any
+// v1 response, so it stays unavailable: identity detail comes from
+// the nested config object plus cohort_hash (never derived here).
+const COHORT_KEYS = ["model_sha", "quantization", "device_class",
   "workload_id", "prompt_sha", "runtime_impl", "runtime_backend",
-  "build_key", "config_hash"];
+  "build"];
+const CONFIG_KEYS = ["n_ctx", "n_threads", "n_predict", "sampler"];
+// Legacy flat keys from a shape the server never emitted. A
+// present legacy key that CONTRADICTS its canonical twin fails the
+// whole cohort (loud contract break, never a silent preference);
+// an equal one is ignored as redundant.
+const LEGACY_TWINS = [["quantization_label", "quantization"],
+  ["build_key", "build"]];
+
+function intOrNull(v) {
+  return Number.isInteger(v) ? v : null;
+}
+
+function cleanConfig(c) {
+  if (c === null || c === undefined) return null;
+  if (!isPlainObject(c)) {
+    throw new ProviderError(STATE.SOURCE_ERROR, "cohort config malformed");
+  }
+  return {
+    n_ctx: intOrNull(c.n_ctx),
+    n_threads: intOrNull(c.n_threads),
+    n_predict: intOrNull(c.n_predict),
+    sampler: typeof c.sampler === "string" ? c.sampler : null,
+  };
+}
 
 export function cleanCohort(c) {
   if (!isPlainObject(c)) {
@@ -61,6 +88,13 @@ export function cleanCohort(c) {
   for (const k of COHORT_KEYS) {
     out[k] = typeof c[k] === "string" ? c[k] : null;
   }
+  for (const [legacy, canon] of LEGACY_TWINS) {
+    if (c[legacy] !== undefined && c[legacy] !== out[canon]) {
+      throw new ProviderError(STATE.SOURCE_ERROR,
+        `contradictory cohort identity: ${legacy}`);
+    }
+  }
+  out.config = cleanConfig(c.config);
   return out;
 }
 
@@ -348,13 +382,33 @@ export function countPublishedGroups(groups) {
 }
 
 // Facet values present in validated groups (client-side subsetting
-// of exact cohorts; never merges cohorts).
+// of exact cohorts; never merges cohorts). Top-level cohort keys
+// plus the nested config parts are addressable; numbers compare by
+// their decimal form, missing values never match a set filter.
+function facetReader(key) {
+  if (COHORT_KEYS.includes(key)) return (g) => g.cohort[key];
+  if (CONFIG_KEYS.includes(key)) {
+    return (g) => g.cohort.config ? g.cohort.config[key] : null;
+  }
+  return null;
+}
+
+function facetString(v) {
+  if (typeof v === "string") return v;
+  return Number.isInteger(v) ? String(v) : null;
+}
+
 export function facetValues(groups, key) {
-  if (!Array.isArray(groups) || !COHORT_KEYS.includes(key)) return [];
+  if (!Array.isArray(groups)) return [];
+  const read = facetReader(key);
+  if (!read) return [];
   const seen = [];
   for (const g of groups) {
-    const v = g.cohort[key];
-    if (typeof v === "string" && !seen.includes(v)) seen.push(v);
+    const s = facetString(read(g));
+    if (s !== null && !seen.includes(s)) seen.push(s);
+  }
+  if (seen.every((s) => /^-?\d+$/.test(s))) {
+    return seen.sort((a, b) => Number(a) - Number(b));
   }
   return seen.sort();
 }
@@ -362,9 +416,9 @@ export function facetValues(groups, key) {
 export function applyFacets(groups, facets) {
   if (!Array.isArray(groups)) return [];
   const keys = Object.keys(facets || {})
-    .filter((k) => COHORT_KEYS.includes(k) &&
+    .filter((k) => facetReader(k) !== null &&
       typeof facets[k] === "string" && facets[k] !== "");
   if (keys.length === 0) return [...groups];
   return groups.filter((g) =>
-    keys.every((k) => g.cohort[k] === facets[k]));
+    keys.every((k) => facetString(facetReader(k)(g)) === facets[k]));
 }
