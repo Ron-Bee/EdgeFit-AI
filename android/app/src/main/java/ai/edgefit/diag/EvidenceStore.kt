@@ -62,6 +62,23 @@ class EvidenceStore(rootDir: File) {
         isValidId(id) && File(dir, "$id.bench.json").isFile
 
     /**
+     * Deletes ONE local result (both files). Cloud
+     * contributions are NOT withdrawn: callers must
+     * say so explicitly. Returns true if a record
+     * existed. Invalid ids throw [BadId].
+     */
+    @Synchronized
+    fun delete(id: String): Boolean {
+        if (!isValidId(id)) throw BadId(id)
+        val bench = File(dir, "$id.bench.json")
+        val meta = File(dir, "$id.meta.json")
+        val had = bench.isFile || meta.isFile
+        bench.delete()
+        meta.delete()
+        return had
+    }
+
+    /**
      * Stores [text] (exact bytes preserved) after validation. Returns
      * the record; identical re-store returns the existing record;
      * different bytes under the same id throw [Conflict].

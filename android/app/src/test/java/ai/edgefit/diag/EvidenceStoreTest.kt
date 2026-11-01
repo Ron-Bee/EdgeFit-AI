@@ -124,4 +124,32 @@ class EvidenceStoreTest {
         } catch (_: EvidenceStore.StoreError) {
         }
     }
+
+    @Test
+    fun delete removes stored record() {
+        val store = freshStore()
+        store.store(BenchResultParseTest.validDoc(),
+            EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
+        assertTrue(store.delete("BENCH-TEST-001"))
+        assertTrue(store.listIds().isEmpty())
+        try {
+            store.load("BENCH-TEST-001")
+            fail("expected NotFound")
+        } catch (_: EvidenceStore.NotFound) {
+        }
+    }
+
+    @Test
+    fun delete missing record returns false() {
+        assertTrue(!freshStore().delete("BENCH-NOPE"))
+    }
+
+    @Test
+    fun delete invalid id throws() {
+        try {
+            freshStore().delete("../evil")
+            fail("expected BadId")
+        } catch (_: EvidenceStore.BadId) {
+        }
+    }
 }

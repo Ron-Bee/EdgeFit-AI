@@ -26,9 +26,8 @@ class GlobalClientTest {
         val fake = FakeGlobalTransport()
         val vault = GlobalTokenVault(dir, FakeSeal())
         vault.setSessionToken(TOKEN)
-        val client = GlobalClient(store, fake, vault, { ORIGIN }) {
-            BenchResultParseTest.NOW
-        }
+        val client = GlobalClient(store, fake, vault, { ORIGIN },
+            { BenchResultParseTest.NOW }, { true })
         store.store(BenchResultParseTest.validDoc(),
             EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
         return Triple(store, fake, client)
@@ -167,9 +166,8 @@ class GlobalClientTest {
         val fake = FakeGlobalTransport()
         val vault = GlobalTokenVault(dir, FakeSeal())
         vault.setSessionToken(TOKEN)
-        val client = GlobalClient(store, fake, vault, { null }) {
-            BenchResultParseTest.NOW
-        }
+        val client = GlobalClient(store, fake, vault, { null },
+            { BenchResultParseTest.NOW }, { true })
         store.store(BenchResultParseTest.validDoc(),
             EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
         val outcome = client.submit("BENCH-TEST-001")
@@ -183,9 +181,8 @@ class GlobalClientTest {
         val store = EvidenceStore(dir)
         val fake = FakeGlobalTransport()
         val vault = GlobalTokenVault(dir, FakeSeal())
-        val client = GlobalClient(store, fake, vault, { ORIGIN }) {
-            BenchResultParseTest.NOW
-        }
+        val client = GlobalClient(store, fake, vault, { ORIGIN },
+            { BenchResultParseTest.NOW }, { true })
         store.store(BenchResultParseTest.validDoc(),
             EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
         val outcome = client.submit("BENCH-TEST-001")
@@ -299,9 +296,8 @@ class GlobalClientTest {
         vault2.setSessionToken(TOKEN)
         store2.store(BenchResultParseTest.validDoc(),
             EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
-        val client2 = GlobalClient(store2, blocking, vault2, { ORIGIN }) {
-            BenchResultParseTest.NOW
-        }
+        val client2 = GlobalClient(store2, blocking, vault2, { ORIGIN },
+            { BenchResultParseTest.NOW }, { true })
         val first = Thread { client2.submit("BENCH-TEST-001") }
         first.start()
         Thread.sleep(300)
@@ -318,6 +314,24 @@ class GlobalClientTest {
         assertEquals("BENCH-TEST-001", review.runId)
         assertEquals(listOf("aggregates"), review.scopes)
         assertEquals(ORIGIN, review.origin)
+        assertEquals(0, fake.calls.size)
+    }
+
+    @Test
+    fun submit blocked while consent policy unapproved() {
+        val dir = Files.createTempDirectory("global-test").toFile()
+        val store = EvidenceStore(dir)
+        val fake = FakeGlobalTransport()
+        val vault = GlobalTokenVault(dir, FakeSeal())
+        vault.setSessionToken(TOKEN)
+        val client = GlobalClient(store, fake, vault, { ORIGIN },
+            { BenchResultParseTest.NOW })
+        store.store(BenchResultParseTest.validDoc(),
+            EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
+        val outcome = client.submit("BENCH-TEST-001")
+        assertTrue(outcome is GlobalClient.SubmitOutcome.Blocked)
+        assertTrue((outcome as GlobalClient.SubmitOutcome.Blocked)
+            .reason.contains("not yet owner-approved"))
         assertEquals(0, fake.calls.size)
     }
 }

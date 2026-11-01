@@ -23,7 +23,9 @@ class GlobalClient(
     private val transport: GlobalTransport,
     private val vault: GlobalTokenVault,
     private val getOrigin: () -> String?,
-    private val nowMs: () -> Long
+    private val nowMs: () -> Long,
+    private val uploadsApproved: () -> Boolean =
+        { GlobalContract.CONSENT_POLICY_APPROVED }
 ) {
     class GlobalError(val code: String, message: String) : Exception(message)
 
@@ -121,6 +123,12 @@ class GlobalClient(
      * Records the consent event, then sends exactly one request.
      */
     fun submit(runId: String): SubmitOutcome {
+        if (!uploadsApproved()) {
+            return SubmitOutcome.Blocked(
+                "Contributions are disabled: consent policy " +
+                    GlobalContract.CONSENT_POLICY_VERSION +
+                    " is not yet owner-approved")
+        }
         val record = try {
             store.load(runId)
         } catch (e: Exception) {

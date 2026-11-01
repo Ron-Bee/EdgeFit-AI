@@ -2317,7 +2317,8 @@ class MainActivity : Activity() {
             statusText("Review unavailable: ${e.message}")
             return
         }
-        val connected = review.origin != null && review.tokenSuffix != null
+        val connected = review.origin != null && review.tokenSuffix != null &&
+            GlobalContract.CONSENT_POLICY_APPROVED
         GlobalView.showReview(this, review, connected) {
             Thread({
                 val outcome = try {
@@ -2335,7 +2336,9 @@ class MainActivity : Activity() {
         if (!connected) {
             statusText(
                 if (review.origin == null) "Cloud connection not configured."
-                else "No upload token: open EdgeFit Global Connection.")
+                else if (review.tokenSuffix == null) "No upload token: open EdgeFit Global Connection."
+                else "Contributions disabled until the owner approves consent policy " + GlobalContract.CONSENT_POLICY_VERSION + "."
+            )
         }
     }
 
@@ -2403,6 +2406,32 @@ class MainActivity : Activity() {
         }, "edgefit-evidence").start()
     }
 
+    /** Deletes ONE local result. Never touches the cloud: a
+     * retained server contribution must be removed with
+     * Withdraw consent, and the status line says so. */
+    private fun deleteLocalResult(id: String, wasShared: Boolean) {
+        Thread({
+            val deleted = try {
+                evidenceStore.delete(id)
+            } catch (e: Exception) {
+                runOnUiThread {
+                    statusText("Local delete failed: " + e.message)
+                }
+                return@Thread
+            }
+            runOnUiThread {
+                if (!deleted) {
+                    statusText("Local result already gone.")
+                } else if (wasShared) {
+                    statusText("Local result deleted. Cloud contribution retained: use Withdraw consent to remove it server-side.")
+                } else {
+                    statusText("Local result deleted.")
+                }
+                refreshEvidenceLine()
+            }
+        }, "edgefit-evidence").start()
+    }
+
     private fun showHistoryActions(id: String) {
         val record = try {
             evidenceStore.load(id)
@@ -2411,7 +2440,19 @@ class MainActivity : Activity() {
             return
         }
         if (record.submissionId == null) {
-            openContributionRecord(id)
+            CardDialog.show(
+                this, "Local result $id",
+                listOf(InsightCards.Section(
+                    "Not shared",
+                    listOf(InsightCards.Row(
+                        "Run", id)))),
+                listOf(
+                    CardDialog.Action("Contribute to EdgeFit Global") {
+                        openContributionRecord(id)
+                    },
+                    CardDialog.Action("Delete local result") {
+                        deleteLocalResult(id, wasShared = false)
+                    }))
             return
         }
         CardDialog.show(
@@ -2463,7 +2504,10 @@ class MainActivity : Activity() {
                             }
                             refreshEvidenceLine()
                         }
-                    }, "edgefit-global").start()
+                    }, "edgefit-global").start(),
+                CardDialog.Action("Delete local result") {
+                    deleteLocalResult(id, wasShared = true)
+                }
                 }))
     }
 
