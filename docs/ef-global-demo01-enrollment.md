@@ -41,6 +41,15 @@ must NEVER be pooled. One installation identity per device; a
 reinstalled app is a NEW installation (new credential), never a
 reused one.
 
+PHYSICAL INDEPENDENCE RULE (DEMO-04): a new installation
+identity alone does not prove a new independent physical
+device. Never deliberately reinstall, re-enroll, or reset one
+device to inflate quorum diversity. Distinguish: (A) three
+distinct authenticated installs under the server algorithm
+(quorum mechanics) from (B) three independently verified
+physical sources (evidence strength). Claim only what the
+enrollment record proves; prefer distinct devices for B.
+
 ## 2. Per-installation issuance
 
 Follow `docs/ef-global-operator-credentials.md` sections 1-2 with

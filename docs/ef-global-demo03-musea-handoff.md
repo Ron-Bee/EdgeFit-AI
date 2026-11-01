@@ -88,5 +88,9 @@ Publication needs 5 runs / 3 installations in ONE exact cohort.
 SM-S908U and SM-S906U are DIFFERENT device classes, hence
 different cohorts: they cannot quorum together. A releasable
 demo chart needs three installations sharing model, config,
-workload, and device class (e.g. reinstalls on one model, or a
-third same-model device). Report below-quorum truthfully.
+workload, and device class — prefer a third same-model device.
+Reinstalls receive fresh credentials as hygiene, but orchestrating
+reinstalls to inflate quorum diversity is PROHIBITED (consent
+policy "Independent installations"). Report below-quorum
+truthfully; never claim verified physical independence beyond
+the enrollment record.

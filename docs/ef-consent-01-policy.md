@@ -4,6 +4,11 @@ Status: PROPOSED. NOT APPROVED. The publication allowlist stays
 EMPTY until the owner approves this exact text (record the SHA-256
 of the approved file with the approval).
 
+Revision: 2026-11-01 — bounded hackathon retention to
+2026-12-31T23:59:59Z, no retained judging archive, independent
+installation rule, terminology fix. No collection or publication
+scope change beyond retention/disposal bounds.
+
 Version history: ef-consent-01 was proposed during the Android
 bridge milestones but NEVER approved, NEVER allowlisted, and NO
 database row carries it (staging rows are `v1` vintage). It has no
@@ -38,7 +43,7 @@ Measurement results of runs YOU choose to contribute:
 The server assigns your installation a random identifier plus a
 secret credential issued by the operator. The identifier is used
 to count DISTINCT installations toward quorum (as salted,
-unreversible values) and to authorize your own status lookups
+irreversible values) and to authorize your own status lookups
 and withdrawals. Raw installation identifiers are NEVER published.
 They are NOT hardware attestation and prove nothing beyond
 "this credential holder uploaded these rows".
@@ -69,12 +74,41 @@ NOT withdraw the cloud contribution. To remove cloud evidence,
 use WITHDRAW (or ask the operator to revoke the credential and
 withdraw affected rows).
 
-## Retention and sharing
+## Retention and disposal (bounded hackathon policy)
 
-Hackathon staging storage until owner teardown after the event.
+- New collection under this version ends at owner-declared demo
+  close, and in no case later than 2026-12-31T23:59:59Z.
+- By 2026-12-31T23:59:59Z the owner deletes: all rows stamped
+  with this version, their audit tombstones, the demo
+  credentials, and any operator backups/exports containing them.
+- Revocation before teardown works as in Withdrawal above
+  (immediate exclusion; the tombstone is then deleted with the
+  rest at teardown).
+- Published aggregates lose their backing rows at teardown; the
+  dashboard reverts to honest insufficient-evidence states.
+- NO judging archive is retained. Judges inspect the live
+  system before teardown. No exception, no extension.
+- A future production network needs a separately reviewed
+  consent version and retention policy. Hackathon rows are
+  NEVER migrated there under this version.
+- Truthful limit: deletion covers everything within owner
+  control (staging database, credentials, operator files).
+  Cloudflare-internal replication/backups beyond owner control
+  are not covered and no promise is made about them.
+
 No sale, no advertising use, no sharing beyond the published
 aggregates described above. Operator access is limited to
 qualification, withdrawal handling, and integrity checks.
+
+## Independent installations
+
+Quorum counts DISTINCT AUTHENTICATED INSTALLATIONS as the server
+counts them (5 runs / 3 installations per exact cohort). An
+installation identity alone does not prove a separate physical
+device, and the project does not deliberately reinstall,
+re-enroll, or reset one device to inflate quorum diversity.
+Public statistics describe authenticated installations, never
+attested distinct physical devices.
 
 ## Your choice
 
@@ -88,7 +122,7 @@ not others, and withdraw contributed batches as described above.
 
 - Approved version: ef-consent-01
 - Approved text SHA-256: _pending_
-- Scope: DEMO-01 physical-device staging + quorum publication
+- Scope: DEMO physical-device staging + quorum publication
 - Date (UTC): _pending_
 - Allowlist action: _pending (separate deployment step after approval)_
 
