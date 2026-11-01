@@ -126,7 +126,7 @@ class EvidenceStoreTest {
     }
 
     @Test
-    fun delete removes stored record() {
+    fun `delete removes stored record`() {
         val store = freshStore()
         store.store(BenchResultParseTest.validDoc(),
             EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
@@ -140,12 +140,12 @@ class EvidenceStoreTest {
     }
 
     @Test
-    fun delete missing record returns false() {
+    fun `delete missing record returns false`() {
         assertTrue(!freshStore().delete("BENCH-NOPE"))
     }
 
     @Test
-    fun delete invalid id throws() {
+    fun `delete invalid id throws`() {
         try {
             freshStore().delete("../evil")
             fail("expected BadId")

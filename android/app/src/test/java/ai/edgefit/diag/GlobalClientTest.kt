@@ -318,7 +318,7 @@ class GlobalClientTest {
     }
 
     @Test
-    fun submit blocked while consent policy unapproved() {
+    fun `submit blocked while consent policy unapproved`() {
         val dir = Files.createTempDirectory("global-test").toFile()
         val store = EvidenceStore(dir)
         val fake = FakeGlobalTransport()
