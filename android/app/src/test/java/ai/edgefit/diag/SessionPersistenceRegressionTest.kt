@@ -33,10 +33,14 @@ class SessionPersistenceRegressionTest {
         const val PROMPT_SHA = "36104db0657a294048410f9043d4efc8510a77088ca1e2f1" +
             "7c0b6c8359c44382"
         const val STAMP = "2026-10-29T00:00:00Z"
+        const val STAMP_EARLY = "2026-10-28T00:00:00Z"
     }
 
     private fun manager(root: File): SessionManager =
         SessionManager(root) { STAMP }
+
+    private fun managerAt(root: File, stamp: String): SessionManager =
+        SessionManager(root) { stamp }
 
     private fun seed(manager: SessionManager): SessionRecord =
         manager.createSession(
@@ -108,19 +112,41 @@ class SessionPersistenceRegressionTest {
     @Test
     fun reinitializedRecordsFeedMainUiModel() {
         val root = temp.newFolder()
-        val first = manager(root)
-        seed(first)
+        val first = seed(managerAt(root, STAMP_EARLY))
         val measured = measuredSession(
-            first, "BENCH-20261029T010000Z-abcdef12")
+            manager(root), "BENCH-20261029T010000Z-abcdef12")
         val second = manager(root)
         val records = second.listSessions()
-        // Newest-first: the measured record (touched last) leads.
+        // Newest-first by creation stamp: the measured record
+        // (created later) leads, deterministically.
+        assertEquals(
+            listOf(measured.sessionId, first.sessionId),
+            records.map { it.sessionId })
         assertEquals(
             measured.sessionId,
             SessionListUi.latestId(records))
         assertEquals(
             records.map { it.sessionId },
             SessionListUi.sortNewestFirst(records).map { it.sessionId })
+    }
+
+    // Production tie-break, pinned: same-second creation orders by
+    // session id descending, stable across refreshes and relaunches.
+
+    @Test
+    fun newestFirstTieBreaksDeterministicallyBySessionId() {
+        val root = temp.newFolder()
+        val first = manager(root)
+        val a = seed(first)
+        val b = seed(first)
+        val ordered = SessionListUi.sortNewestFirst(
+            manager(root).listSessions())
+        val expectedFirst = maxOf(a.sessionId, b.sessionId)
+        assertEquals(expectedFirst, ordered.first().sessionId)
+        assertEquals(expectedFirst, SessionListUi.latestId(ordered))
+        assertEquals(
+            ordered.map { it.sessionId },
+            SessionListUi.sortNewestFirst(ordered).map { it.sessionId })
     }
 
     // D4 (pure half): secondary filter sees every record.
