@@ -25,8 +25,9 @@ package ai.edgefit.diag
  *   doc's install_id is superseded: identity comes from the token).
  * - consent = {policy_version 1..32 chars, accepted_at ISO-8601,
  *   scopes non-empty subset of ["aggregates"]}; "runs" disabled.
- * - Retry-After: backend does NOT currently emit it (doc anticipates
- *   it); the client honors it if present and stays correct if absent.
+ * - Retry-After: honored when present (429 quota / 503 busy emit
+ *   it); stays correct if absent. v1.1 rate_limited rides the same
+ *   header discipline (bridge forward rule, behavior-safe).
  * - No self-registration endpoint exists: tokens are owner-issued.
  */
 object GlobalContract {
