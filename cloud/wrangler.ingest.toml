@@ -1,0 +1,63 @@
+# EF-GLOBAL-01 DEMO device-ingestion Worker — DEMO-02 route B.
+#
+# SEPARATE Worker: the only device-reachable write path, for
+# OWNER-ENROLLED demo installations only (no public enrollment
+# exists and none is created here). Entry cloud/ingest-demo.js
+# answers exactly POST /v1/submissions, GET/DELETE
+# /v1/submissions/{id} through the SAME reviewed builders staging
+# uses; reads, admin, enrollment, and unknown routes are 404/405.
+# D1 writes are bounded to those three handlers' statements.
+#
+# This Worker intentionally HAS a workers.dev URL (owner-authorized
+# DEMO-02 exposure for authenticated device writes). It binds the
+# SAME staging D1: per-install bearer tokens authenticate at the
+# app layer, origin stays server-assigned from installs.kind, and
+# the publication allowlist stays EMPTY (demo uploads record
+# their version but publish nothing without a separate approval).
+# Private staging (edgefit-evidence-staging-staging,
+# workers_dev=false + Access) is unaffected by this file.
+#
+# NO SECRETS: per-install bearer tokens live in D1 (hashed) + on
+# enrolled devices only. There is deliberately no INSTALL_SALT /
+# PUBLIC_SALT / token-minting route here.
+#
+# Local tests do NOT read this file: they inject adapters directly
+# into cloud/ingest-demo.js ingestFetch.
+
+name = "edgefit-evidence-ingest-demo"
+# Entry point, relative to this file (cloud/).
+main = "ingest-demo.js"
+# Same pinned runtime semantics as staging; nodejs_compat provides
+# node:crypto for SHA-256 auth lookups.
+compatibility_date = "2026-10-30"
+compatibility_flags = ["nodejs_compat"]
+# Device-reachable by owner authorization (DEMO-02): demo-window
+# authenticated writes through the workers.dev URL printed at
+# deploy time. Rapid disable: delete this Worker (staging and
+# the public reader are unaffected).
+workers_dev = true
+# No preview/version URLs: only the production workers.dev route
+# answers, so no unreviewed version is ever reachable.
+preview_urls = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "edgefit-evidence-staging"
+# Same staging database, bounded to the three ingestion handlers'
+# statements (no admin/enrollment/migration paths exist in
+# ingest-demo.js). Non-secret locator; production DNE.
+database_id = "2ccce000-c70c-4c5a-9267-d330dedc22aa"
+
+# Anonymous per-IP rate limiting. PUB-03 diagnostic result: the
+# binding attaches on Free but does NOT enforce, so this rule is
+# a plan-upgrade path ONLY. The control that bites on Free is the
+# isolate-local budget in ingest-demo.js (same numbers, so
+# semantics converge if the plan ever enforces the binding).
+# Per-install daily quotas (server-enforced) apply regardless.
+[[ratelimits]]
+name = "RATE_LIMIT"
+# Account-unique; 7001 staging, 7002 public reader, 7003 ingest.
+# Change if this account already uses it.
+namespace_id = "7003"
+# 120 requests/minute per IP. Period must be 10 or 60.
+simple = { limit = 120, period = 60 }

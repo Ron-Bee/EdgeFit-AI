@@ -7,18 +7,20 @@ and bridge contract v1.1
 `b6b06f7`; v1.1 amends error codes only). Where this packet and the
 bridge disagree, STOP and reconcile — do not guess.
 
-## 0. Gate status (backend view)
+## 0. Gate status (backend view, DEMO-02 verified)
 
-- Ingestion route: UNDECIDED — see `{INGEST_BASE}` below. No
-  device-reachable write route exists until the owner approves the
-  enrollment doc's section 4.
+- Ingestion route: LIVE — dedicated demo worker
+  `https://edgefit-evidence-ingest-demo.ronbaute92.workers.dev`
+  (version `a23f6c4b`, DEMO-02 live-qualified 14/14). Use this as
+  `{INGEST_BASE}` throughout. No Access/browser token needed;
+  per-install bearer only.
 - Consent version: `ef-consent-01`, PROPOSED, text in
   `docs/ef-consent-01-policy.md`. Do not ship uploads stamping any
   version until its text is approved.
-- Credentials: per-install, owner-issued, NOT YET ISSUED. No
-  shared token exists and none will be created.
+- Credentials: per-install, owner-issued, NOT YET ISSUED for
+  devices. No shared token exists and none will be created.
 
-## 1. Endpoints (base = {INGEST_BASE}, approved route only)
+## 1. Endpoints (base = {INGEST_BASE}, verified DEMO-02 route)
 
 - `POST {INGEST_BASE}/v1/submissions` — contribute one batch.
 - `GET {INGEST_BASE}/v1/submissions/{id}` — owner-scoped status.
