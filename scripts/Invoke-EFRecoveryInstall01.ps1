@@ -13,6 +13,11 @@
   preservation verification. Never uninstalls, clears data,
   downgrades, or retries an incompatible install.
 
+  With -SkipInstall, reconciles an interrupted run instead of
+  updating: verifies the installed artifact against the candidate
+  and validates preservation against the prior run's baseline.
+  Never installs in that mode.
+
   Reports VERDICT: PASS or VERDICT: BLOCKED and exits 0 / 1.
 
 .EXAMPLE
@@ -30,7 +35,9 @@ param(
     [string]$ExpectedCertSha256 = '',
     [int]$ExpectedUser = 0,
     [string]$ReportDir = '',
-    [switch]$SkipBuild
+    [switch]$SkipBuild,
+    [switch]$SkipInstall,
+    [string]$PriorReportDir = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -122,6 +129,13 @@ Note 'https-only: OK (source)'
 
 # ---------- 2. build ----------
 
+if ($SkipInstall) {
+    # Reconcile mode must compare the device against the exact
+    # candidate bytes from the interrupted run: rebuilding here
+    # could only invalidate that comparison, never strengthen it.
+    $SkipBuild = $true
+    Note 'build: SKIPPED (reconcile mode validates the existing candidate)'
+}
 if (-not $SkipBuild) {
     Step '2. Gradle compile + tests + assemble'
     if (-not (Test-Path $GradlePath)) { Fail "gradle not found: $GradlePath" }
@@ -140,7 +154,7 @@ if (-not $SkipBuild) {
     finally { Pop-Location }
     Note 'build: PASS'
 }
-else { Note 'build: SKIPPED by flag (APK gates still apply)' }
+else { Note 'build: SKIPPED (APK gates still apply)' }
 
 # ---------- 3. candidate APK ----------
 
@@ -292,8 +306,8 @@ $pmPath = (& $adb -s $Serial shell pm path $ExpectedAppId) |
 if ($pmPath -notmatch 'package:(.+)') { Fail 'installed APK path unreadable' }
 $deviceApk = $Matches[1].Trim()
 $pulledApk = Join-Path $ReportDir 'installed-base.apk'
-& $adb -s $Serial pull $deviceApk $pulledApk | Out-Null
-if ($LASTEXITCODE -ne 0) { Fail 'could not pull installed APK for cert check' }
+$pull = Invoke-ToolText $adb @('-s', $Serial, 'pull', $deviceApk, $pulledApk)
+if ($pull.Exit -ne 0) { Fail 'could not pull installed APK for cert check' }
 $instCerts = Invoke-Signer @('verify', '--print-certs',
     '--min-sdk-version', '26', $pulledApk)
 if ($LASTEXITCODE -ne 0) { Fail 'apksigner verify failed on installed APK' }
@@ -313,32 +327,108 @@ if ($instCert -ne $candCert) {
 }
 Note 'signing: MATCH'
 
-# ---------- 6. baseline inventory (read-only) ----------
+# ---------- 6. baseline evidence inventory ----------
 
-Step '6. Baseline evidence inventory (read-only)'
-$baseSessions = Get-AppList $adb $Serial $ExpectedAppId 'sessions'
-$baseEvidence = Get-AppList $adb $Serial $ExpectedAppId 'evidence'
-$baseQuar = Get-AppList $adb $Serial $ExpectedAppId 'sessions-quarantine'
-Note "baseline sessions: $($baseSessions.Count)"
-Note "baseline evidence: $($baseEvidence.Count)"
-Note "baseline quarantine: $($baseQuar.Count)"
-$baseSessions | Out-File (Join-Path $ReportDir 'baseline-sessions.txt')
-$baseEvidence | Out-File (Join-Path $ReportDir 'baseline-evidence.txt')
-$installJson = & $adb -s $Serial shell "run-as $ExpectedAppId cat files/install.json" 2>&1
-$baseInstallId = $null
-if ($LASTEXITCODE -eq 0 -and ($installJson -match '"install_id"\s*:\s*"([^"]+)"')) {
-    $baseInstallId = $Matches[1]
-    Note "baseline install_id: $($baseInstallId.Substring(0, 8))..."
+Step '6. Baseline evidence inventory'
+$tarExe = Get-Command tar -ErrorAction SilentlyContinue
+if (-not $tarExe) { Fail 'tar.exe not found (needed for backup verification)' }
+if ($SkipInstall) {
+    if ([string]::IsNullOrWhiteSpace($PriorReportDir)) {
+        Fail '-SkipInstall requires -PriorReportDir pointing at the interrupted run'
+    }
+    if (-not (Test-Path $PriorReportDir)) {
+        Fail "prior report dir missing: $PriorReportDir"
+    }
+    Note "reconcile mode: loading baseline from $PriorReportDir"
+    $priorSessionsFile = Join-Path $PriorReportDir 'baseline-sessions.txt'
+    $priorEvidenceFile = Join-Path $PriorReportDir 'baseline-evidence.txt'
+    $priorManifestFile = Join-Path $PriorReportDir 'MANIFEST.sha256'
+    $priorReportFile = Join-Path $PriorReportDir 'report.txt'
+    foreach ($req in @($priorSessionsFile, $priorEvidenceFile,
+        $priorManifestFile, $priorReportFile)) {
+        if (-not (Test-Path $req)) {
+            Fail "prior report incomplete, missing: $req"
+        }
+    }
+    $manifestText = (Get-Content $priorManifestFile -Raw).Trim()
+    if ($manifestText -notmatch '^([0-9A-Fa-f]{64})\s+(\S+)$') {
+        Fail 'prior MANIFEST unparseable'
+    }
+    $priorTarPath = Join-Path $PriorReportDir $Matches[2]
+    if (-not (Test-Path $priorTarPath)) {
+        Fail "prior backup missing: $priorTarPath"
+    }
+    if ((Get-FileHash $priorTarPath -Algorithm SHA256).Hash -ne
+        $Matches[1].ToUpper()) {
+        Fail 'prior backup hash mismatch (evidence drift since the backup)'
+    }
+    Note 'prior backup hash: VERIFIED'
+    $priorReport = Get-Content $priorReportFile -Raw
+    $priorMembers = @('files/sessions', 'files/evidence',
+        'files/sessions-quarantine')
+    $priorHadMarker = $priorReport -match 'baseline install_id:'
+    if ($priorHadMarker) { $priorMembers += 'files/install.json' }
+    $priorSes = @(Get-Content $priorSessionsFile |
+        ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne '' })
+    $priorEv = @(Get-Content $priorEvidenceFile |
+        ForEach-Object { "$_".Trim() } | Where-Object { $_ -ne '' })
+    $priorCheck = Test-BackupArchive $tarExe.Source $priorTarPath `
+        $priorMembers $priorSes $priorEv
+    if (-not $priorCheck.Ok) {
+        Fail "prior backup does not match its baseline: $($priorCheck.Reason)"
+    }
+    Note "prior backup re-verified: sessions $($priorCheck.Sessions.Count) evidence $($priorCheck.Evidence.Count) entries $($priorCheck.Entries)"
+    $baseSessions = $priorSes
+    $baseEvidence = $priorEv
+    $baseQuar = $priorCheck.Quarantine
+    $baseTomb = @($baseEvidence | Where-Object { $_ -like '*.withdraw.json' })
+    $baseInstallId = $null
+    if ($priorHadMarker) {
+        $priorMarkerTmp = Join-Path $ReportDir 'prior-install.json'
+        $extract = Invoke-NativeBinary $tarExe.Source `
+            "-xOf `"$priorTarPath`" files/install.json" $priorMarkerTmp 60
+        $priorMarkerText = ''
+        if ($extract.Exit -eq 0) {
+            $priorMarkerText = [IO.File]::ReadAllText($priorMarkerTmp)
+        }
+        if ($priorMarkerText -match '"install_id"\s*:\s*"([^"]+)"') {
+            $baseInstallId = $Matches[1]
+        }
+        else { Fail 'prior install marker unreadable (evidence incomplete)' }
+    }
+    Copy-Item $priorSessionsFile (Join-Path $ReportDir 'prior-baseline-sessions.txt')
+    Copy-Item $priorEvidenceFile (Join-Path $ReportDir 'prior-baseline-evidence.txt')
+    Copy-Item $priorManifestFile (Join-Path $ReportDir 'prior-MANIFEST.sha256')
+    Note "baseline sessions: $($baseSessions.Count) evidence: $($baseEvidence.Count) quarantine: $($baseQuar.Count) (from prior run)"
+    if ($baseInstallId) {
+        Note "baseline install_id: $($baseInstallId.Substring(0, [Math]::Min(8, $baseInstallId.Length)))... (from prior backup)"
+    }
+    else { Note 'baseline install.json: absent (pre-marker build)' }
+    Note "baseline withdrawal tombstones: $($baseTomb.Count) (from prior run)"
 }
-else { Note 'baseline install.json: absent (pre-marker build)' }
-$baseTomb = @($baseEvidence | Where-Object { $_ -like '*.withdraw.json' })
-Note "baseline withdrawal tombstones: $($baseTomb.Count)"
+else {
+    $baseSessions = Get-AppList $adb $Serial $ExpectedAppId 'sessions'
+    $baseEvidence = Get-AppList $adb $Serial $ExpectedAppId 'evidence'
+    $baseQuar = Get-AppList $adb $Serial $ExpectedAppId 'sessions-quarantine'
+    Note "baseline sessions: $($baseSessions.Count)"
+    Note "baseline evidence: $($baseEvidence.Count)"
+    Note "baseline quarantine: $($baseQuar.Count)"
+    $baseSessions | Out-File (Join-Path $ReportDir 'baseline-sessions.txt')
+    $baseEvidence | Out-File (Join-Path $ReportDir 'baseline-evidence.txt')
+    $installJson = & $adb -s $Serial shell "run-as $ExpectedAppId cat files/install.json" 2>&1
+    $baseInstallId = $null
+    if ($LASTEXITCODE -eq 0 -and ($installJson -match '"install_id"\s*:\s*"([^"]+)"')) {
+        $baseInstallId = $Matches[1]
+        Note "baseline install_id: $($baseInstallId.Substring(0, [Math]::Min(8, $baseInstallId.Length)))..."
+    }
+    else { Note 'baseline install.json: absent (pre-marker build)' }
+    $baseTomb = @($baseEvidence | Where-Object { $_ -like '*.withdraw.json' })
+    Note "baseline withdrawal tombstones: $($baseTomb.Count)"
+}
 
 # ---------- 6b. verified backup (read-only on device) ----------
 
 Step '6b. Verified device backup (read-only on device)'
-$tarExe = Get-Command tar -ErrorAction SilentlyContinue
-if (-not $tarExe) { Fail 'tar.exe not found (needed to verify backup)' }
 $backupTar = Join-Path $ReportDir 'app-data-backup.tar'
 # Request only members proven present by the baseline inventory: a
 # missing member would make tar diagnose on stderr, and no
@@ -362,14 +452,35 @@ Note "backup sha256: $tarHash"
 Note "backup sessions: $($check.Sessions.Count) evidence: $($check.Evidence.Count) entries: $($check.Entries)"
 Note 'backup excludes key material by design (Meta/Global secrets stay on device)'
 
-# ---------- 7. in-place install ----------
+# ---------- 7. install or reconcile ----------
 
-Step '7. In-place install (all gates passed)'
-$instOut = & $adb -s $Serial install -r $ApkPath 2>&1
-$instText = ($instOut | Out-String)
-Note $instText.Trim()
-if ($instText -notmatch 'Success') {
-    Fail "install failed; NOT retrying with uninstall/clear: $instText"
+if ($SkipInstall) {
+    Step '7. Reconcile installed candidate (NO reinstall)'
+    $instSha = (Get-FileHash $pulledApk -Algorithm SHA256).Hash
+    Note "installed artifact sha256: $instSha"
+    if ($instSha -ne $candSha) {
+        Fail 'installed artifact differs from candidate: an update may be needed, but this run will not install. Re-run without -SkipInstall only after owner review.'
+    }
+    Note 'installed bytes IDENTICAL to candidate (update already present)'
+}
+else {
+    # RECONCILE-NO-INSTALL: the update below runs only when
+    # -SkipInstall is absent; the branch above never installs.
+    Step '7. In-place install (all gates passed)'
+    $instResult = Invoke-ToolText $adb @('-s', $Serial, 'install',
+        '-r', $ApkPath)
+    $instText = ($instResult.Lines -join "`n")
+    Note $instText.Trim()
+    $instVerdict = Get-InstallResult $instResult.Exit $instResult.Lines
+    if ($instVerdict.Status -eq 'Success') {
+        Note 'install result: SUCCESS (Android confirmed)'
+    }
+    elseif ($instVerdict.Status -eq 'Failed') {
+        Fail "install failed; NOT retrying with uninstall/clear: $($instVerdict.Detail)"
+    }
+    else {
+        Fail "install result indeterminate; reconcile device before any retry: $($instVerdict.Detail)"
+    }
 }
 
 # ---------- 8. post-install validation ----------
@@ -401,6 +512,14 @@ if ($lostTomb.Count -gt 0) {
 if ($missingQuar.Count -gt 0) {
     Fail "quarantine files missing after install: $($missingQuar -join ', ')"
 }
+$tokenProbe = Invoke-ToolText $adb @('-s', $Serial, 'shell',
+    "run-as $ExpectedAppId ls files/global_upload_token.bin")
+if ($tokenProbe.Exit -eq 0) {
+    Note 'device holds a Global upload token: uploads remain gated by consent-OFF plus explicit per-batch tap (source-verified)'
+}
+else {
+    Note 'device holds no Global upload token: cloud upload impossible without provisioning'
+}
 $postJson = & $adb -s $Serial shell "run-as $ExpectedAppId cat files/install.json" 2>&1
 if ($baseInstallId -and ($postJson -match '"install_id"\s*:\s*"([^"]+)"')) {
     if ($Matches[1] -ne $baseInstallId) {
@@ -420,6 +539,20 @@ if (($LASTEXITCODE -ne 0) -or (-not $pid1) -or (-not "$pid1".Trim())) {
     Fail 'app not running after launch'
 }
 Note "running pid: $($pid1.Trim())"
+$markerCheck = Invoke-ToolText $adb @('-s', $Serial, 'shell',
+    "run-as $ExpectedAppId cat files/install.json")
+$markerId = $null
+if (($markerCheck.Exit -eq 0) -and
+    (($markerCheck.Lines -join "`n") -match '"install_id"\s*:\s*"([^"]+)"')) {
+    $markerId = $Matches[1]
+    Note "post-launch install_id: $($markerId.Substring(0, [Math]::Min(8, $markerId.Length)))... (marker build confirmed running)"
+    if ($baseInstallId -and ($markerId -ne $baseInstallId)) {
+        Fail 'install_id changed across validation (identity reset?)'
+    }
+}
+else {
+    Fail 'install.json missing after launch (marker build cannot be confirmed)'
+}
 & $adb -s $Serial shell am force-stop $ExpectedAppId
 & $adb -s $Serial shell monkey -p $ExpectedAppId -c android.intent.category.LAUNCHER 1 | Out-Null
 Start-Sleep -Seconds 8

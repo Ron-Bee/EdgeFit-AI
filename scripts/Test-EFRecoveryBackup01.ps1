@@ -264,6 +264,22 @@ Assert-True $failFired 'applist.failure-surfaced'
 $chain = Test-BackupArchive $tarExe $emptyTar $members3 (Get-AppList $mockAdb 'SERIAL-X' 'ai.edgefit.diag' 'evidence') @()
 Assert-True ($chain.Ok) 'chain.empty-ok' $chain.Reason
 
+# 14h. install result parsing: transfer progress is noise, not signal.
+$okLines = @('3161 KB/s (17339914 bytes in 5.355s)', 'Success')
+$r14h = Get-InstallResult 0 $okLines
+Assert-True ($r14h.Status -eq 'Success') 'install.parse-success'
+$failLines = @('1024 KB/s (100 bytes in 0.001s)', 'Failure [INSTALL_FAILED_ALREADY_EXISTS]')
+$r14h2 = Get-InstallResult 1 $failLines
+Assert-True (($r14h2.Status -eq 'Failed') -and ($r14h2.Detail -match 'ALREADY_EXISTS')) 'install.parse-failure'
+$r14h3 = Get-InstallResult 0 @('3161 KB/s (17339914 bytes in 5.355s)')
+Assert-True ($r14h3.Status -eq 'Indeterminate') 'install.progress-indeterminate'
+$r14h4 = Get-InstallResult 1 @('Success')
+Assert-True ($r14h4.Status -eq 'Indeterminate') 'install.contradiction-indeterminate'
+$r14h5 = Get-InstallResult 0 @()
+Assert-True ($r14h5.Status -eq 'Indeterminate') 'install.empty-indeterminate'
+$r14h6 = Get-InstallResult 0 @('Failure [INSTALL_CANCELED_BY_USER]')
+Assert-True ($r14h6.Status -eq 'Failed') 'install.failure-despite-zero-exit'
+
 # 15. package parse keeps diagnostics out of identity names.
 $pmLines = @(
     'package:ai.edgefit.diag',
@@ -290,12 +306,18 @@ Assert-True ($libText -notmatch '(?i)\b(uninstall|exec-out|monkey|force-stop|reb
 # 18. installer: one in-place update, after backup verification,
 # user-scoped pm, and a global fault trap for honest verdicts.
 $inst = Get-Content (Join-Path $SCRIPT:HERE 'Invoke-EFRecoveryInstall01.ps1') -Raw
-Assert-True (([regex]::Matches($inst, 'adb -s \$Serial install -r')).Count -eq 1) 'installer.single-install'
+Assert-True (([regex]::Matches($inst, '''-r'', \$ApkPath')).Count -eq 1) 'installer.single-install'
 $iBackup = $inst.IndexOf('Test-BackupArchive')
-$iInstall = $inst.IndexOf('install -r $ApkPath')
+$iInstall = $inst.IndexOf("'-r', `$ApkPath")
 Assert-True (($iBackup -gt 0) -and ($iInstall -gt $iBackup)) 'installer.backup-before-install'
 Assert-True (($inst -match "'pm', 'list',") -and ($inst -match "'packages', '--user'")) 'installer.user-scoped-pm'
 Assert-True ($inst -match '(?m)^trap \{') 'installer.fault-trap'
+Assert-True ($inst -match 'Get-InstallResult') 'installer.uses-install-parser'
+$iSkip = $inst.IndexOf('if ($SkipInstall)')
+$iMark = $inst.IndexOf('RECONCILE-NO-INSTALL')
+$iInst2 = $inst.IndexOf("'-r', `$ApkPath")
+Assert-True (($iSkip -gt 0) -and ($iMark -gt $iSkip) -and ($iInst2 -gt $iMark)) 'installer.no-reinstall-in-reconcile'
+Assert-True ($inst -match '\$SkipBuild = \$true') 'installer.reconcile-skips-build'
 
 Remove-Item $Tmp -Recurse -Force -ErrorAction SilentlyContinue
 

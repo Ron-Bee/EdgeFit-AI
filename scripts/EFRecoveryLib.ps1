@@ -122,7 +122,7 @@ function Test-BackupArchive(
     $ExpectedEvidence = @($ExpectedEvidence |
         Where-Object { $_ -ne $null -and "$_".Trim() -ne '' })
     $fail = { param($why) return @{ Ok = $false; Reason = $why;
-        Sessions = @(); Evidence = @(); Entries = 0 } }
+        Sessions = @(); Evidence = @(); Entries = 0; Quarantine = @() } }
     if ([string]::IsNullOrWhiteSpace($TarExe) -or -not (Test-Path $TarExe)) {
         return &$fail 'tar tool missing'
     }
@@ -148,6 +148,7 @@ function Test-BackupArchive(
     $sessions = @()
     $evidence = @()
     $entries = 0
+    $quarantine = @()
     foreach ($raw in $list) {
         $entry = "$raw".Trim() -replace '^\./', ''
         if ($entry -eq '') { continue }
@@ -170,6 +171,9 @@ function Test-BackupArchive(
         }
         elseif ($entry -match '^files/evidence/.*\.json$') {
             $evidence += ($entry -split '/')[-1]
+        }
+        elseif ($entry -match '^files/sessions-quarantine/.*\.json$') {
+            $quarantine += ($entry -split '/')[-1]
         }
     }
     $seenNames = @(
@@ -198,7 +202,38 @@ function Test-BackupArchive(
             (($missingEv | Select-Object -First 3) -join ', '))
     }
     return @{ Ok = $true; Reason = ''; Sessions = $sessions;
-        Evidence = $evidence; Entries = $entries }
+        Evidence = $evidence; Entries = $entries; Quarantine = $quarantine }
+}
+
+# Interprets an update command's exit code plus output lines. A
+# transfer-progress line is noise: neither success nor failure.
+# Explicit Failure dominates (even with exit 0, for old tools);
+# Success with exit 0 passes; anything else is Indeterminate and
+# the caller must reconcile, never assume.
+# Returns @{ Status = 'Success'|'Failed'|'Indeterminate'; Detail = [string] }.
+function Get-InstallResult(
+    [int]$ExitCode,
+    [string[]]$Lines
+) {
+    $text = @($Lines | ForEach-Object { "$_" })
+    $failLine = @($text | Where-Object { $_ -match 'Failure' } |
+        Select-Object -First 1)
+    $hasSuccess = @($text | Where-Object { $_ -match 'Success' }).Count -gt 0
+    if ($failLine.Count -gt 0) {
+        return @{ Status = 'Failed'; Detail = "$($failLine[0])".Trim() }
+    }
+    if ($ExitCode -ne 0) {
+        if ($hasSuccess) {
+            return @{ Status = 'Indeterminate';
+                Detail = "exit $ExitCode with Success text (contradictory)" }
+        }
+        $tail = ($text | Select-Object -Last 3) -join ' | '
+        return @{ Status = 'Failed'; Detail = "exit $ExitCode : $tail" }
+    }
+    if ($hasSuccess) {
+        return @{ Status = 'Success'; Detail = 'Android reported Success' }
+    }
+    return @{ Status = 'Indeterminate'; Detail = 'no Success or Failure in output' }
 }
 
 # Runs a native tool for TEXT output, merging stderr as text lines.
