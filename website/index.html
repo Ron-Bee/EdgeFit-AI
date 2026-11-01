@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EdgeFit AI — Evidence-based on-device inference</title>
+<meta name="description" content="EdgeFit AI is a hackathon prototype for evidence-based Android inference experiments: physical on-device benchmarks, explicit consent, and exact-cohort statistics.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<nav aria-label="Main">
+<a class="brand" href="index.html">EdgeFit AI</a>
+<a href="methodology.html">Methodology</a>
+<a href="evidence.html">Evidence status</a>
+</nav>
+</header>
+<main>
+<h1>Evidence-based on-device inference</h1>
+<p class="standfirst">EdgeFit AI is a prototype built for the Meta Global AI
+Developer Hackathon. It measures real language-model inference on physical
+Android phones and works toward a global evidence network where only
+verified, consented, comparable measurements count as evidence.</p>
+
+<h2>How it works</h2>
+<ol>
+<li><strong>Measure on the phone.</strong> The EdgeFitDiag Android app runs
+inference benchmarks on the physical device and exports a signed-shape JSON
+profile. No permissions, no network, no telemetry.</li>
+<li><strong>Review and consent.</strong> Contributors preview exactly what
+would be shared and grant explicit per-submission consent before anything
+leaves the phone.</li>
+<li><strong>Submit for qualification.</strong> Consented results enter a
+server pipeline that validates, deduplicates, and qualifies them through
+audited eligibility states.</li>
+<li><strong>Publish exact cohorts only.</strong> Statistics are published
+only for exact cohorts — same model, build, runtime, workload, and
+configuration — once 5 eligible runs from 3 independent installations
+agree the cohort is real.</li>
+</ol>
+
+<h2>Current status</h2>
+<p>Staging backend under test. <strong>No verified global aggregates have
+been published yet.</strong> See the
+<a href="evidence.html">evidence status page</a> for what exists today and
+what does not.</p>
+
+<h2>Provenance honesty</h2>
+<p>All EdgeFit AI source and functionality in this repository is new work
+started October 26, 2026, for this hackathon. Honey LLM and BeeBench are
+pre-existing independent projects; EdgeFit does not reuse their code or
+present their results as its own.</p>
+</main>
+<footer>
+<p>EdgeFit AI — hackathon prototype. No published global statistics yet.</p>
+</footer>
+</body>
+</html>

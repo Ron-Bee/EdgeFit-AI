@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Evidence status — EdgeFit AI</title>
+<meta name="description" content="What global evidence EdgeFit AI has published: nothing yet. Staging state, quorum rules, and what publication requires.">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+<nav aria-label="Main">
+<a class="brand" href="index.html">EdgeFit AI</a>
+<a href="methodology.html">Methodology</a>
+<a href="evidence.html" aria-current="page">Evidence status</a>
+</nav>
+</header>
+<main>
+<h1>Evidence status: insufficient evidence</h1>
+<p class="standfirst">EdgeFit AI has published <strong>zero</strong> verified
+global aggregates. This page explains why, and what has to happen before
+any number appears here.</p>
+
+<h2>What exists today</h2>
+<ul>
+<li>A staging backend (Cloudflare Workers + D1) under active test. It is
+private and not publicly queryable; this page makes no calls to it.</li>
+<li>Synthetic test fixtures used to qualify the pipeline. They are
+test-only and excluded from genuine statistics by design.</li>
+<li>Physical Android measurements collected locally during development.
+They are single-device, unqualified runs — interesting to the developers,
+not evidence yet.</li>
+</ul>
+
+<h2>What publication requires</h2>
+<ul>
+<li>An approved consent policy (still under review).</li>
+<li>Genuine device contributions through explicit per-submission consent.</li>
+<li>At least 5 eligible runs from at least 3 independent installations in
+the same exact cohort.</li>
+<li>Individual-run drill-down stays disabled until its disclosure policy
+is approved. Public viewers will only ever see authorized aggregates.</li>
+</ul>
+
+<h2>What you will see when a cohort qualifies</h2>
+<p>A model table with median throughput, sample and installation counts,
+and the full cohort identity — one representative cohort per model, never
+a pooled mean across incompatible runs. Until then: counts without
+statistics, honestly labeled.</p>
+</main>
+<footer>
+<p>EdgeFit AI — hackathon prototype. No published global statistics yet.</p>
+</footer>
+</body>
+</html>
