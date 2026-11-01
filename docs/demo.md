@@ -6,9 +6,9 @@
 recording is ready, the owner will add the verified link here and in
 the README.
 
-## Five-minute demonstration flow
+## Demonstration flow (live version; official submission video is max THREE minutes)
 
-Designed for a live walkthrough on the Galaxy S22 Ultra with the
+The official hackathon submission video must be THREE minutes maximum (URL pending). This script is the longer live walkthrough version for the Galaxy S22 Ultra with the
 workstation alongside. Steps 1–2 and 5 are fully offline; steps 3–4
 need a Meta API key only if run live (otherwise narrate over the
 recorded session evidence).
@@ -37,9 +37,9 @@ nothing runs without approval.
 
 **4:00–4:45 — Contribute with consent.**
 Open the Global contribution review for a finished run: provenance,
-hashes, what is sent, and the aggregates-only scope. (No backend is
-deployed, so submission stops at the insistence on a configured
-origin — say so plainly.)
+hashes, what is sent, and the aggregates-only scope. (The backend is
+deployed, but live submission needs a per-install credential plus
+approved consent, neither granted yet -- say so plainly, and show the live empty dashboard.)
 
 **4:45–5:00 — Close on evidence.**
 Recap the loop on one slide: predict → measure → compare → contribute.

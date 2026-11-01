@@ -20,7 +20,7 @@ flowchart TB
         Disp["Validated dispatchers\n(tool-call gate + retrieval)"]
     end
     Muse["Meta Muse Spark\napi.meta.ai"]
-    subgraph Cloud["Global backend (UNDEPLOYED)"]
+    subgraph Cloud["Global backend (DEPLOYED, honestly empty)"]
         API["v1 submission API"]
         GDB[("Evidence database")]
         Web["Public explorer"]
@@ -29,7 +29,7 @@ flowchart TB
     Bench --> Sess --> JSON --> Lite --> Disp --> Muse
     Muse -->|"prediction stored first"| Sess
     Bench -->|"measured result"| Sess
-    Sess -.->|"consent-gated upload\n(no backend yet)"| API
+    Sess -.->|"consent-gated upload\n(deployed; upload pending)"| API
     API --> GDB --> Web
 ```
 
@@ -43,9 +43,9 @@ flowchart TB
 | Bounded agent loop (EF-AGENT-01) | Host + one scoped live loop | [edgefit-agentic-workflow.md](edgefit-agentic-workflow.md) |
 | Workstation SQLite + importers | Qualified (additive migrations 2, 3) | [ef-data-02-import.md](ef-data-02-import.md), [ef-data-03-bench.md](ef-data-03-bench.md) |
 | Validated retrieval + dispatch | Offline + live qualified | [muse-integration.md](muse-integration.md) |
-| Cloud backend (`cloud/`) | Host-qualified foundation, **undeployed** | [../cloud/README.md](../cloud/README.md) |
-| Global contribution client | Host-qualified, no live backend observed | [ef-global-contribute-app-handoff.md](ef-global-contribute-app-handoff.md) |
-| Public explorer | Proposed, not built | master architecture §15 |
+| Cloud backend | **Deployed** (3 Workers + D1), 297/297 PASS @ `cba27c3`, zero genuine rows | [README global section](../README.md#i-global-evidence-system-deployed-honestly-empty) |
+| Global contribution client | Host-qualified; backend live, first genuine upload not run | [ef-global-contribute-app-handoff.md](ef-global-contribute-app-handoff.md) |
+| Public dashboard | **Live, honestly empty** ([dashboard](https://edgefit-ai.pages.dev/dashboard.html)) | Handoff `cba27c3` §H |
 | Signed public release | Not started | [edgefit-release-and-distribution.md](edgefit-release-and-distribution.md) |
 
 ## Key design rules
