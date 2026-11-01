@@ -1,0 +1,69 @@
+# EF-GLOBAL-01 PUBLIC read-only evidence Worker — PUB-03.
+#
+# SEPARATE Worker from staging: anonymous GET-only aggregate reads
+# for the public dashboard. Entry cloud/public-reader.js answers
+# exactly three routes (models, aggregates, model-candidates) plus
+# CORS preflight; no POST/DELETE, no scheduler, no writes exist in
+# its code. Publication is enforced server-side by publicationClause
+# (approved consent AND device_contribution origin); the allowlist
+# stays EMPTY until a real consent version is owner-approved.
+#
+# This Worker intentionally HAS a workers.dev URL (owner-authorized
+# PUB-03 exposure for anonymous reads). It binds the SAME staging
+# D1 in a code-enforced read-only role: no statement it can run
+# mutates (verified by host tests pinning the route allowlist +
+# GET-only dispatch). Private staging (edgefit-evidence-staging-
+# staging, workers_dev=false) is unaffected by this file.
+#
+# Secrets set ONLY via `wrangler secret put` (PUBLIC_SALT must be
+# set before first deploy; it never appears here or in git).
+# The database_id below is the same non-secret staging resource
+# locator recorded in wrangler.staging.toml by owner decision.
+#
+# Local tests do NOT read this file: they inject adapters directly
+# into cloud/public-reader.js publicFetch.
+
+name = "edgefit-evidence-public"
+# Entry point, relative to this file (cloud/).
+main = "public-reader.js"
+# Same pinned runtime semantics as staging; nodejs_compat provides
+# node:crypto for synchronous SHA-256 salting.
+compatibility_date = "2026-10-30"
+compatibility_flags = ["nodejs_compat"]
+# Public by owner authorization (PUB-03): anonymous aggregate
+# reads through the workers.dev URL printed at deploy time.
+workers_dev = true
+# No preview/version URLs: only the production workers.dev route
+# answers, so no unreviewed version is ever reachable.
+preview_urls = false
+
+[[d1_databases]]
+binding = "DB"
+database_name = "edgefit-evidence-staging"
+# Same staging database, read-only by code (no write path exists
+# in public-reader.js). Non-secret locator; production DNE.
+database_id = "2ccce000-c70c-4c5a-9267-d330dedc22aa"
+
+# Anonymous per-IP rate limiting. Same semantics as staging
+# (fail open with observable hook; 429 bridge-v1.1 envelope),
+# but a SEPARATE namespace so public traffic can never consume
+# the staging operator budget and vice versa. First-class
+# `ratelimits` key only: never redeclare under unsafe.bindings.
+[[ratelimits]]
+name = "RATE_LIMIT"
+# Account-unique; 7001 is the staging namespace, so public uses
+# 7002. Change if this account already uses it.
+namespace_id = "7002"
+# 120 requests/minute per IP. PUB-03 diagnostic result: the
+# binding attaches on Free but does NOT enforce (limit=5 probes
+# never tripped), so this rule is a plan-upgrade path ONLY. The
+# control that bites on Free is the isolate-local budget in
+# public-reader.js (same numbers, so semantics converge if the
+# plan ever enforces the binding). Period must be 10 or 60.
+simple = { limit = 120, period = 60 }
+
+# Secrets (set ONLY via `wrangler secret put` under PUB-03
+# authorization; never in this file, never in git):
+#   PUBLIC_SALT — dedicated population salt for install identities.
+#     MUST differ from the staging INSTALL_SALT (different Worker,
+#     different secret). No Meta key, no install tokens live here.
