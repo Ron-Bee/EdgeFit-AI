@@ -132,6 +132,8 @@ class MainActivity : Activity() {
     private lateinit var globalClient: GlobalClient
     private lateinit var evidenceLine: TextView
     private var globalOrigin: String? = null
+    /** EF-ANDROID-RECOVERY-INSTALL-01 durable install marker. */
+    private var installRecord: InstallIdentity.Record? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -151,6 +153,12 @@ class MainActivity : Activity() {
         globalClient = GlobalClient(
             evidenceStore, HttpsGlobalTransport(), globalVault,
             { globalOrigin }, { System.currentTimeMillis() })
+        installRecord = try {
+            InstallIdentity.ensure(filesDir, BuildConfig.APPLICATION_ID,
+                appVersionCode(), SessionManager.utcNow())
+        } catch (_: Exception) {
+            null
+        }
         Thread({
             val actions = try {
                 val found = sessionManager.recoverOnLaunch().toMutableList()
@@ -1422,6 +1430,23 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * Version code for the install marker; -1 when unreadable.
+     * Diagnostic only; never gates launch or storage.
+     */
+    private fun appVersionCode(): Int = try {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        if (android.os.Build.VERSION.SDK_INT >=
+            android.os.Build.VERSION_CODES.P
+        ) {
+            info.longVersionCode.toInt()
+        } else {
+            @Suppress("DEPRECATION") info.versionCode
+        }
+    } catch (_: Exception) {
+        -1
+    }
+
     /** Real-state context for the AeroSettings model. */
     private fun settingsCtx(): AeroSettings.Context {
         val suffix = try {
@@ -1447,7 +1472,12 @@ class MainActivity : Activity() {
             globalTokenPersisted = persisted,
             versionName = BuildConfig.VERSION_NAME,
             packageName = packageName,
-            workloadId = BenchContract.WORKLOAD_ID)
+            workloadId = BenchContract.WORKLOAD_ID,
+            installLine = try {
+                installRecord?.let { InstallIdentity.statusLine(it) }
+            } catch (_: Exception) {
+                null
+            })
     }
 
     /** Static caption detail for one settings action row. */
@@ -2700,6 +2730,16 @@ class MainActivity : Activity() {
             // bytes. No session-count ceiling exists anymore.
             storageNote = try {
                 "${MemDiag.formatMb(filesDir.usableSpace)} free"
+            } catch (_: Exception) {
+                null
+            },
+            quarantineNote = try {
+                val quarantined = sessionManager.quarantineCount()
+                if (quarantined > 0) {
+                    quarantined.toString() + " quarantined"
+                } else {
+                    null
+                }
             } catch (_: Exception) {
                 null
             }

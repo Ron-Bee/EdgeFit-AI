@@ -217,7 +217,8 @@ object SessionView {
         onOpenRepeat: ((String) -> Unit)? = null,
         onClose: (() -> Unit)? = null,
         onRecover: ((String) -> Unit)? = null,
-        storageNote: String? = null
+        storageNote: String? = null,
+        quarantineNote: String? = null
     ) {
         var dialog: AlertDialog? = null
         val density = activity.resources.displayMetrics.density
@@ -303,11 +304,9 @@ object SessionView {
             } else {
                 "${shown.size} of ${sessions.size} · ${filter.label}"
             }
-            count.text = if (storageNote != null) {
-                "$baseCount · $storageNote"
-            } else {
-                baseCount
-            }
+            count.text = listOfNotNull(
+                baseCount, storageNote, quarantineNote)
+                .joinToString(" · ")
             if (shown.isEmpty()) {
                 list.addView(TextView(activity).apply {
                     text = SessionListUi.emptyStateText(filter)
