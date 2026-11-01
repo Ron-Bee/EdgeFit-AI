@@ -35,6 +35,18 @@ enum class NavTab {
         }
 
         /**
+         * Aero top-bar descriptor per destination. Pure
+         * mapping like [title]; the activity owns display.
+         */
+        fun subtitle(tab: NavTab): String = when (tab) {
+            HOME -> "Device overview"
+            BENCHMARK -> "Measure this device"
+            SESSIONS -> "Local measurement history"
+            AGENT -> "Guided optimization"
+            SETTINGS -> "Connections and app"
+        }
+
+        /**
          * Back-navigation target. Null means the back press
          * exits the activity (default behavior).
          */

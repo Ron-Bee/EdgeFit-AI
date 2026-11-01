@@ -2,8 +2,12 @@ package ai.edgefit.diag
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.content.res.ColorStateList
+import android.view.Gravity
 import android.view.KeyEvent
+import android.view.View
 import android.widget.Button
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
@@ -14,6 +18,10 @@ import android.widget.TextView
  * never triggers network, key, download, benchmark, or
  * paid work. Content comes from [Onboarding.pages] (pure,
  * unit-tested); this object only renders and navigates.
+ * EF-UX-AERO-01 Step 5 restyles the sheet with the Aero
+ * light tokens (mist background, ink copy, azure brand
+ * mark, azure primary action) while keeping the page
+ * model, Skip, Back, and retirement semantics untouched.
  * Main thread only.
  */
 object OnboardingView {
@@ -36,10 +44,35 @@ object OnboardingView {
         var done = false
         val density = activity.resources.displayMetrics.density
         fun dp(value: Int): Int = (value * density + 0.5f).toInt()
-        val ink = activity.resources.getColor(
-            R.color.edgefit_text, activity.theme)
-        val secondary = activity.resources.getColor(
-            R.color.edgefit_text_secondary, activity.theme)
+        val ink = activity.getColor(R.color.aero_ink)
+        val secondary = activity.getColor(
+            R.color.aero_light_secondary)
+        val azure = activity.getColor(R.color.aero_azure)
+        val brandRow = LinearLayout(activity).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val markSize = dp(24)
+        brandRow.addView(ImageView(activity).apply {
+            setImageResource(R.drawable.ic_aero_mark)
+            imageTintList = ColorStateList.valueOf(azure)
+            importantForAccessibility =
+                View.IMPORTANT_FOR_ACCESSIBILITY_NO
+        }, LinearLayout.LayoutParams(markSize, markSize).apply {
+            marginEnd = dp(8)
+        })
+        brandRow.addView(TextView(activity).apply {
+            text = activity.getString(R.string.aero_wordmark_short)
+            textSize = 12f
+            letterSpacing = 0.12f
+            isSingleLine = true
+            setTextColor(azure)
+            SemanticUi.bold(this)
+        })
+        val divider = View(activity).apply {
+            setBackgroundColor(activity.getColor(
+                R.color.aero_light_border))
+        }
         val title = TextView(activity).apply {
             textSize = 20f
             setTextColor(ink)
@@ -53,8 +86,11 @@ object OnboardingView {
             orientation = LinearLayout.VERTICAL
         }
         val primary = Button(activity).apply {
-            SemanticUi.stylePrimary(activity, this)
+            AeroUi.stylePrimary(activity, this)
         }
+        // Back/Skip keep the system light-button look:
+        // the Aero secondary/ghost styles are tuned for
+        // dark surfaces and would wash out here.
         val back = Button(activity).apply { text = "Back" }
         val skip = Button(activity).apply { text = "Skip" }
         fun finish(start: Boolean) {
@@ -66,8 +102,7 @@ object OnboardingView {
         fun render() {
             val data = Onboarding.pages()[page]
             title.text = data.title
-            indicator.text =
-                "${page + 1} of ${Onboarding.PAGE_COUNT}"
+            indicator.text = Onboarding.progressLabel(page)
             body.removeAllViews()
             for (line in data.lines) {
                 body.addView(TextView(activity).apply {
@@ -102,8 +137,17 @@ object OnboardingView {
         }
         val content = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
+            setBackgroundColor(activity.getColor(
+                R.color.aero_light_page))
             val pad = dp(16)
             setPadding(pad, pad, pad, pad)
+            addView(brandRow)
+            addView(divider, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                dp(1)).apply {
+                topMargin = dp(8)
+                bottomMargin = dp(8)
+            })
             addView(title)
             addView(indicator)
             addView(body)

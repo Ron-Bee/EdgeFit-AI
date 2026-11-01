@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aero keyboard-focus ring overlay. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@android:color/transparent" />
+    <stroke
+        android:width="@dimen/aero_stroke_focus"
+        android:color="@color/aero_focus" />
+    <corners android:radius="@dimen/aero_radius_button" />
+</shape>

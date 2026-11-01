@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="512" viewBox="0 0 400 128">
+  <!-- EdgeFit Aero WORDMARK reference (EF-UX-AERO-01 Step 1).
+       Lockup: icon mark + "EDGEFIT" + tagline. Display type set in a
+       generic grotesque (system sans); letterforms here are live text,
+       not outlines — convert to outlines before print use. -->
+  <defs>
+    <linearGradient id="wbg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#071D3B"/>
+      <stop offset="1" stop-color="#081427"/>
+    </linearGradient>
+    <linearGradient id="wbar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#49BBFF"/>
+      <stop offset="1" stop-color="#1265F5"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="400" height="128" rx="24" fill="url(#wbg)"/>
+  <g transform="translate(22,26) scale(0.685)">
+    <path d="M35,38 A5,5 0 0 1 45,38 L45,71 A5,5 0 0 1 35,71 Z" fill="url(#wbar)"/>
+    <path d="M40,33 L68,33 A5,5 0 0 1 68,43 L40,43 A5,5 0 0 1 40,33 Z" fill="url(#wbar)"/>
+    <path d="M40,66 L68,66 A5,5 0 0 1 68,76 L40,76 A5,5 0 0 1 40,66 Z" fill="url(#wbar)"/>
+    <path d="M50,48 L60,48 A5,5 0 0 1 60,58 L50,58 A5,5 0 0 1 50,48 Z" fill="#8054F8"/>
+    <path d="M55,62 a3,3 0 1 0 6,0 a3,3 0 1 0 -6,0" fill="#F3F7FE"/>
+  </g>
+  <text x="108" y="68" font-family="Arial, Helvetica, sans-serif" font-weight="bold"
+        font-size="34" letter-spacing="6" fill="#F3F7FE">EDGEFIT</text>
+  <text x="110" y="94" font-family="Arial, Helvetica, sans-serif" font-size="14"
+        letter-spacing="3" fill="#A9BCD8">MEASURE WHAT MATTERS</text>
+</svg>

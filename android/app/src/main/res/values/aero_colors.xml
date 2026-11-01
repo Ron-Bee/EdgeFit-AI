@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- EdgeFit Aero design tokens: color system (EF-UX-AERO-01 Step 1).
+     Dark-first palette. Base rows are the six directive colors; every
+     derived row documents its role. All Aero drawables/styles reference
+     these tokens — no scattered hard-coded colors. -->
+<resources>
+    <!-- Directive base palette -->
+    <color name="aero_deep_space">#081427</color>
+    <color name="aero_abyss">#071D3B</color>
+    <color name="aero_azure">#1265F5</color>
+    <color name="aero_sky">#49BBFF</color>
+    <color name="aero_violet">#8054F8</color>
+    <color name="aero_mist">#F3F7FE</color>
+
+    <!-- Surfaces (page -> raised -> card) -->
+    <color name="aero_page">#081427</color>
+    <color name="aero_surface">#071D3B</color>
+    <color name="aero_card">#0C2347</color>
+    <color name="aero_card_border">#23406B</color>
+    <color name="aero_dock">#0B2140</color>
+    <color name="aero_dock_border">#2A4A7A</color>
+    <color name="aero_divider">#1F3355</color>
+    <color name="aero_overlay">#12294D</color>
+
+    <!-- Text on dark -->
+    <color name="aero_text_primary">#F3F7FE</color>
+    <color name="aero_text_secondary">#A9BCD8</color>
+    <color name="aero_text_disabled">#5F7191</color>
+    <color name="aero_text_on_primary">#FFFFFF</color>
+    <!-- Text on light sheets -->
+    <color name="aero_ink">#081427</color>
+
+    <!-- Primary action states -->
+    <color name="aero_primary">#1265F5</color>
+    <color name="aero_primary_hover">#2E7BF7</color>
+    <color name="aero_primary_pressed">#0D52C9</color>
+    <color name="aero_primary_disabled">#2A3B56</color>
+    <color name="aero_on_primary_disabled">#8CA0BE</color>
+
+    <!-- Glow / halo washes (translucent) -->
+    <color name="aero_glow_azure">#401265F5</color>
+    <color name="aero_glow_sky">#4049BBFF</color>
+    <color name="aero_glow_violet">#408054F8</color>
+    <color name="aero_glow_ring">#801265F5</color>
+
+    <!-- Scrims -->
+    <color name="aero_scrim">#CC081427</color>
+    <color name="aero_scrim_light">#99081427</color>
+
+    <!-- Semantic accents tuned for dark surfaces -->
+    <color name="aero_measured">#5CC8DC</color>
+    <color name="aero_predicted">#A78BFA</color>
+    <color name="aero_error">#FF8A80</color>
+    <color name="aero_error_container">#4A1512</color>
+    <color name="aero_success">#3ECF8E</color>
+
+    <!-- Light sheets (dialogs/exports on mist) -->
+    <color name="aero_light_page">#F3F7FE</color>
+    <color name="aero_light_card">#FFFFFF</color>
+    <color name="aero_light_border">#DCE7F7</color>
+    <!-- Secondary copy on light sheets (onboarding indicator) -->
+    <color name="aero_light_secondary">#40506E</color>
+
+    <!-- Focus -->
+    <color name="aero_focus">#49BBFF</color>
+</resources>

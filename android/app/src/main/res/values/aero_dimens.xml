@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- EdgeFit Aero design tokens: spacing, radii, elevation, glow, type
+     scale (EF-UX-AERO-01 Step 1). 8dp grid; radii step up from UX-01A. -->
+<resources>
+    <!-- Spacing (8dp grid + half step) -->
+    <dimen name="aero_space_2">2dp</dimen>
+    <dimen name="aero_space_4">4dp</dimen>
+    <dimen name="aero_space_8">8dp</dimen>
+    <dimen name="aero_space_12">12dp</dimen>
+    <dimen name="aero_space_16">16dp</dimen>
+    <dimen name="aero_space_20">20dp</dimen>
+    <dimen name="aero_space_24">24dp</dimen>
+    <dimen name="aero_space_32">32dp</dimen>
+    <dimen name="aero_space_48">48dp</dimen>
+
+    <!-- Radii -->
+    <dimen name="aero_radius_s">8dp</dimen>
+    <dimen name="aero_radius_m">16dp</dimen>
+    <dimen name="aero_radius_card">20dp</dimen>
+    <dimen name="aero_radius_button">14dp</dimen>
+    <dimen name="aero_radius_dock">28dp</dimen>
+    <dimen name="aero_radius_pill">24dp</dimen>
+
+    <!-- Strokes -->
+    <dimen name="aero_stroke_hairline">1dp</dimen>
+    <dimen name="aero_stroke_card">1dp</dimen>
+    <dimen name="aero_stroke_focus">2dp</dimen>
+
+    <!-- Elevation (dark theme leans on borders; elevation for shadow) -->
+    <dimen name="aero_elevation_button">2dp</dimen>
+    <dimen name="aero_elevation_card">4dp</dimen>
+    <dimen name="aero_elevation_dock">8dp</dimen>
+    <dimen name="aero_elevation_dialog">16dp</dimen>
+
+    <!-- Glow simulation (pre-API-31 has no RenderEffect blur, so glow is
+         layered translucent shapes; see aero_card_glow_bg.xml) -->
+    <dimen name="aero_glow_pad">6dp</dimen>
+    <dimen name="aero_glow_mid">3dp</dimen>
+    <dimen name="aero_glow_radius">16dp</dimen>
+
+    <!-- Buttons -->
+    <dimen name="aero_button_height">48dp</dimen>
+    <dimen name="aero_button_height_compact">40dp</dimen>
+    <dimen name="aero_button_min_width">120dp</dimen>
+
+    <!-- Cards -->
+    <dimen name="aero_card_padding">16dp</dimen>
+    <dimen name="aero_card_gap">12dp</dimen>
+
+    <!-- Floating dock -->
+    <dimen name="aero_dock_height">72dp</dimen>
+    <dimen name="aero_dock_margin">16dp</dimen>
+    <dimen name="aero_dock_icon">24dp</dimen>
+
+    <!-- Iconography -->
+    <dimen name="aero_icon_mark">24dp</dimen>
+    <dimen name="aero_icon_touch">48dp</dimen>
+
+    <!-- Type scale -->
+    <dimen name="aero_text_display">32sp</dimen>
+    <dimen name="aero_text_title">22sp</dimen>
+    <dimen name="aero_text_headline">18sp</dimen>
+    <dimen name="aero_text_body">16sp</dimen>
+    <dimen name="aero_text_body_small">14sp</dimen>
+    <dimen name="aero_text_label">14sp</dimen>
+    <dimen name="aero_text_caption">12sp</dimen>
+    <dimen name="aero_text_mono">14sp</dimen>
+</resources>

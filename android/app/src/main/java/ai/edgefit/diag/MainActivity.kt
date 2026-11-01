@@ -18,7 +18,6 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.Button
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.text.InputType
 import android.widget.EditText
 import android.widget.LinearLayout
@@ -39,7 +38,12 @@ import java.util.Locale
  */
 class MainActivity : Activity() {
 
-    private lateinit var summaryView: TextView
+    private lateinit var deviceTitleView: TextView
+    private lateinit var deviceUpdatedView: TextView
+    private val deviceTileValues = mutableMapOf<String, TextView>()
+    private lateinit var modelReadinessView: TextView
+    private lateinit var runHintView: TextView
+    private lateinit var benchAuthView: TextView
     private lateinit var statusView: TextView
     private lateinit var modelView: TextView
     private lateinit var benchView: TextView
@@ -67,12 +71,8 @@ class MainActivity : Activity() {
     private lateinit var contentFrame: FrameLayout
     private lateinit var benchScreen: BenchScreenView
     private val destinations = mutableMapOf<NavTab, View>()
-    private data class TabItem(
-        val root: View,
-        val icon: ImageView,
-        val label: TextView
-    )
-    private val tabButtons = mutableMapOf<NavTab, TabItem>()
+    private lateinit var topBar: AeroTopBar
+    private lateinit var dock: AeroDockView
     private var currentTab: NavTab = NavTab.HOME
     private lateinit var nextActionView: TextView
     private lateinit var nextActionButton: Button
@@ -91,6 +91,24 @@ class MainActivity : Activity() {
     private var detailsTicker: DeviceTelemetry.Ticker? = null
     private var detailsView: TextView? = null
     private lateinit var sessionsSummaryView: TextView
+    // EF-UX-AERO-01 Step 4 inline evidence library:
+    // bounded recent cards, rebuilt on every refresh.
+    private lateinit var recentSessionsList: LinearLayout
+    private lateinit var sessionsMoreView: TextView
+    // EF-UX-AERO-01 Step 4 result hero: this launch's
+    // run; Details opens the full sections (raw IDs).
+    private lateinit var resultHeroBox: LinearLayout
+    private lateinit var resultDetailsButton: Button
+    private lateinit var agentSummaryView: TextView
+    // EF-UX-AERO-01 Step 5 agent workspace: bounded
+    // inline parent cards, rebuilt on every refresh.
+    private lateinit var agentWorkspaceList: LinearLayout
+    private lateinit var agentMoreView: TextView
+    // EF-UX-AERO-01 Step 5 contribute preview + settings
+    // status lines (read-only; actions stay explicit).
+    private lateinit var contributePreviewView: TextView
+    private lateinit var settingsMetaView: TextView
+    private lateinit var settingsGlobalView: TextView
     private var benchActive: Boolean = false
     private val requestTracker = RequestTracker()
     private lateinit var sessionManager: SessionManager
@@ -108,6 +126,12 @@ class MainActivity : Activity() {
     private lateinit var metaVault: MetaKeyVault
     private lateinit var metaClient: MetaSessionClient
     private lateinit var agentManager: AgentManager
+    // EF-GLOBAL-CONTRIBUTE-01: durable evidence + upload client.
+    private lateinit var evidenceStore: EvidenceStore
+    private lateinit var globalVault: GlobalTokenVault
+    private lateinit var globalClient: GlobalClient
+    private lateinit var evidenceLine: TextView
+    private var globalOrigin: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -121,6 +145,12 @@ class MainActivity : Activity() {
         metaClient = MetaSessionClient(
             sessionManager, HttpsMetaTransport(), metaVault)
         agentManager = AgentManager(sessionManager)
+        evidenceStore = EvidenceStore(filesDir)
+        globalVault = GlobalTokenVault(filesDir, GlobalKeySeal())
+        globalOrigin = readGlobalOrigin()
+        globalClient = GlobalClient(
+            evidenceStore, HttpsGlobalTransport(), globalVault,
+            { globalOrigin }, { System.currentTimeMillis() })
         Thread({
             val actions = try {
                 val found = sessionManager.recoverOnLaunch().toMutableList()
@@ -147,23 +177,43 @@ class MainActivity : Activity() {
         val density = resources.displayMetrics.density
         fun dp(value: Int): Int = (value * density + 0.5f).toInt()
         val basePadding = dp(16)
-        summaryView = TextView(this)
+        deviceTitleView = TextView(this).apply {
+            text = "…"
+            textSize = 16f
+            setTypeface(typeface,
+                android.graphics.Typeface.BOLD)
+        }
+        deviceUpdatedView = TextView(this).apply {
+            text = "…"
+            textSize = 12f
+        }
         statusView = TextView(this)
-        modelView = TextView(this).apply { text = "Model: none selected" }
+        modelView = TextView(this).apply {
+            text = BenchWorkflow.modelLine(null, 0L, null, null)
+        }
         benchView = TextView(this).apply { text = "Benchmark: idle" }
         sessionLine = TextView(this).apply {
             text = SessionView.buildActiveLine(null, null)
         }
         val export = Button(this).apply { text = "Export Profile" }
-        runButton = Button(this).apply { text = "Run Benchmark" }
-        SemanticUi.stylePrimary(this, runButton)
+        runButton = Button(this).apply {
+            text = "Run Benchmark"
+            // Enabled once a model is staged (UX polish: no dead-end
+            // error tap). Native guards still enforce all safety.
+            isEnabled = false
+        }
+        AeroUi.stylePrimary(this, runButton)
         cancelButton = Button(this).apply { text = "Cancel"; isEnabled = false }
         saveButton = Button(this).apply { text = "Save Result"; isEnabled = false }
         val select = Button(this).apply { text = "Select Model File" }
         val workloadButton = Button(this).apply { text = "View Workload" }
-        val sessionsButton = Button(this).apply { text = "Sessions" }
+        val sessionsButton = Button(this).apply {
+            text = "Open session browser"
+        }
         val metaButton = Button(this).apply { text = "Meta API" }
-        val agentButton = Button(this).apply { text = "Agent" }
+        val agentButton = Button(this).apply {
+            text = "Open agent workspace"
+        }
         val runRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             addView(runButton, LinearLayout.LayoutParams(0,
@@ -172,39 +222,64 @@ class MainActivity : Activity() {
                 LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
         }
         fun sectionHeader(title: String): TextView =
-            TextView(this).apply {
-                text = title
-                textSize = 18f
-                setTypeface(typeface, android.graphics.Typeface.BOLD)
-                setTextColor(inkColor())
-                setPadding(0, dp(12), 0, dp(4))
-            }
+            AeroUi.sectionHeader(this, title)
         // UX-01A: the same widget instances, re-homed into five
         // tab destinations. No handler or behavior changes here.
         nextActionView = TextView(this).apply {
             textSize = 14f
-            setTextColor(primaryColor())
+            setTextColor(accentColor())
         }
         sessionsSummaryView = TextView(this)
+        recentSessionsList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        sessionsMoreView = TextView(this).apply {
+            textSize = 13f
+            setTextColor(secondaryColor())
+        }
+        agentSummaryView = TextView(this).apply {
+            textSize = 13f
+            setTextColor(secondaryColor())
+        }
+        agentWorkspaceList = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        agentMoreView = TextView(this).apply {
+            textSize = 13f
+            setTextColor(secondaryColor())
+        }
         val agentHintView = TextView(this).apply {
-            text = "Create optimization sessions, review Meta " +
-                "proposals, and approve experiments. Budgets and " +
-                "approvals stay explicit."
+            text = AeroAgent.roleLines().joinToString("\n")
         }
         val aboutView = TextView(this).apply {
             text = "EdgeFit AI ${BuildConfig.VERSION_NAME} " +
                 "($packageName)\nWorkload: " +
                 "${BenchContract.WORKLOAD_ID}\nRuntime ABI: arm64-v8a"
         }
-        for (view in listOf(summaryView, modelView, benchView,
+        for (view in listOf(deviceTitleView, modelView, benchView,
             sessionLine, sessionsSummaryView, agentHintView,
             aboutView)) {
             view.setTextColor(inkColor())
         }
+        deviceUpdatedView.setTextColor(secondaryColor())
         statusView.apply {
-            textSize = 13f
+            textSize = 12f
             setTextColor(secondaryColor())
+            setPadding(basePadding, dp(4), basePadding, dp(4))
         }
+        // Card group: related rows on one raised surface,
+        // 8dp between rows. Headers stay flat above cards.
+        fun cardGroup(vararg views: View): LinearLayout =
+            AeroUi.card(this).apply {
+                views.forEachIndexed { index, child ->
+                    addView(child, LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT)
+                        .apply {
+                            if (index > 0) topMargin = dp(8)
+                        })
+                }
+            }
         fun destination(vararg views: View): View =
             ScrollView(this).apply {
                 val column = LinearLayout(this@MainActivity).apply {
@@ -214,20 +289,29 @@ class MainActivity : Activity() {
                     for (child in views) {
                         addView(child, LinearLayout.LayoutParams(
                             LinearLayout.LayoutParams.MATCH_PARENT,
-                            LinearLayout.LayoutParams.WRAP_CONTENT))
+                            LinearLayout.LayoutParams.WRAP_CONTENT)
+                            .apply {
+                                bottomMargin = dp(12)
+                            })
                     }
                 }
                 addView(column)
                 visibility = View.GONE
             }
-        // UX-01BC Home dashboard: next action, device card,
-        // model card, last measurement, Meta state. Detail
-        // stays one tap away; nothing here runs work.
-        nextActionButton = Button(this).apply { text = "Continue" }
-        SemanticUi.stylePrimary(this, nextActionButton)
+        // EF-UX-AERO-01 Step 3 Home dashboard: hero,
+        // one contextual primary action, device metric
+        // tiles, model readiness, the last real
+        // measurement (or a designed empty state), and
+        // quick-access links. Detail stays one tap away;
+        // nothing here runs work.
+        nextActionButton = Button(this).apply {
+            text = HomeDashboard.primaryAction(pendingNextAction)
+        }
+        AeroUi.stylePrimary(this, nextActionButton)
         nextActionButton.setOnClickListener {
             selectTab(HomeDashboard.actionTab(pendingNextAction))
         }
+        modelReadinessView = AeroUi.cardTitle(this, "No model")
         modelCardView = TextView(this).apply {
             setTextColor(inkColor())
         }
@@ -243,37 +327,65 @@ class MainActivity : Activity() {
         deviceDetailsButton.setOnClickListener {
             showLiveDeviceDetails()
         }
-        val modelGoButton = Button(this).apply { text = "Open Benchmark" }
-        modelGoButton.setOnClickListener {
-            selectTab(NavTab.BENCHMARK)
+        // Metric tile shells; values refresh live via
+        // refreshHomeHealth. Labels come from the same
+        // pure list as the values, so order cannot drift.
+        val tileRoots = HomeDashboard.metricLabels.map { label ->
+            AeroUi.metricTile(this, label, "…").also {
+                deviceTileValues[label] = it.valueView
+            }.root
         }
+        val tileRowA = AeroUi.tileRow(this,
+            tileRoots[0], tileRoots[1])
+        val tileRowB = AeroUi.tileRow(this,
+            tileRoots[2], tileRoots[3])
+        val tileRowC = AeroUi.tileRow(this,
+            tileRoots[4], tileRoots[5])
         // EF-MODEL-01A: offline catalog, no key needed.
-        val homeModelsButton = Button(this).apply {
-            text = "Recommended Models"
+        // Quick access owns all Home navigation now; a
+        // null tab opens the catalog dialog instead.
+        val quickLinks = HomeDashboard.quickAccess()
+        val quickButtons = quickLinks.map { link ->
+            Button(this).apply {
+                text = link.label
+                contentDescription =
+                    "${link.label} — ${link.detail}"
+            }
         }
-        homeModelsButton.setOnClickListener {
-            showModelCatalog()
+        quickButtons.forEachIndexed { index, button ->
+            val tab = quickLinks[index].tab
+            button.setOnClickListener {
+                if (tab == null) showModelCatalog()
+                else selectTab(tab)
+            }
         }
-        val lastRunButton = Button(this).apply { text = "Open Sessions" }
-        lastRunButton.setOnClickListener {
-            selectTab(NavTab.SESSIONS)
-        }
+        val quickRowA = AeroUi.tileRow(this,
+            quickButtons[0], quickButtons[1])
+        val quickRowB = AeroUi.tileRow(this,
+            quickButtons[2], quickButtons[3])
         val metaGoButton = Button(this).apply { text = "Meta Settings" }
         metaGoButton.setOnClickListener {
             selectTab(NavTab.SETTINGS)
         }
+        val hero = HomeDashboard.hero()
         destinations[NavTab.HOME] = destination(
+            AeroUi.heroCard(this, hero.overline, hero.title,
+                hero.subtitle),
             sectionHeader("Next Up"),
-            nextActionView, nextActionButton,
+            cardGroup(nextActionView, nextActionButton),
             sectionHeader("This Device"),
-            summaryView, deviceDetailsButton,
+            cardGroup(deviceTitleView, tileRowA, tileRowB,
+                tileRowC, tileRoots[6], deviceUpdatedView,
+                deviceDetailsButton),
             sectionHeader("Model"),
-            modelCardView, modelGoButton, homeModelsButton,
-            sessionLine,
+            cardGroup(modelReadinessView, modelCardView,
+                sessionLine),
             sectionHeader("Last Measurement"),
-            lastRunView, lastRunButton,
+            cardGroup(lastRunView),
+            sectionHeader("Quick Access"),
+            cardGroup(quickRowA, quickRowB),
             sectionHeader("Meta Muse"),
-            metaLineView, metaGoButton)
+            cardGroup(metaLineView, metaGoButton))
         val benchModelsButton = Button(this).apply {
             text = "Recommended Models"
         }
@@ -300,28 +412,217 @@ class MainActivity : Activity() {
         configButton.setOnClickListener {
             showManualBenchConfig()
         }
+        // EF-GLOBAL-CONTRIBUTE-01: durable evidence + contribution.
+        evidenceLine = TextView(this).apply {
+            setTextColor(secondaryColor())
+        }
+        // Step 5 inline preview: device/model/result
+        // plus connection state; read-only, no gating.
+        contributePreviewView = TextView(this).apply {
+            textSize = 13f
+            setTextColor(inkColor())
+        }
+        val contributeButton = Button(this).apply {
+            text = "Contribute to EdgeFit Global"
+        }
+        contributeButton.setOnClickListener { showContributeLatest() }
+        val importButton = Button(this).apply {
+            text = "Import Result JSON"
+        }
+        importButton.setOnClickListener { launchBenchImport() }
+        val historyButton = Button(this).apply {
+            text = "Contribution History"
+        }
+        historyButton.setOnClickListener { showContributionHistory() }
+        // Step 3 guided workflow: Model, Configure, Run,
+        // then Results and Contribute LAST, so sharing
+        // reads as an optional follow-up — never a
+        // required pre-step. Import, history, and
+        // Contribute stay reachable with no staged model
+        // and no new run (always enabled, no gating).
+        benchAuthView = TextView(this).apply {
+            setTextColor(secondaryColor())
+        }
+        runHintView = AeroUi.captionText(this,
+            BenchWorkflow.runHint(false, false))
+        resultHeroBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        resultDetailsButton = Button(this).apply {
+            text = "Result Details"
+        }
+        resultDetailsButton.setOnClickListener {
+            showResultDetails()
+        }
+        // Screen titles live in the top bar; destinations
+        // keep section headers only (no "Benchmark" /
+        // "Sessions" echo and no bare launcher buttons —
+        // each tab shows live inline content).
         destinations[NavTab.BENCHMARK] = destination(
-            sectionHeader("Benchmark"),
-            modelView, select, benchModelsButton, benchView,
-            memReadinessView, memCheckButton,
-            benchConfigView, configButton,
-            saveButton, runRow)
+            sectionHeader("1 · Model"),
+            cardGroup(modelView, select, benchModelsButton),
+            sectionHeader("2 · Configure"),
+            cardGroup(benchConfigView, configButton),
+            sectionHeader("3 · Run"),
+            cardGroup(benchAuthView, benchView,
+                memReadinessView, memCheckButton, runRow,
+                runHintView),
+            sectionHeader("4 · Results and Contribute"),
+            cardGroup(resultHeroBox, resultDetailsButton,
+                saveButton, evidenceLine,
+                contributePreviewView,
+                contributeButton, importButton,
+                historyButton))
         destinations[NavTab.SESSIONS] = destination(
-            sectionHeader("Sessions"),
-            sessionsSummaryView, sessionsButton)
+            sectionHeader("Session history"),
+            cardGroup(sessionsSummaryView, recentSessionsList,
+                sessionsMoreView, sessionsButton))
+        // Step 5 workspace: role contract, live
+        // summary, bounded inline parent cards with
+        // recommendation/experiment kinds, and the
+        // explicit workspace entry. Nothing inline
+        // approves, requests, or runs.
         destinations[NavTab.AGENT] = destination(
-            sectionHeader("Agent"),
-            agentHintView, agentButton)
+            sectionHeader("Meta Muse Workspace"),
+            cardGroup(agentHintView),
+            sectionHeader("Sessions"),
+            cardGroup(agentSummaryView, agentWorkspaceList,
+                agentMoreView, agentButton))
         val helpButton = Button(this).apply { text = "Help" }
         helpButton.setOnClickListener { showHelp() }
         memDiagButton = Button(this).apply {
             text = memDiagLabel()
         }
         memDiagButton.setOnClickListener { showMemDiag() }
+        val globalButton = Button(this).apply {
+            text = "EdgeFit Global Connection"
+        }
+        globalButton.setOnClickListener { showGlobalConnection() }
+        // Step 5 settings: six groups from the
+        // AeroSettings model — only real controls, no
+        // fake toggles, no secrets, BYOK separate from
+        // the Global token. Copy renders from the model
+        // so the tested spec and the screen agree.
+        fun cap(text: String): TextView = TextView(this).apply {
+            this.text = text
+            textSize = 13f
+            setTextColor(secondaryColor())
+        }
+        fun info(group: AeroSettings.Group): TextView =
+            TextView(this).apply {
+                text = AeroSettings.rows(group, settingsCtx())
+                    .filter { it.action == null }
+                    .joinToString("\n\n") {
+                        "${it.label}: ${it.detail}"
+                    }
+                textSize = 13f
+                setTextColor(inkColor())
+            }
+        fun detail(
+            group: AeroSettings.Group,
+            action: AeroSettings.Action
+        ): String = settingDetail(group, action) ?: ""
+        settingsMetaView = TextView(this).apply {
+            textSize = 13f
+            setTextColor(secondaryColor())
+        }
+        settingsGlobalView = TextView(this).apply {
+            textSize = 13f
+            setTextColor(secondaryColor())
+        }
+        val settingsCatalogButton = Button(this).apply {
+            text = "Recommended Models"
+        }
+        settingsCatalogButton.setOnClickListener {
+            showModelCatalog()
+        }
+        val settingsDeviceButton = Button(this).apply {
+            text = "Device Details"
+        }
+        settingsDeviceButton.setOnClickListener {
+            showLiveDeviceDetails()
+        }
+        val settingsHistoryButton = Button(this).apply {
+            text = "Contribution History"
+        }
+        settingsHistoryButton.setOnClickListener {
+            showContributionHistory()
+        }
+        val settingsReviewButton = Button(this).apply {
+            text = "Review or withdraw uploads"
+        }
+        settingsReviewButton.setOnClickListener {
+            showContributionHistory()
+        }
         destinations[NavTab.SETTINGS] = destination(
-            sectionHeader("Settings"),
-            metaButton, workloadButton, export, helpButton,
-            memDiagButton, aboutView)
+            sectionHeader(AeroSettings.title(
+                AeroSettings.Group.APPEARANCE)),
+            cap(AeroSettings.helper(
+                AeroSettings.Group.APPEARANCE)),
+            cardGroup(info(AeroSettings.Group.APPEARANCE)),
+            sectionHeader(AeroSettings.title(
+                AeroSettings.Group.BENCHMARK)),
+            cap(AeroSettings.helper(
+                AeroSettings.Group.BENCHMARK)),
+            cardGroup(workloadButton,
+                cap(detail(AeroSettings.Group.BENCHMARK,
+                    AeroSettings.Action.WORKLOAD)),
+                settingsCatalogButton,
+                cap(detail(AeroSettings.Group.BENCHMARK,
+                    AeroSettings.Action.MODEL_CATALOG)),
+                memDiagButton,
+                cap(detail(AeroSettings.Group.BENCHMARK,
+                    AeroSettings.Action.MEM_DIAG)),
+                settingsDeviceButton,
+                cap(detail(AeroSettings.Group.BENCHMARK,
+                    AeroSettings.Action.DEVICE_DETAILS))),
+            sectionHeader(AeroSettings.title(
+                AeroSettings.Group.META)),
+            cap(AeroSettings.helper(AeroSettings.Group.META)),
+            cardGroup(settingsMetaView, metaButton,
+                cap(detail(AeroSettings.Group.META,
+                    AeroSettings.Action.META_KEY))),
+            sectionHeader(AeroSettings.title(
+                AeroSettings.Group.GLOBAL)),
+            cap(AeroSettings.helper(
+                AeroSettings.Group.GLOBAL)),
+            cardGroup(settingsGlobalView, globalButton,
+                cap(detail(AeroSettings.Group.GLOBAL,
+                    AeroSettings.Action.GLOBAL_CONNECTION)),
+                settingsHistoryButton,
+                cap(detail(AeroSettings.Group.GLOBAL,
+                    AeroSettings.Action.CONTRIBUTION_HISTORY))),
+            sectionHeader(AeroSettings.title(
+                AeroSettings.Group.PRIVACY)),
+            cap(AeroSettings.helper(
+                AeroSettings.Group.PRIVACY)),
+            cardGroup(info(AeroSettings.Group.PRIVACY),
+                export,
+                cap(detail(AeroSettings.Group.PRIVACY,
+                    AeroSettings.Action.EXPORT_PROFILE)),
+                settingsReviewButton),
+            sectionHeader(AeroSettings.title(
+                AeroSettings.Group.ABOUT)),
+            cap(AeroSettings.helper(AeroSettings.Group.ABOUT)),
+            cardGroup(aboutView, helpButton,
+                cap(detail(AeroSettings.Group.ABOUT,
+                    AeroSettings.Action.HELP_GUIDE))))
+        // Aero button pass: primaries were styled at
+        // creation; everything else gets the secondary
+        // treatment for the dark shell.
+        for (button in listOf(export, cancelButton, saveButton,
+            select, workloadButton, sessionsButton, metaButton,
+            agentButton, deviceDetailsButton, metaGoButton,
+            benchModelsButton, memCheckButton, configButton,
+            resultDetailsButton, contributeButton, importButton,
+            historyButton, helpButton, memDiagButton,
+            globalButton, settingsCatalogButton,
+            settingsDeviceButton, settingsHistoryButton,
+            settingsReviewButton) +
+            quickButtons) {
+            AeroUi.styleSecondary(this, button)
+        }
+        topBar = AeroTopBar(this)
         contentFrame = FrameLayout(this).apply {
             setBackgroundColor(paperColor())
             for ((_, view) in destinations) {
@@ -330,59 +631,33 @@ class MainActivity : Activity() {
                     FrameLayout.LayoutParams.MATCH_PARENT))
             }
         }
-        val tabBar = LinearLayout(this).apply {
+        // Aero floating dock: detached rounded navy bar
+        // with 16dp side margins, in normal flow so content
+        // never slides underneath it on small screens.
+        dock = AeroDockView(this).apply {
+            onSelect = { selectTab(it) }
+        }
+        val dockRow = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            background = getDrawable(R.drawable.tabbar_bg)
-            val margin = dp(4)
-            for (tab in NavTab.values()) {
-                // UX-01BC-R2 icon destination: 24dp glyph
-                // over a compact single-line label. The
-                // whole item is one 56dp touch target.
-                val icon = ImageView(this@MainActivity).apply {
-                    setImageResource(NavTab.icon(tab))
-                    importantForAccessibility =
-                        View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                }
-                val iconSize = dp(24)
-                val label = TextView(this@MainActivity).apply {
-                    text = NavTab.title(tab)
-                    textSize = 11f
-                    isSingleLine = true
-                    gravity = android.view.Gravity.CENTER
-                }
-                val item = LinearLayout(this@MainActivity).apply {
-                    orientation = LinearLayout.VERTICAL
-                    gravity = android.view.Gravity.CENTER
-                    isClickable = true
-                    isFocusable = true
-                    contentDescription = NavTab.title(tab)
-                    background = getDrawable(R.drawable.tab_item_bg)
-                    minimumHeight = resources.getDimensionPixelSize(
-                        R.dimen.edgefit_tab_height)
-                    setPadding(0, dp(6), 0, dp(6))
-                    addView(icon, LinearLayout.LayoutParams(
-                        iconSize, iconSize))
-                    addView(label, LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT))
-                    setOnClickListener { selectTab(tab) }
-                }
-                tabButtons[tab] = TabItem(item, icon, label)
-                val params = LinearLayout.LayoutParams(
-                    0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
-                params.setMargins(margin, margin, margin, margin)
-                addView(item, params)
-            }
+            gravity = android.view.Gravity.CENTER
+            setBackgroundColor(paperColor())
+            setPadding(dp(16), dp(4), dp(16), dp(8))
+            addView(dock, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT))
         }
         val shell = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(paperColor())
+            addView(topBar, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT))
             addView(contentFrame, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
             addView(statusView, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT))
-            addView(tabBar, LinearLayout.LayoutParams(
+            addView(dockRow, LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT))
         }
@@ -455,6 +730,14 @@ class MainActivity : Activity() {
                 FrameLayout.LayoutParams.MATCH_PARENT))
         }
         setContentView(root)
+        // Aero chrome: dark system bars + window backdrop
+        // so the shell never flashes light, and the system
+        // action bar stays hidden behind the Aero top bar.
+        window.setBackgroundDrawable(
+            android.graphics.drawable.ColorDrawable(paperColor()))
+        window.statusBarColor = paperColor()
+        window.navigationBarColor = paperColor()
+        applyBenchChrome(dark = true)
         currentTab = NavTab.fromName(savedInstanceState?.getString(KEY_TAB))
         selectTab(currentTab)
         refresh()
@@ -502,6 +785,7 @@ class MainActivity : Activity() {
         }
         // EF-UX-01D cold-start evaluation (design E gating).
         maybeShowOnboarding()
+        refreshEvidenceLine()
     }
 
     override fun onResume() {
@@ -542,7 +826,8 @@ class MainActivity : Activity() {
     }
 
     private fun showMain() {
-        applyBenchChrome(dark = false)
+        // Aero main shell is dark like the bench screen.
+        applyBenchChrome(dark = true)
         benchScreen.visibility = View.GONE
         shellRoot.visibility = View.VISIBLE
         selectTab(currentTab)
@@ -556,17 +841,8 @@ class MainActivity : Activity() {
             view.visibility =
                 if (candidate == tab) View.VISIBLE else View.GONE
         }
-        val active = primaryColor()
-        val idle = resources.getColor(
-            R.color.edgefit_tab_inactive, theme)
-        for ((candidate, item) in tabButtons) {
-            val selected = candidate == tab
-            item.root.isSelected = selected
-            val tint = if (selected) active else idle
-            item.icon.imageTintList =
-                android.content.res.ColorStateList.valueOf(tint)
-            item.label.setTextColor(tint)
-        }
+        dock.setSelected(tab)
+        topBar.setTab(tab)
         refreshNextAction()
         updateTelemetrySubscriptions()
         // EF-MEM-02 lifecycle checkpoints (transition-only,
@@ -578,6 +854,7 @@ class MainActivity : Activity() {
             diagNote(MemDiag.Checkpoint.CONFIG_READY)
             updateMemReadinessLine()
             refreshBenchConfigLine()
+            refreshBenchAuthLine()
         }
     }
 
@@ -589,14 +866,25 @@ class MainActivity : Activity() {
      */
     private fun refreshBenchConfigLine() {
         if (!::benchConfigView.isInitialized) return
-        val bound = activeSessionId
-        benchConfigView.text = if (bound != null) {
-            "Config: from bound session $bound " +
-                "(manual selection ignored)"
-        } else {
-            ManualBenchConfig.describe(
-                standaloneOverride, currentBenchConfig())
+        benchConfigView.text = BenchWorkflow.configLine(
+            activeSessionId, standaloneOverride,
+            currentBenchConfig())
+    }
+
+    /**
+     * Step 3 Run-step authorization line. Honest about
+     * NOT AUTHORIZED; never authorizes or binds — the
+     * bind gate and the state machine still own that.
+     */
+    private fun refreshBenchAuthLine() {
+        if (!::benchAuthView.isInitialized) return
+        val id = activeSessionId
+        val record = try {
+            id?.let { sessionManager.get(it) }
+        } catch (_: Exception) {
+            null
         }
+        benchAuthView.text = BenchWorkflow.authLine(id, record)
     }
 
     /**
@@ -670,17 +958,22 @@ class MainActivity : Activity() {
         else selectTab(target)
     }
 
+    // Aero shell palette (Step 2): the main shell is
+    // dark; dialogs keep their light styling untouched.
     private fun inkColor(): Int =
-        resources.getColor(R.color.edgefit_text, theme)
+        resources.getColor(R.color.aero_text_primary, theme)
 
     private fun secondaryColor(): Int =
-        resources.getColor(R.color.edgefit_text_secondary, theme)
+        resources.getColor(R.color.aero_text_secondary, theme)
 
-    private fun primaryColor(): Int =
-        resources.getColor(R.color.edgefit_primary, theme)
+    private fun accentColor(): Int =
+        resources.getColor(R.color.aero_sky, theme)
+
+    private fun errorColor(): Int =
+        resources.getColor(R.color.aero_error, theme)
 
     private fun paperColor(): Int =
-        resources.getColor(R.color.edgefit_background, theme)
+        resources.getColor(R.color.aero_page, theme)
 
     /**
      * Advisory next-action line. Recomputed at navigation and
@@ -731,29 +1024,32 @@ class MainActivity : Activity() {
         )
         pendingNextAction = nextAction(state)
         nextActionView.text = NextAction.label(pendingNextAction)
+        nextActionButton.text =
+            HomeDashboard.primaryAction(pendingNextAction)
         val model = staged
-        val card = HomeDashboard.modelCard(
-            model?.name, model?.sha256, model?.bytes ?: 0L)
-        modelCardView.text = card.lines.joinToString("\n")
+        val readiness = HomeDashboard.modelReadiness(
+            model?.name, model?.sha256, model?.bytes ?: 0L,
+            records)
+        modelReadinessView.text =
+            HomeDashboard.readinessLabel(readiness.state)
+        modelCardView.text = readiness.lines.joinToString("\n")
+        val modelInk = readiness.state !=
+            HomeDashboard.ModelReadiness.NONE
+        modelReadinessView.setTextColor(
+            if (modelInk) inkColor() else secondaryColor())
         modelCardView.setTextColor(
-            if (card.staged) inkColor() else secondaryColor())
-        lastRunView.text = lastRun?.let {
-            lastRunView.setTextColor(inkColor())
-            "${it.sessionId}\nRun ${it.runId}\n" +
-                "Generation ${InsightCards.tps(it.genTps)}\n" +
-                "Prefill ${InsightCards.tps(it.prefillTps)}\n" +
-                it.whenUtc
-        } ?: run {
-            lastRunView.setTextColor(secondaryColor())
-            "No completed measurement yet.\n" +
-                "Run a benchmark to record one."
+            if (modelInk) inkColor() else secondaryColor())
+        lastRunView.text =
+            HomeDashboard.lastRunLines(lastRun).joinToString("\n")
+        lastRunView.setTextColor(
+            if (lastRun == null) secondaryColor() else inkColor())
+        lastProfile?.let {
+            deviceTitleView.text = HomeDashboard.deviceTitle(it)
         }
         metaLineView.text = MetaView.keyStatusLine(
             metaVault.hasSession(), metaVault.sessionSuffix(),
             metaVault.hasPersisted())
-        val noun = if (records.size == 1) "session" else "sessions"
-        val head = if (records.isEmpty()) "No local sessions yet."
-        else "${records.size} local $noun."
+        val head = AeroSessions.headerLine(records.size)
         val activeLine = try {
             val bound = activeSessionId
             if (bound == null) SessionView.buildActiveLine(null, null)
@@ -762,13 +1058,431 @@ class MainActivity : Activity() {
             SessionView.buildActiveLine(null, null)
         }
         sessionsSummaryView.text = "$head\n$activeLine"
+        refreshResultHero(records)
+        refreshSessionsList(records)
+        // Step 5 workspace: honest headline (real
+        // pending count, newest active budget) plus
+        // bounded inline cards. Read-only: approval,
+        // budgets, and gates still live in the dialog.
+        val workspace = AeroAgent.summarize(records)
+        agentSummaryView.text = workspace.headline +
+            (workspace.budgetLine?.let { "\n$it" } ?: "")
+        refreshAgentWorkspace(records)
+        refreshSettingsLines()
     }
 
     /**
-     * Hides the light action-bar header on the dark benchmark screen so
-     * content is never hidden behind it, and keeps status/navigation
-     * icons legible on both screens. Bar colors stay system-owned;
-     * only icon contrast is toggled, so restore is exact.
+     * EF-UX-AERO-01 Step 4 result hero: this launch's run
+     * with measured/predicted/unavailable discipline
+     * (AeroResult). Rebuilt on every dashboard refresh
+     * from lastResult plus the already-loaded records
+     * (no extra I/O). The live chart stays on the bench
+     * screen, fed only by real sampler pairs — no chart
+     * is invented here.
+     */
+    private fun refreshResultHero(records: List<SessionRecord>) {
+        resultHeroBox.removeAllViews()
+        val result = lastResult
+        if (result == null) {
+            resultDetailsButton.isEnabled = false
+            resultHeroBox.addView(AeroUi.bodyText(this,
+                "No benchmark result this launch."))
+            resultHeroBox.addView(AeroUi.captionText(this,
+                "Past measurements live in Sessions."))
+            return
+        }
+        resultDetailsButton.isEnabled = true
+        val hero = AeroResult.hero(result)
+        val session =
+            AeroResult.attachedSession(records, result.runId)
+        resultHeroBox.addView(TextView(this).apply {
+            text = hero.genValue
+            textSize = 22f
+            setTypeface(typeface,
+                android.graphics.Typeface.BOLD)
+            setTextColor(AeroUi.originColor(
+                this@MainActivity, hero.genOrigin))
+            contentDescription =
+                "${hero.genValue}, ${hero.genCaption}"
+        })
+        resultHeroBox.addView(AeroUi.captionText(this,
+            hero.genCaption))
+        resultHeroBox.addView(TextView(this).apply {
+            text = "Prefill ${hero.prefillValue}"
+            textSize = 16f
+            setTextColor(AeroUi.originColor(
+                this@MainActivity, hero.prefillOrigin))
+            contentDescription = "Prefill " +
+                "${hero.prefillValue}, ${hero.prefillCaption}"
+        })
+        resultHeroBox.addView(AeroUi.captionText(this,
+            hero.prefillCaption))
+        resultHeroBox.addView(TextView(this).apply {
+            text = hero.statusLine
+            textSize = 14f
+            setTextColor(if (result.status ==
+                BenchContract.STATUS_FAILED ||
+                result.status == BenchContract.STATUS_TIMEOUT
+            ) {
+                errorColor()
+            } else {
+                inkColor()
+            })
+        })
+        resultHeroBox.addView(AeroUi.bodyText(this,
+            AeroResult.bindingChip(result.runId, session)))
+        AeroResult.deltaLine(session)?.let { delta ->
+            resultHeroBox.addView(AeroUi.bodyText(this, delta))
+        }
+        for (row in AeroResult.specRows(result)) {
+            resultHeroBox.addView(TextView(this).apply {
+                text = "${row.label}: ${row.value}"
+                textSize = 13f
+                setTextColor(if (row.origin ==
+                    AeroResult.Origin.MEASURED
+                ) {
+                    inkColor()
+                } else {
+                    secondaryColor()
+                })
+            })
+        }
+    }
+
+    /**
+     * EF-UX-AERO-01 Step 4 inline evidence library: the
+     * newest sessions as bounded cards (timestamps,
+     * model, measured rate, prediction delta, evidence
+     * and contribution state). At most INLINE_MAX cards
+     * inflate, so 0/1/62/large histories all render
+     * without jank; the browser dialog holds the rest
+     * with its tested filters. Evidence resolves
+     * best-effort per card: one missing artifact never
+     * blanks the list.
+     */
+    private fun refreshSessionsList(records: List<SessionRecord>) {
+        recentSessionsList.removeAllViews()
+        if (records.isEmpty()) {
+            for (line in AeroSessions.emptyLines()) {
+                recentSessionsList.addView(
+                    AeroUi.captionText(this, line))
+            }
+            sessionsMoreView.text = ""
+            sessionsMoreView.visibility = View.GONE
+            return
+        }
+        val evidenceFor:
+            (SessionRecord) -> AeroSessions.EvidenceInfo? =
+            { record ->
+                val runId = AeroSessions.runIdOf(record)
+                if (runId == null) {
+                    null
+                } else {
+                    try {
+                        AeroSessions.evidenceInfo(
+                            evidenceStore.load(runId))
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+            }
+        val cards = AeroSessions.visibleCards(records,
+            SessionListUi.latestId(records), activeSessionId,
+            evidenceFor)
+        val density = resources.displayMetrics.density
+        val gap = (12 * density + 0.5f).toInt()
+        for ((index, card) in cards.withIndex()) {
+            recentSessionsList.addView(sessionCardView(card),
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT)
+                    .apply {
+                        if (index > 0) topMargin = gap
+                    })
+        }
+        val more = AeroSessions.showMoreLine(
+            records.size, cards.size)
+        if (more == null) {
+            sessionsMoreView.text = ""
+            sessionsMoreView.visibility = View.GONE
+        } else {
+            sessionsMoreView.text = more
+            sessionsMoreView.visibility = View.VISIBLE
+        }
+    }
+
+    /**
+     * One inline session card with details navigation.
+     * Details opens the session browser focused on this
+     * record; bind/predict/follow-up stay in the browser
+     * (no new behavior inline).
+     */
+    private fun sessionCardView(card: AeroSessions.Card): View {
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        column.addView(TextView(this).apply {
+            text = card.title
+            textSize = 14f
+            setTypeface(typeface,
+                android.graphics.Typeface.BOLD)
+            setTextColor(if (card.isLatest) accentColor()
+            else inkColor())
+        })
+        column.addView(AeroUi.captionText(this,
+            card.createdLocal))
+        column.addView(AeroUi.bodyText(this, card.modelLine))
+        column.addView(AeroUi.bodyText(this, card.stateLine))
+        column.addView(TextView(this).apply {
+            text = card.measuredLine
+            textSize = 14f
+            setTypeface(typeface,
+                android.graphics.Typeface.BOLD)
+            setTextColor(if (card.measuredPresent) {
+                AeroUi.originColor(this@MainActivity,
+                    AeroResult.Origin.MEASURED)
+            } else {
+                secondaryColor()
+            })
+        })
+        card.deltaLine?.let { delta ->
+            column.addView(AeroUi.bodyText(this, delta))
+        }
+        column.addView(AeroUi.captionText(this,
+            card.evidenceLine))
+        val details = Button(this).apply {
+            text = "Details"
+            contentDescription =
+                AeroSessions.detailsDescription(card)
+        }
+        AeroUi.styleGhost(this, details)
+        details.setOnClickListener {
+            showSessions(card.sessionId)
+        }
+        column.addView(details)
+        return column
+    }
+
+    /**
+     * EF-UX-AERO-01 Step 5 inline agent workspace: at
+     * most INLINE_MAX parents, each with status/budget,
+     * the pending recommendation (if any), the newest
+     * experiment card, and the abstention line (if any).
+     * Read-only: request/approve/modify/reject/finish
+     * stay behind the explicit workspace entry, and the
+     * gate line mirrors the dialog without enforcing.
+     */
+    private fun refreshAgentWorkspace(records: List<SessionRecord>) {
+        agentWorkspaceList.removeAllViews()
+        val agents = records.filter { it.mode == "agent" }
+        if (agents.isEmpty()) {
+            // Headline already says none; show the
+            // designed follow-ups only.
+            for (line in AeroAgent.emptyLines().drop(1)) {
+                agentWorkspaceList.addView(
+                    AeroUi.captionText(this, line))
+            }
+            agentMoreView.text = ""
+            agentMoreView.visibility = View.GONE
+            return
+        }
+        val childrenByParent = records.groupBy { it.parentSessionId }
+        val density = resources.displayMetrics.density
+        val gap = (12 * density + 0.5f).toInt()
+        val visible = agents.sortedByDescending { it.updatedAtUtc }
+            .take(AeroAgent.INLINE_MAX)
+        for ((index, parent) in visible.withIndex()) {
+            agentWorkspaceList.addView(
+                agentParentView(parent,
+                    childrenByParent[parent.sessionId]
+                        ?: emptyList()),
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT)
+                    .apply {
+                        if (index > 0) topMargin = gap
+                    })
+        }
+        val more = AeroAgent.showMoreLine(
+            agents.size, visible.size)
+        if (more == null) {
+            agentMoreView.text = ""
+            agentMoreView.visibility = View.GONE
+        } else {
+            agentMoreView.text = more
+            agentMoreView.visibility = View.VISIBLE
+        }
+    }
+
+    /** One inline parent block with its newest cards. */
+    private fun agentParentView(
+        parent: SessionRecord,
+        children: List<SessionRecord>
+    ): View {
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
+        column.addView(TextView(this).apply {
+            text = "Agent ${parent.sessionId}"
+            textSize = 14f
+            setTypeface(typeface,
+                android.graphics.Typeface.BOLD)
+            setTextColor(inkColor())
+        })
+        for (line in AeroAgent.sessionLines(
+            parent, children.size)) {
+            column.addView(AeroUi.bodyText(this, line))
+        }
+        // Active without pending: mirror the gate so a
+        // blocked prerequisite is visible inline. The
+        // dialog still owns enforcement; a read failure
+        // reads as unavailable, never as open.
+        if (AeroAgent.isActive(parent) &&
+            !AeroAgent.hasPending(parent)
+        ) {
+            val gate = try {
+                agentManager.proposalGate(parent.sessionId)
+            } catch (e: Exception) {
+                null
+            }
+            if (gate == null) {
+                column.addView(AeroUi.captionText(this,
+                    "Proposal gate unavailable."))
+            } else {
+                AeroAgent.gateLine(gate.first, gate.second)
+                    ?.let { column.addView(
+                        AeroUi.captionText(this, it)) }
+            }
+        }
+        AeroAgent.proposalCard(parent)?.let { card ->
+            column.addView(agentCardView(card))
+        }
+        for (card in AeroAgent.recentCards(children, max = 1)) {
+            column.addView(agentCardView(card))
+        }
+        AeroAgent.abstentionLine(parent, children)?.let {
+            column.addView(AeroUi.captionText(this, it))
+        }
+        return column
+    }
+
+    /** One kind-labeled workspace card (inline). */
+    private fun agentCardView(card: AeroAgent.Card): View {
+        val column = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val density = resources.displayMetrics.density
+            setPadding(0, (6 * density + 0.5f).toInt(), 0, 0)
+        }
+        column.addView(TextView(this).apply {
+            text = AeroAgent.kindLabel(card.kind)
+            textSize = 12f
+            letterSpacing = 0.08f
+            isSingleLine = true
+            setTextColor(AeroUi.agentKindColor(
+                this@MainActivity, card.kind))
+        })
+        column.addView(TextView(this).apply {
+            text = card.title
+            textSize = 14f
+            setTypeface(typeface,
+                android.graphics.Typeface.BOLD)
+            setTextColor(inkColor())
+        })
+        for (line in card.lines) {
+            column.addView(AeroUi.bodyText(this, line))
+        }
+        return column
+    }
+
+    /**
+     * Step 5 settings status lines from real state: the
+     * Meta key line mirrors Home, and the Global line
+     * mirrors the connection dialog's honest states.
+     * Vault reads fail open to unconfigured text.
+     */
+    private fun refreshSettingsLines() {
+        if (!::settingsMetaView.isInitialized) return
+        // Rendered from the model so the tested spec
+        // and the screen share one copy source.
+        val meta = AeroSettings.rows(
+            AeroSettings.Group.META, settingsCtx())
+            .firstOrNull { it.action == null }
+        settingsMetaView.text = if (meta == null) {
+            "Meta API key: status unavailable."
+        } else {
+            "${meta.label}: ${meta.detail}"
+        }
+        val global = AeroSettings.rows(
+            AeroSettings.Group.GLOBAL, settingsCtx())
+            .firstOrNull { it.action == null }
+        settingsGlobalView.text = if (global == null) {
+            AeroContribute.connectionLine(globalOrigin, null)
+        } else {
+            "${global.label}: ${global.detail}"
+        }
+    }
+
+    /** Real-state context for the AeroSettings model. */
+    private fun settingsCtx(): AeroSettings.Context {
+        val suffix = try {
+            globalVault.suffix()
+        } catch (_: Exception) {
+            null
+        }
+        val persisted = try {
+            globalVault.hasPersisted()
+        } catch (_: Exception) {
+            false
+        }
+        val keyStatus = try {
+            MetaView.keyStatusLine(metaVault.hasSession(),
+                metaVault.sessionSuffix(), metaVault.hasPersisted())
+        } catch (_: Exception) {
+            "status unavailable."
+        }
+        return AeroSettings.Context(
+            metaKeyStatus = keyStatus,
+            globalOrigin = globalOrigin,
+            globalTokenSuffix = suffix,
+            globalTokenPersisted = persisted,
+            versionName = BuildConfig.VERSION_NAME,
+            packageName = packageName,
+            workloadId = BenchContract.WORKLOAD_ID)
+    }
+
+    /** Static caption detail for one settings action row. */
+    private fun settingDetail(
+        group: AeroSettings.Group,
+        action: AeroSettings.Action
+    ): String? = AeroSettings.rows(group, settingsCtx())
+        .firstOrNull { it.action == action }?.detail
+
+    /**
+     * Full result sections: measured rows, raw IDs,
+     * binding, and the stored prediction/comparison.
+     */
+    private fun showResultDetails() {
+        val result = lastResult
+        if (result == null) {
+            statusText("No benchmark result yet.")
+            return
+        }
+        val session = try {
+            AeroResult.attachedSession(
+                sessionManager.listSessions(), result.runId)
+        } catch (_: Exception) {
+            null
+        }
+        CardDialog.show(this, "Result Details",
+            AeroResult.detailSections(result, session))
+    }
+
+    /**
+     * Hides the system action-bar header (the Aero top bar
+     * owns branding now) and keeps status/navigation icons
+     * legible for dark surfaces. Both the main shell and
+     * the bench screen are dark, so callers always pass
+     * dark = true; the restoration branch stays for safety.
      */
     private fun applyBenchChrome(dark: Boolean) {
         if (dark) actionBar?.hide() else actionBar?.show()
@@ -821,7 +1535,7 @@ class MainActivity : Activity() {
             refreshDashboard()
             json
         } catch (e: Exception) {
-            summaryView.text = "Collection failed."
+            deviceTitleView.text = "Collection failed."
             statusView.text = "Error: ${e.message}"
             null
         }
@@ -903,32 +1617,24 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
             return
         }
-        val lines = HomeDashboard.deviceCard(profile).lines +
-            healthLines(sample)
-        summaryView.text = lines.joinToString("\n")
-    }
-
-    private fun healthLines(
-        sample: DeviceTelemetry.Snapshot
-    ): List<String> {
-        val lines = mutableListOf(
-            "Battery: " +
-                "${DeviceTelemetry.batteryPctLabel(sample.batteryPct)} · " +
-                DeviceTelemetry.chargingLabel(
-                    sample.batteryStatus, sample.batteryPlugged),
-            "Battery temp: " +
-                DeviceTelemetry.batteryTempLabel(sample.batteryTempC),
-            "Available RAM: " +
-                DeviceTelemetry.formatRam(sample.availRamBytes),
-            "Thermal: " +
-                DeviceTelemetry.thermalLabel(sample.thermalName)
-        )
-        if (sample.lowMemory) {
-            lines.add("Low-memory signal active")
+        deviceTitleView.text =
+            HomeDashboard.deviceTitle(profile)
+        val tiles = HomeDashboard.metricTiles(profile, sample)
+        for (tile in tiles) {
+            deviceTileValues[tile.label]?.apply {
+                text = tile.value
+                contentDescription = HomeDashboard
+                    .tileDescription(tile.label, tile.value)
+            }
         }
-        lines.add("Updated: " +
-            SessionTimeline.formatClock(System.currentTimeMillis()))
-        return lines
+        val updated = "Updated: " +
+            SessionTimeline.formatClock(
+                System.currentTimeMillis())
+        deviceUpdatedView.text = if (sample.lowMemory) {
+            "$updated · Low-memory signal active"
+        } else {
+            updated
+        }
     }
 
     private fun showLiveDeviceDetails() {
@@ -1040,6 +1746,7 @@ class MainActivity : Activity() {
         runButton.isEnabled = false
         cancelButton.isEnabled = true
         saveButton.isEnabled = false
+        runHintView.text = BenchWorkflow.runHint(true, true)
         runner.setProgressListener { update ->
             runOnUiThread { benchScreen.render(update) }
         }
@@ -1127,6 +1834,8 @@ class MainActivity : Activity() {
         refreshNextAction()
         runButton.isEnabled = true
         cancelButton.isEnabled = false
+        runHintView.text = BenchWorkflow.runHint(
+            staged != null, false)
         val measurements = result.measurements
         benchView.text = "Benchmark: ${result.status}\n" +
             "Generated ${measurements.generatedTokens} tokens in " +
@@ -1140,6 +1849,8 @@ class MainActivity : Activity() {
             benchJson = BenchResultJson.serialize(result)
             saveButton.isEnabled = true
             statusText("Benchmark ${result.status}. Result ready to save.")
+            persistEvidenceAsync(
+                benchJson!!, EvidenceStore.PROVENANCE_CAPTURED)
         } catch (e: Exception) {
             benchJson = null
             statusText("Result serialize failed: ${e.message}")
@@ -1296,6 +2007,7 @@ class MainActivity : Activity() {
                     // A new artifact invalidates any prior
                     // standalone config override.
                     standaloneOverride = null
+                    runButton.isEnabled = true
                     refreshModelLine()
                     refreshBenchConfigLine()
                     diagNote(MemDiag.Checkpoint.MODEL_STAGED)
@@ -1335,19 +2047,12 @@ class MainActivity : Activity() {
      */
     private fun refreshModelLine() {
         val model = staged
-        modelView.text = if (model == null) {
-            "Model: none staged"
-        } else {
-            val override = standaloneOverride
-            "Model: ${model.name} (${model.bytes / 1048576} MB)" +
-                if (override != null &&
-                    activeSessionId == null
-                ) {
-                    " [standalone ${override.nCtx}/" +
-                        "${override.nThreads}/${override.nPredict}]"
-                } else {
-                    ""
-                }
+        modelView.text = BenchWorkflow.modelLine(
+            model?.name, model?.bytes ?: 0L,
+            standaloneOverride, activeSessionId)
+        if (::runHintView.isInitialized) {
+            runHintView.text = BenchWorkflow.runHint(
+                model != null, benchActive)
         }
     }
 
@@ -1405,6 +2110,15 @@ class MainActivity : Activity() {
             }
             return
         }
+        if (requestCode == REQUEST_IMPORT_BENCH) {
+            val uri = if (resultCode == RESULT_OK) data?.data else null
+            if (uri == null) {
+                statusText("Result import cancelled.")
+            } else {
+                importBenchFile(uri)
+            }
+            return
+        }
         if (requestCode != REQUEST_CREATE_DOCUMENT) return
         val json = pendingJson
         pendingJson = null
@@ -1434,6 +2148,417 @@ class MainActivity : Activity() {
     private fun resultFilename(): String {
         val stamp = SimpleDateFormat("yyyyMMdd-HHmmss", Locale.US).format(Date())
         return "edgefit-bench-$stamp.json"
+    }
+
+    // ---- EdgeFit Global contribution (EF-GLOBAL-CONTRIBUTE-01) ----
+
+    private fun readGlobalOrigin(): String? {
+        return try {
+            val file = File(filesDir, "global_origin.txt")
+            if (!file.isFile) null
+            else GlobalContract.normalizeOrigin(
+                file.readText(Charsets.UTF_8))
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun saveGlobalOrigin(raw: String): Boolean {
+        val origin = GlobalContract.normalizeOrigin(raw) ?: return false
+        return try {
+            File(filesDir, "global_origin.txt")
+                .writeText(origin, Charsets.UTF_8)
+            globalOrigin = origin
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun persistEvidenceAsync(json: String, provenance: String) {
+        Thread({
+            val line = try {
+                val record = evidenceStore.store(
+                    json, provenance, System.currentTimeMillis())
+                GlobalView.readinessLine(record) +
+                    " (${record.summary.runId.takeLast(8)})"
+            } catch (e: Exception) {
+                "Evidence not preserved: ${e.message}"
+            }
+            runOnUiThread { evidenceLine.text = line }
+        }, "edgefit-evidence").start()
+    }
+
+    private fun refreshEvidenceLine() {
+        Thread({
+            // Step 5 preview: readiness plus the
+            // device/model/result preview and the honest
+            // connection state. Read-only; the review
+            // dialog still owns consent and upload.
+            val suffix = try {
+                globalVault.suffix()
+            } catch (_: Exception) {
+                null
+            }
+            val connection =
+                AeroContribute.connectionLine(globalOrigin, suffix)
+            val pair = try {
+                val latest = latestEvidenceId()
+                if (latest == null) {
+                    AeroContribute.emptyLines()[0] to
+                        AeroContribute.emptyLines()[1]
+                } else {
+                    val record = evidenceStore.load(latest)
+                    AeroContribute.evidenceLine(record) to
+                        (AeroContribute.previewLines(record) +
+                            connection).joinToString("\n")
+                }
+            } catch (e: Exception) {
+                "Evidence unavailable: ${e.message}" to ""
+            }
+            runOnUiThread {
+                evidenceLine.text = pair.first
+                contributePreviewView.text = pair.second
+            }
+        }, "edgefit-evidence").start()
+    }
+
+    private fun latestEvidenceId(): String? {
+        var best: String? = null
+        var bestAt = ""
+        for (id in evidenceStore.listIds()) {
+            val record = try {
+                evidenceStore.load(id)
+            } catch (_: Exception) {
+                continue
+            }
+            if (record.storedAtUtc >= bestAt) {
+                bestAt = record.storedAtUtc
+                best = id
+            }
+        }
+        return best
+    }
+
+    private fun launchBenchImport() {
+        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+            addCategory(Intent.CATEGORY_OPENABLE)
+            type = "application/json"
+        }
+        try {
+            @Suppress("DEPRECATION")
+            pickerActive = true
+            startActivityForResult(intent, REQUEST_IMPORT_BENCH)
+        } catch (e: Exception) {
+            pickerActive = false
+            statusText("No document picker available: ${e.message}")
+        }
+    }
+
+    private fun importBenchFile(uri: Uri) {
+        Thread({
+            val message = try {
+                val bytes = ByteArrayOutputStreamBounded(
+                    EvidenceStore.MAX_EVIDENCE_BYTES + 1)
+                contentResolver.openInputStream(uri)?.use { input ->
+                    val buf = ByteArray(8192)
+                    while (true) {
+                        val n = input.read(buf)
+                        if (n < 0) break
+                        bytes.write(buf, 0, n)
+                    }
+                } ?: throw IllegalStateException("cannot open file")
+                val record = evidenceStore.store(
+                    bytes.toByteArray().toString(Charsets.UTF_8),
+                    EvidenceStore.PROVENANCE_IMPORTED,
+                    System.currentTimeMillis())
+                "Imported ${record.summary.runId} " +
+                    "(marked imported, not this install)."
+            } catch (e: Exception) {
+                "Import failed: ${e.message}"
+            }
+            runOnUiThread {
+                statusText(message)
+                refreshEvidenceLine()
+            }
+        }, "edgefit-evidence").start()
+    }
+
+    private fun showContributeLatest() {
+        val id = try {
+            latestEvidenceId()
+        } catch (e: Exception) {
+            statusText("Evidence unavailable: ${e.message}")
+            return
+        }
+        if (id == null) {
+            statusText("No preserved result: run a benchmark or import one.")
+            return
+        }
+        openContributionRecord(id)
+    }
+
+    private fun openContributionRecord(id: String) {
+        val record = try {
+            evidenceStore.load(id)
+        } catch (e: Exception) {
+            statusText("Evidence unavailable: ${e.message}")
+            return
+        }
+        if (record.contributionState == GlobalContract.LOCAL_SHARED &&
+            record.submissionId != null
+        ) {
+            showSharedRecord(record)
+            return
+        }
+        val review = try {
+            globalClient.review(id)
+        } catch (e: Exception) {
+            statusText("Review unavailable: ${e.message}")
+            return
+        }
+        val connected = review.origin != null && review.tokenSuffix != null
+        GlobalView.showReview(this, review, connected) {
+            Thread({
+                val outcome = try {
+                    globalClient.submit(id)
+                } catch (e: Exception) {
+                    GlobalClient.SubmitOutcome.Uncertain(
+                        "unexpected client error")
+                }
+                runOnUiThread {
+                    showSubmitOutcome(outcome)
+                    refreshEvidenceLine()
+                }
+            }, "edgefit-global").start()
+        }
+        if (!connected) {
+            statusText(
+                if (review.origin == null) "Cloud connection not configured."
+                else "No upload token: open EdgeFit Global Connection.")
+        }
+    }
+
+    private fun showSubmitOutcome(outcome: GlobalClient.SubmitOutcome) {
+        when (outcome) {
+            is GlobalClient.SubmitOutcome.Shared -> GlobalView.showReceipt(
+                this, outcome.submissionId, outcome.eligibility,
+                outcome.duplicate)
+            is GlobalClient.SubmitOutcome.Rejected -> GlobalView.showOutcome(
+                this, "Submission rejected",
+                "${outcome.code}: ${outcome.message}", outcome.details)
+            is GlobalClient.SubmitOutcome.AuthFailed -> GlobalView.showOutcome(
+                this, "Not authorized",
+                "${outcome.code}: ${outcome.message}. " +
+                    "Check the upload token in EdgeFit Global Connection.")
+            is GlobalClient.SubmitOutcome.Quota -> GlobalView.showOutcome(
+                this, "Daily quota exceeded",
+                "The backend refused another upload today." +
+                    (outcome.retryAfterSec?.let {
+                        " Retry after $it seconds."
+                    } ?: " Try again tomorrow."))
+            is GlobalClient.SubmitOutcome.Uncertain -> GlobalView.showOutcome(
+                this, "Submission uncertain",
+                outcome.reason + ". Nothing was marked shared. " +
+                    "Resubmitting the same bytes is safe: the " +
+                    "server dedups by content hash.")
+            is GlobalClient.SubmitOutcome.Blocked -> statusText(outcome.reason)
+        }
+    }
+
+    private fun showSharedRecord(record: EvidenceStore.Record) {
+        val id = record.summary.runId
+        val eligibility = GlobalContract.displayServerState(
+            record.serverEligibility)
+        GlobalView.showOutcome(
+            this, "Shared record",
+            "$id · server state: $eligibility" +
+                (record.lastStatusAtUtc?.let { " (observed $it)" } ?: "") +
+                (record.submissionId?.let { " · $it" } ?: ""))
+        // Follow-up actions live in the history view to keep this
+        // dialog read-only; refresh/revoke run from there.
+    }
+
+    private fun showContributionHistory() {
+        Thread({
+            val lines = try {
+                evidenceStore.listIds().mapNotNull { id ->
+                    try {
+                        id to GlobalView.historyLine(evidenceStore.load(id))
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    statusText("History unavailable: ${e.message}")
+                }
+                return@Thread
+            }
+            runOnUiThread {
+                GlobalView.showHistory(this, lines) { id ->
+                    showHistoryActions(id)
+                }
+            }
+        }, "edgefit-evidence").start()
+    }
+
+    private fun showHistoryActions(id: String) {
+        val record = try {
+            evidenceStore.load(id)
+        } catch (e: Exception) {
+            statusText("Evidence unavailable: ${e.message}")
+            return
+        }
+        if (record.submissionId == null) {
+            openContributionRecord(id)
+            return
+        }
+        CardDialog.show(
+            this, "Shared record $id",
+            listOf(InsightCards.Section(
+                GlobalContract.displayServerState(
+                    record.serverEligibility),
+                listOf(
+                    InsightCards.Row(
+                        "Submission", record.submissionId ?: "—"),
+                    InsightCards.Row(
+                        "Observed", record.lastStatusAtUtc ?: "—")
+                ))),
+            listOf(
+                CardDialog.Action("Refresh status") {
+                    Thread({
+                        val outcome = globalClient.refreshStatus(id)
+                        runOnUiThread {
+                            when (outcome) {
+                                is GlobalClient.StatusOutcome.Updated ->
+                                    statusText(
+                                        "Server state: " +
+                                            GlobalContract.displayServerState(
+                                                outcome.eligibility))
+                                is GlobalClient.StatusOutcome.Failed ->
+                                    statusText(
+                                        "Refresh failed " +
+                                            "(${outcome.code}): " +
+                                            outcome.message)
+                            }
+                            refreshEvidenceLine()
+                        }
+                    }, "edgefit-global").start()
+                },
+                CardDialog.Action("Withdraw consent") {
+                    Thread({
+                        val outcome = globalClient.revoke(id)
+                        runOnUiThread {
+                            when (outcome) {
+                                GlobalClient.RevokeOutcome.Revoked ->
+                                    statusText(
+                                        "Consent withdrawn; server " +
+                                            "marked the row revoked.")
+                                is GlobalClient.RevokeOutcome.Failed ->
+                                    statusText(
+                                        "Withdraw failed " +
+                                            "(${outcome.code}): " +
+                                            outcome.message)
+                            }
+                            refreshEvidenceLine()
+                        }
+                    }, "edgefit-global").start()
+                }))
+    }
+
+    @Suppress("DEPRECATION")
+    private fun showGlobalConnection() {
+        val originInput = EditText(this).apply {
+            hint = "https://staging-host.example"
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_VARIATION_URI
+            globalOrigin?.let { setText(it) }
+        }
+        val tokenInput = EditText(this).apply {
+            hint = "Paste owner-issued upload token"
+            inputType = InputType.TYPE_CLASS_TEXT or
+                InputType.TYPE_TEXT_VARIATION_PASSWORD
+        }
+        val remember = android.widget.CheckBox(this).apply {
+            text = "Persist token in Keystore (otherwise session-only)"
+            isChecked = false
+        }
+        val suffix = try {
+            globalVault.suffix()
+        } catch (_: Exception) {
+            null
+        }
+        val state = TextView(this).apply {
+            text = "Token: " + (suffix ?: "none") +
+                (if (globalVault.hasPersisted()) " (persisted)" else "") +
+                "\nOrigin: " + (globalOrigin
+                    ?: "Cloud connection not configured") +
+                "\nTokens never leave this screen except to the " +
+                "configured backend over HTTPS."
+        }
+        val layout = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            val pad = (16 * resources.displayMetrics.density).toInt()
+            setPadding(pad, pad, pad, pad)
+            addView(state)
+            addView(originInput)
+            addView(tokenInput)
+            addView(remember)
+        }
+        AlertDialog.Builder(this)
+            .setTitle("EdgeFit Global Connection")
+            .setView(layout)
+            .setPositiveButton("Save") { _, _ ->
+                val originText = originInput.text.toString()
+                if (originText.isNotBlank() &&
+                    !saveGlobalOrigin(originText)
+                ) {
+                    statusText("Origin rejected: use plain https URL.")
+                    return@setPositiveButton
+                }
+                val tokenText = tokenInput.text.toString()
+                if (tokenText.isNotBlank()) {
+                    try {
+                        globalVault.setSessionToken(tokenText)
+                        if (remember.isChecked) {
+                            globalVault.persistSessionToken()
+                        }
+                        statusText("Upload token set " +
+                            (if (remember.isChecked) "(persisted)."
+                            else "(session-only)."))
+                    } catch (e: Exception) {
+                        statusText("Token rejected: ${e.message}")
+                    }
+                } else if (originText.isNotBlank()) {
+                    statusText("Origin saved.")
+                }
+                refreshEvidenceLine()
+            }
+            .setNeutralButton("Forget token") { _, _ ->
+                if (globalVault.forget()) {
+                    statusText("Upload token forgotten everywhere.")
+                } else {
+                    statusText("No upload token was stored.")
+                }
+                refreshEvidenceLine()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /** Bounded sink: refuses input past [cap] bytes. */
+    private class ByteArrayOutputStreamBounded(val cap: Int) {
+        private val out = java.io.ByteArrayOutputStream()
+        @Throws(IllegalStateException::class)
+        fun write(buf: ByteArray, offset: Int, length: Int) {
+            if (out.size() + length > cap) {
+                throw IllegalStateException("file exceeds bound")
+            }
+            out.write(buf, offset, length)
+        }
+
+        fun toByteArray(): ByteArray = out.toByteArray()
     }
 
     private fun statusText(message: String) {
@@ -1792,7 +2917,7 @@ class MainActivity : Activity() {
             model != null &&
             assessment.level == MemPolicy.Level.SEVERE
         ) {
-            resources.getColor(R.color.edgefit_error, theme)
+            errorColor()
         } else {
             secondaryColor()
         })
@@ -2278,8 +3403,9 @@ class MainActivity : Activity() {
                     try {
                         Onboarding.countCompletions(
                             sessionManager.listSessions())
-                            .toString() + " of " +
-                            Onboarding.RETIRE_COUNT
+                            .toString() + " recorded (onboarding " +
+                            "auto-retires at " +
+                            Onboarding.RETIRE_COUNT + ")"
                     } catch (_: Exception) {
                         "unavailable"
                     })))
@@ -2322,6 +3448,7 @@ class MainActivity : Activity() {
             sessionLine.text = line
             sessionsSummaryView.text = line
             refreshNextAction()
+            refreshBenchAuthLine()
             return
         }
         val record = try {
@@ -2340,6 +3467,7 @@ class MainActivity : Activity() {
             sessionsSummaryView.text = line
         }
         refreshNextAction()
+        refreshBenchAuthLine()
     }
 
     // ---- live Meta (EF-BYOK-01) ----
@@ -3239,6 +4367,7 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_CREATE_DOCUMENT = 1
         private const val REQUEST_OPEN_DOCUMENT = 2
+        private const val REQUEST_IMPORT_BENCH = 3
         private const val KEY_PENDING_JSON = "pending_json"
         private const val KEY_PENDING_FILENAME = "pending_filename"
         private const val KEY_ACTIVE_SESSION = "active_session"

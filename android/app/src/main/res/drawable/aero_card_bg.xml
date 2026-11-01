@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aero card: raised surface, subtle border, large radius. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/aero_card" />
+    <stroke
+        android:width="@dimen/aero_stroke_card"
+        android:color="@color/aero_card_border" />
+    <corners android:radius="@dimen/aero_radius_card" />
+</shape>

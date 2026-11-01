@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aero dock item: subtle azure wash when selected, sky wash while
+     pressed, transparent otherwise. Icon/label tints come from the
+     aero_nav_* state lists keyed off the same selected state. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/aero_glow_azure" />
+            <corners android:radius="@dimen/aero_radius_m" />
+        </shape>
+    </item>
+    <item android:state_pressed="true">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/aero_glow_sky" />
+            <corners android:radius="@dimen/aero_radius_m" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@android:color/transparent" />
+            <corners android:radius="@dimen/aero_radius_m" />
+        </shape>
+    </item>
+</selector>

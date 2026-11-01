@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aero floating dock background: raised pill with border.
+     True frosted blur needs API 31+ RenderEffect (applied in code where
+     available); this solid is the graceful fallback on API 26-30. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@color/aero_dock" />
+    <stroke
+        android:width="@dimen/aero_stroke_hairline"
+        android:color="@color/aero_dock_border" />
+    <corners android:radius="@dimen/aero_radius_dock" />
+</shape>

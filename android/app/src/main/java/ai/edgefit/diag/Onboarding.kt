@@ -191,4 +191,8 @@ object Onboarding {
 
     fun prevPage(index: Int): Int =
         (index - 1).coerceAtLeast(0)
+
+    /** "1 of 3" progress caption for the indicator line. */
+    fun progressLabel(index: Int): String =
+        "${index.coerceIn(0, PAGE_COUNT - 1) + 1} of $PAGE_COUNT"
 }

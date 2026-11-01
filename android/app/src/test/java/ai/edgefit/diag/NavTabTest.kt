@@ -33,6 +33,16 @@ class NavTabTest {
     }
 
     @Test
+    fun subtitlesAreNonBlankAndDistinct() {
+        val seen = mutableSetOf<String>()
+        for (tab in NavTab.values()) {
+            val subtitle = NavTab.subtitle(tab)
+            assertEquals(false, subtitle.isBlank())
+            assertEquals(true, seen.add(subtitle))
+        }
+    }
+
+    @Test
     fun fromNameRestoresOrDefaultsHome() {
         assertEquals(NavTab.AGENT, NavTab.fromName("AGENT"))
         assertEquals(NavTab.HOME, NavTab.fromName(null))

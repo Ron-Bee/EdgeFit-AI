@@ -1,0 +1,27 @@
+<!-- EdgeFit Aero launcher foreground (ORIGINAL artwork, EF-UX-AERO-01).
+     Abstract signal-E: spine + three stadium bars with a violet mid-bar
+     and a mist dot in the lower counter. 108dp adaptive canvas; all art
+     sits inside the 66dp-diameter safe circle (center 54,54). Vector
+     drawables take flat fills only, so gradients live in the master SVG
+     and the rendered PNG exports. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="@color/aero_sky"
+        android:pathData="M35,38 A5,5 0 0 1 45,38 L45,71 A5,5 0 0 1 35,71 Z" />
+    <path
+        android:fillColor="@color/aero_sky"
+        android:pathData="M40,33 L68,33 A5,5 0 0 1 68,43 L40,43 A5,5 0 0 1 40,33 Z" />
+    <path
+        android:fillColor="@color/aero_sky"
+        android:pathData="M40,66 L68,66 A5,5 0 0 1 68,76 L40,76 A5,5 0 0 1 40,66 Z" />
+    <path
+        android:fillColor="@color/aero_violet"
+        android:pathData="M50,48 L60,48 A5,5 0 0 1 60,58 L50,58 A5,5 0 0 1 50,48 Z" />
+    <path
+        android:fillColor="@color/aero_mist"
+        android:pathData="M55,62 a3,3 0 1 0 6,0 a3,3 0 1 0 -6,0" />
+</vector>

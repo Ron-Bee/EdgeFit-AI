@@ -537,4 +537,13 @@ class OnboardingTest {
             SessionListUi.friendlyState(standalone))
         assertFalse(SessionListUi.needsAction(standalone))
     }
+
+    @Test
+    fun progressLabelCountsPages() {
+        assertEquals("1 of 3", Onboarding.progressLabel(0))
+        assertEquals("2 of 3", Onboarding.progressLabel(1))
+        assertEquals("3 of 3", Onboarding.progressLabel(2))
+        assertEquals("1 of 3", Onboarding.progressLabel(-1))
+        assertEquals("3 of 3", Onboarding.progressLabel(9))
+    }
 }

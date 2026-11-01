@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- EdgeFit Aero wordmark references (EF-UX-AERO-01 Step 1).
+     Vector master: assets/aero/icon/edgefit-aero-wordmark.svg -->
+<resources>
+    <string name="aero_wordmark">EdgeFit AI</string>
+    <string name="aero_wordmark_short">EDGEFIT</string>
+    <string name="aero_tagline">Measure what matters</string>
+    <string name="aero_icon_desc">EdgeFit Aero app icon</string>
+</resources>

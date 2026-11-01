@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- EdgeFit Aero design tokens: themes (EF-UX-AERO-01 Step 1).
+     Defined here, NOT yet applied in the manifest — applying the theme
+     to the app is a later Aero step. Additive only; the current light
+     UI is unchanged. -->
+<resources>
+    <style name="Theme.EdgeFit.Aero" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@color/aero_page</item>
+        <item name="android:colorBackground">@color/aero_page</item>
+        <item name="android:colorPrimary">@color/aero_primary</item>
+        <item name="android:colorAccent">@color/aero_sky</item>
+        <item name="android:textColorPrimary">@color/aero_text_primary</item>
+        <item name="android:textColorSecondary">@color/aero_text_secondary</item>
+        <item name="android:textColorHint">@color/aero_text_disabled</item>
+        <item name="android:buttonStyle">@style/Widget.Aero.Button.Primary</item>
+        <item name="android:dialogTheme">@style/Theme.EdgeFit.Aero.Dialog</item>
+    </style>
+
+    <style name="Theme.EdgeFit.Aero.Dialog" parent="@android:style/Theme.Material.Dialog.NoActionBar">
+        <item name="android:windowBackground">@drawable/aero_card_bg</item>
+        <item name="android:colorBackground">@color/aero_card</item>
+        <item name="android:colorPrimary">@color/aero_primary</item>
+        <item name="android:colorAccent">@color/aero_sky</item>
+        <item name="android:textColorPrimary">@color/aero_text_primary</item>
+        <item name="android:textColorSecondary">@color/aero_text_secondary</item>
+    </style>
+</resources>

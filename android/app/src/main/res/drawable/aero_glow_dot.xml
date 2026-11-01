@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aero radial glow dot for hero accents and empty states. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="oval">
+    <gradient
+        android:type="radial"
+        android:gradientRadius="@dimen/aero_glow_radius"
+        android:centerColor="@color/aero_glow_sky"
+        android:endColor="@android:color/transparent" />
+</shape>

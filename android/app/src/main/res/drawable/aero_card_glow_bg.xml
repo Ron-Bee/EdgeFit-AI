@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Aero glowing card: layered translucent halo behind the card.
+     Pre-API-31 has no RenderEffect blur, so glow is simulated. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/aero_glow_azure" />
+            <corners android:radius="@dimen/aero_radius_m" />
+        </shape>
+    </item>
+    <item
+        android:left="@dimen/aero_glow_mid"
+        android:top="@dimen/aero_glow_mid"
+        android:right="@dimen/aero_glow_mid"
+        android:bottom="@dimen/aero_glow_mid">
+        <shape android:shape="rectangle">
+            <solid android:color="@color/aero_glow_ring" />
+            <corners android:radius="@dimen/aero_radius_m" />
+        </shape>
+    </item>
+    <item
+        android:left="@dimen/aero_glow_pad"
+        android:top="@dimen/aero_glow_pad"
+        android:right="@dimen/aero_glow_pad"
+        android:bottom="@dimen/aero_glow_pad"
+        android:drawable="@drawable/aero_card_bg" />
+</layer-list>

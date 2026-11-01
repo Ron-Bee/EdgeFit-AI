@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- EdgeFit Aero design tokens: typography + widget styles
+     (EF-UX-AERO-01 Step 1). System fonts only (no downloads). -->
+<resources>
+    <!-- Base parents: AAPT2 requires every dotted-name
+         ancestor to exist, so the roots declare an
+         explicit parent to stop the chain. Roots stay
+         empty so each leaf renders exactly its own
+         items. -->
+    <style name="TextAppearance.Aero"
+        parent="android:TextAppearance" />
+
+    <!-- Typography -->
+    <style name="TextAppearance.Aero.Display">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textSize">@dimen/aero_text_display</item>
+        <item name="android:textColor">@color/aero_text_primary</item>
+    </style>
+    <style name="TextAppearance.Aero.Title">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textSize">@dimen/aero_text_title</item>
+        <item name="android:textColor">@color/aero_text_primary</item>
+    </style>
+    <style name="TextAppearance.Aero.Headline">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textSize">@dimen/aero_text_headline</item>
+        <item name="android:textColor">@color/aero_text_primary</item>
+    </style>
+    <style name="TextAppearance.Aero.Body">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textSize">@dimen/aero_text_body</item>
+        <item name="android:textColor">@color/aero_text_primary</item>
+    </style>
+    <style name="TextAppearance.Aero.BodySecondary">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textSize">@dimen/aero_text_body_small</item>
+        <item name="android:textColor">@color/aero_text_secondary</item>
+    </style>
+    <style name="TextAppearance.Aero.Label">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textSize">@dimen/aero_text_label</item>
+        <item name="android:textColor">@color/aero_text_primary</item>
+    </style>
+    <style name="TextAppearance.Aero.Caption">
+        <item name="android:fontFamily">sans-serif</item>
+        <item name="android:textSize">@dimen/aero_text_caption</item>
+        <item name="android:textColor">@color/aero_text_secondary</item>
+    </style>
+    <style name="TextAppearance.Aero.Mono">
+        <item name="android:fontFamily">monospace</item>
+        <item name="android:textSize">@dimen/aero_text_mono</item>
+        <item name="android:textColor">@color/aero_text_primary</item>
+    </style>
+    <style name="TextAppearance.Aero.Overline">
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textSize">@dimen/aero_text_caption</item>
+        <item name="android:textColor">@color/aero_text_secondary</item>
+        <item name="android:letterSpacing">0.08</item>
+        <item name="android:textAllCaps">true</item>
+    </style>
+
+    <style name="Widget.Aero" parent="" />
+    <style name="Widget.Aero.Button" />
+
+    <!-- Buttons -->
+    <style name="Widget.Aero.Button.Primary">
+        <item name="android:background">@drawable/aero_button_primary_bg</item>
+        <item name="android:textAppearance">@style/TextAppearance.Aero.Label</item>
+        <item name="android:textColor">@color/aero_button_primary_text</item>
+        <item name="android:minHeight">@dimen/aero_button_height</item>
+        <item name="android:minWidth">@dimen/aero_button_min_width</item>
+        <item name="android:gravity">center</item>
+        <item name="android:elevation">@dimen/aero_elevation_button</item>
+    </style>
+    <style name="Widget.Aero.Button.Secondary">
+        <item name="android:background">@drawable/aero_button_secondary_bg</item>
+        <item name="android:textAppearance">@style/TextAppearance.Aero.Label</item>
+        <item name="android:textColor">@color/aero_button_secondary_text</item>
+        <item name="android:minHeight">@dimen/aero_button_height</item>
+        <item name="android:minWidth">@dimen/aero_button_min_width</item>
+        <item name="android:gravity">center</item>
+    </style>
+    <style name="Widget.Aero.Button.Ghost">
+        <item name="android:background">@drawable/aero_button_ghost_bg</item>
+        <item name="android:textAppearance">@style/TextAppearance.Aero.Label</item>
+        <item name="android:textColor">@color/aero_ghost_text</item>
+        <item name="android:minHeight">@dimen/aero_button_height_compact</item>
+        <item name="android:gravity">center</item>
+    </style>
+
+    <!-- Cards -->
+    <style name="Widget.Aero.Card">
+        <item name="android:background">@drawable/aero_card_bg</item>
+        <item name="android:padding">@dimen/aero_card_padding</item>
+        <item name="android:elevation">@dimen/aero_elevation_card</item>
+    </style>
+    <style name="Widget.Aero.Card.Glow">
+        <item name="android:background">@drawable/aero_card_glow_bg</item>
+        <item name="android:padding">@dimen/aero_card_padding</item>
+        <item name="android:elevation">@dimen/aero_elevation_card</item>
+    </style>
+
+    <!-- Floating dock -->
+    <style name="Widget.Aero.Dock">
+        <item name="android:background">@drawable/aero_dock_bg</item>
+        <item name="android:elevation">@dimen/aero_elevation_dock</item>
+    </style>
+</resources>
