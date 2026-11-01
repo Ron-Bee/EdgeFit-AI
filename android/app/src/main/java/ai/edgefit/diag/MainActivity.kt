@@ -2347,8 +2347,11 @@ class MainActivity : Activity() {
             statusText("Review unavailable: ${e.message}")
             return
         }
-        val connected = review.origin != null && review.tokenSuffix != null &&
-            GlobalContract.CONSENT_POLICY_APPROVED
+        val eligible = record.summary.status == BenchContract.STATUS_COMPLETED &&
+            record.provenance == EvidenceStore.PROVENANCE_CAPTURED
+        val connected = GlobalView.canOfferUpload(
+            review.origin, review.tokenSuffix,
+            GlobalContract.CONSENT_POLICY_APPROVED, eligible)
         GlobalView.showReview(this, review, connected) {
             Thread({
                 val outcome = try {
@@ -2367,6 +2370,7 @@ class MainActivity : Activity() {
             statusText(
                 if (review.origin == null) "Cloud connection not configured."
                 else if (review.tokenSuffix == null) "No upload token: open EdgeFit Global Connection."
+                else if (!eligible) "Only COMPLETED results measured on this install can be contributed."
                 else "Contributions disabled until the owner approves consent policy " + GlobalContract.CONSENT_POLICY_VERSION + "."
             )
         }

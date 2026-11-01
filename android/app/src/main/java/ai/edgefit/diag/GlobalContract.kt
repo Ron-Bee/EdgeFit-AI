@@ -36,14 +36,19 @@ object GlobalContract {
     val CONSENT_SCOPES = listOf("aggregates")
 
     /**
-     * Upload enablement (EF-ANDROID-GLOBAL-01 Phase D).
-     * The ef-consent-01 policy text is PROPOSED and NOT
-     * owner-approved: uploads stay disabled. Flip to
-     * true ONLY in a reviewed commit after the owner
-     * approves the exact policy. Withdrawal (revoke)
-     * and status refresh are never gated by this flag.
+     * Upload enablement (EF-ANDROID-CONSENT-ACTIVATION-01).
+     * Collection A APPROVED by the owner on 2026-11-01 for
+     * policy ef-consent-01, SHA-256
+     * B83E78FBF78AD0FBE4E77CFBBCF37709519A4305A45D86FFCCFF6C72E78CDB21
+     * (backend implement/ef-global-01-2026-10-30, approval
+     * commit 6e09295, docs/ef-consent-01-approval.md).
+     * Per-batch uploads stamping this policy are enabled.
+     * Publication B remains NOT approved (server-side
+     * allowlist; this client sends no publication fields).
+     * Withdrawal (revoke) and status refresh were never
+     * gated by this flag.
      */
-    const val CONSENT_POLICY_APPROVED = false
+    const val CONSENT_POLICY_APPROVED = true
 
     const val PATH_SUBMISSIONS = "/v1/submissions"
 

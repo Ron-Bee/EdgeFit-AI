@@ -20,13 +20,13 @@ class GlobalClientTest {
             cipher.reversedArray()
     }
 
-    private fun harness(): Triple<EvidenceStore, FakeGlobalTransport, GlobalClient> {
+    private fun harness(origin: String = ORIGIN): Triple<EvidenceStore, FakeGlobalTransport, GlobalClient> {
         val dir = Files.createTempDirectory("global-test").toFile()
         val store = EvidenceStore(dir)
         val fake = FakeGlobalTransport()
         val vault = GlobalTokenVault(dir, FakeSeal())
         vault.setSessionToken(TOKEN)
-        val client = GlobalClient(store, fake, vault, { ORIGIN },
+        val client = GlobalClient(store, fake, vault, { origin },
             { BenchResultParseTest.NOW }, { true })
         store.store(BenchResultParseTest.validDoc(),
             EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
@@ -368,6 +368,64 @@ class GlobalClientTest {
             null))
         val outcome = client.revokeWithdrawal("SUB-9")
         assertTrue(outcome is GlobalClient.RevokeOutcome.Failed)
+    }
+
+    @Test
+    fun `submit malformed origin blocks without network`() {
+        val (_, fake, client) = harness(origin = "http://insecure.example.com/x")
+        val outcome = client.submit("BENCH-TEST-001")
+        assertTrue(outcome is GlobalClient.SubmitOutcome.Blocked)
+        assertEquals(0, fake.calls.size)
+    }
+
+    @Test
+    fun `submit failed result blocks without network`() {
+        val (store, fake, client) = harness()
+        store.store(BenchResultParseTest.validDoc("BENCH-FAIL-001", "FAILED"),
+            EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
+        val outcome = client.submit("BENCH-FAIL-001")
+        assertTrue(outcome is GlobalClient.SubmitOutcome.Blocked)
+        assertTrue((outcome as GlobalClient.SubmitOutcome.Blocked)
+            .reason.contains("COMPLETED"))
+        assertEquals(0, fake.calls.size)
+    }
+
+    @Test
+    fun `submit imported result blocks without network`() {
+        val (store, fake, client) = harness()
+        store.store(BenchResultParseTest.validDoc("BENCH-IMP-001"),
+            EvidenceStore.PROVENANCE_IMPORTED, BenchResultParseTest.NOW)
+        val outcome = client.submit("BENCH-IMP-001")
+        assertTrue(outcome is GlobalClient.SubmitOutcome.Blocked)
+        assertTrue((outcome as GlobalClient.SubmitOutcome.Blocked)
+            .reason.contains("imported"))
+        assertEquals(0, fake.calls.size)
+    }
+
+    @Test
+    fun `review and idle client perform no requests`() {
+        val (_, fake, client) = harness()
+        val review = client.review("BENCH-TEST-001")
+        assertEquals("BENCH-TEST-001", review.runId)
+        assertEquals("COMPLETED", review.status)
+        assertEquals(0, fake.calls.size)
+    }
+
+    @Test
+    fun `approved submit sends exactly result plus consent`() {
+        val (_, fake, client) = harness()
+        fake.script.add(GlobalHttpResult(
+            201,
+            """{"submission_id":"SUB-1","eligibility":"SUBMITTED","duplicate":false}""",
+            null))
+        val outcome = client.submit("BENCH-TEST-001")
+        assertTrue(outcome is GlobalClient.SubmitOutcome.Shared)
+        assertEquals(1, fake.calls.size)
+        val sent = SessionJson.parse(fake.bodies.single()!!) as Map<*, *>
+        assertEquals(setOf("result", "consent"), sent.keys)
+        val consent = sent["consent"] as Map<*, *>
+        assertEquals("ef-consent-01", consent["policy_version"])
+        assertEquals(listOf("aggregates"), consent["scopes"])
     }
 
 }

@@ -134,6 +134,20 @@ class GlobalClient(
         } catch (e: Exception) {
             return SubmitOutcome.Blocked("no local evidence: $runId")
         }
+        // EF-ANDROID-CONSENT-ACTIVATION-01: Collection A covers
+        // genuine completed measurements from this install only.
+        // Anything else stays local; the review screen still
+        // displays it read-only with its true status/source.
+        if (record.summary.status != BenchContract.STATUS_COMPLETED) {
+            return SubmitOutcome.Blocked(
+                "only COMPLETED results can be contributed " +
+                    "(status ${record.summary.status})")
+        }
+        if (record.provenance != EvidenceStore.PROVENANCE_CAPTURED) {
+            return SubmitOutcome.Blocked(
+                "imported results cannot be contributed as " +
+                    "this install's measurements")
+        }
         val origin = getOrigin()
         if (origin == null || GlobalContract.normalizeOrigin(origin) == null) {
             return SubmitOutcome.Blocked("Cloud connection not configured")

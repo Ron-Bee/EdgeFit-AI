@@ -49,6 +49,19 @@ object GlobalView {
         }
     }
 
+    /**
+     * EF-ANDROID-CONSENT-ACTIVATION-01: pure gate for the
+     * "Approve and upload" action (host-testable). The activity
+     * passes the live connection facts; all four must hold.
+     */
+    fun canOfferUpload(
+        origin: String?,
+        tokenSuffix: String?,
+        approved: Boolean,
+        eligible: Boolean
+    ): Boolean =
+        origin != null && tokenSuffix != null && approved && eligible
+
     fun showReview(
         activity: Activity,
         review: GlobalClient.Review,
