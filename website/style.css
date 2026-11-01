@@ -92,8 +92,11 @@ h2 { font-size: 1.25rem; margin-top: 2.25rem; }
 }
 .btn-primary { background: var(--accent); color: var(--accent-ink); }
 .btn-primary:hover { text-decoration: none; filter: brightness(1.08); }
-.btn-ghost { border-color: var(--line); color: var(--ink); }
-.btn-ghost:hover { text-decoration: none; border-color: var(--accent); }
+.btn-ghost { border-color: var(--accent); color: var(--accent); }
+.btn-ghost:hover {
+  text-decoration: none;
+  background: rgba(53, 207, 255, 0.08);
+}
 
 /* ---- phone frame + screenshot placeholder ---- */
 .phone {
@@ -121,7 +124,7 @@ h2 { font-size: 1.25rem; margin-top: 2.25rem; }
 }
 .phone img {
   width: 100%;
-  aspect-ratio: 9 / 19.5;
+  aspect-ratio: 955 / 2048;
   max-height: 480px;
   object-fit: contain;
   background: #04070f;

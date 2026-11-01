@@ -34,3 +34,5 @@ edgefit-bench-*.json
 # Generated CMake build outputs and local model weights (EF-LOOP-01)
 android/app/.cxx/
 *.gguf
+# Cloudflare Pages/Workers local CLI state (EF-WEB-LAUNCH-01)
+.wrangler/

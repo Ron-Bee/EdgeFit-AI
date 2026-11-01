@@ -3,7 +3,9 @@
 // measurements, never calls any backend.
 (function () {
   "use strict";
-  var FREE_GB = 3.2; // illustrative free memory, see page copy
+  // Illustrative free memory, matching the figure shown in the
+  // example device panel (itself illustrative, varies live).
+  var FREE_GB = 1.8;
   var pick = document.getElementById("modelpick");
   var out = document.getElementById("demoout");
   if (!pick || !out) return;
