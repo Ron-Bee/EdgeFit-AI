@@ -10,8 +10,8 @@ import {
 async function setup() {
   const deps = makeDeps();
   const db = await openTestDb();
-  await seedInstall(db, deps, "install-1", "token-one");
-  await seedInstall(db, deps, "install-2", "token-two");
+  await seedInstall(db, deps, "install-1", "token-one", "device_contribution");
+  await seedInstall(db, deps, "install-2", "token-two", "device_contribution");
   return { deps, db };
 }
 

@@ -49,6 +49,23 @@ export function publishableVersionClause(deps) {
   };
 }
 
+// Durable evidence provenance (PUB-02, migration 003). Origin is
+// assigned server-side from the install's kind at INSERT and frozen
+// after; only device_contribution rows may publish, conjoined with
+// the consent allowlist below. The origin literal is a fixed
+// internal constant, never caller input.
+export const ORIGIN_VALUES = ["device_contribution", "synthetic_test",
+  "legacy_untrusted"];
+export const PUBLISHABLE_ORIGIN = "device_contribution";
+
+export function publicationClause(deps) {
+  const version = publishableVersionClause(deps);
+  return {
+    clause: `(${version.clause}) AND origin = '${PUBLISHABLE_ORIGIN}'`,
+    params: version.params,
+  };
+}
+
 const SHA64 = /^[0-9a-f]{64}$/;
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,127}$/;
 const PRINTABLE = /^[\x20-\x7E]{1,64}$/;

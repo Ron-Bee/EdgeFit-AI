@@ -13,7 +13,7 @@ const PROMPT_B = "b".repeat(64);
 async function setup() {
   const deps = makeDeps();
   const db = await openTestDb();
-  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
+  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, `test-token-${i}`, "device_contribution");
   return { deps, db };
 }
 

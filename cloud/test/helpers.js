@@ -38,15 +38,42 @@ export function makeDeps(overrides = {}) {
  * Apply every migration in cloud/migrations/ in filename order.
  * initSchema() carries the initial (v1) schema; the migration
  * chain brings a database to current (002 trigger and beyond).
- * Idempotent: every migration statement is IF NOT EXISTS.
+ * Idempotent via the _migrations_applied journal: applied files
+ * are skipped, mirroring migrations/apply-local.mjs (SQLite has
+ * no ADD COLUMN IF NOT EXISTS, so 003+ cannot blindly re-execute).
+ * Pre-journal databases claim 001/002 by the objects they created.
  */
 export async function applyMigrations(db) {
   const dir = join(dirname(fileURLToPath(import.meta.url)), "..",
     "migrations");
   const files = readdirSync(dir).filter((f) => f.endsWith(".sql"))
     .sort();
+  await db.exec(
+    "CREATE TABLE IF NOT EXISTS _migrations_applied (filename TEXT PRIMARY KEY, applied_at TEXT NOT NULL)");
+  const done = new Set((await db.all(
+    "SELECT filename FROM _migrations_applied")).map((r) => r.filename));
+  const objects = new Set((await db.all(
+    "SELECT type || ':' || name AS n FROM sqlite_master")).map((r) => r.n));
+  const now = new Date().toISOString();
+  const claim = async (filename) => {
+    await db.run(
+      "INSERT OR IGNORE INTO _migrations_applied (filename, applied_at) VALUES (?, ?)",
+      filename, now);
+    done.add(filename);
+  };
+  if (objects.has("table:submissions") && !done.has("001_init.sql")) {
+    await claim("001_init.sql");
+  }
+  if (objects.has("trigger:trg_eligibility_audit") &&
+      !done.has("002_eligibility_audit_trigger.sql")) {
+    await claim("002_eligibility_audit_trigger.sql");
+  }
   for (const file of files) {
+    if (done.has(file)) continue;
     await db.exec(readFileSync(join(dir, file), "utf8"));
+    await db.run(
+      "INSERT INTO _migrations_applied (filename, applied_at) VALUES (?, ?)",
+      file, new Date().toISOString());
   }
 }
 
@@ -57,10 +84,11 @@ export async function openTestDb() {
   return db;
 }
 
-export async function seedInstall(db, deps, installId, token) {
+export async function seedInstall(db, deps, installId, token,
+  kind = "legacy_untrusted") {
   await db.run(
-    "INSERT INTO installs (install_id, token_hash, created_at, revoked_at) VALUES (?, ?, ?, NULL)",
-    installId, deps.sha256hex(token), new Date(NOW).toISOString(),
+    "INSERT INTO installs (install_id, token_hash, created_at, revoked_at, kind) VALUES (?, ?, ?, NULL, ?)",
+    installId, deps.sha256hex(token), new Date(NOW).toISOString(), kind,
   );
 }
 

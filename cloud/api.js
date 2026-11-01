@@ -15,7 +15,7 @@ import {
   MAX_BODY_BYTES,
   validateSubmission,
   configHashFor,
-  publishableVersionClause,
+  publicationClause,
 } from "./validate.js";
 import { mean, median, iqr } from "./stats.js";
 import { groupCohorts, passesQuorum, saltedInstall } from "./cohort.js";
@@ -180,6 +180,11 @@ async function postSubmissions(req) {
           params: [installId, day],
         },
         {
+          // Origin (PUB-02) is assigned here from the install's
+          // server-controlled kind via subselect: atomic with the
+          // row, no JS-read window, never client-supplied. The
+          // trailing installId param feeds that subselect (values
+          // holds the 35 envelope columns plus receivedAt).
           sql: `INSERT INTO submissions (
                   submission_id, install_id, content_hash, result_json, run_id,
                   device_class, model_sha, model_size_bytes, quantization_label,
@@ -190,15 +195,18 @@ async function postSubmissions(req) {
                   collected_at, app_version,
                   mem_avail_pct_start, mem_below_advisory, mem_low_memory,
                   consent_policy_version, consent_accepted_at, consent_scopes,
-                  eligibility, received_at, published_at
+                  origin, eligibility, received_at, published_at
                 )
                 SELECT ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                       ?, ?, ?, ?, ?, 'SUBMITTED', ?, NULL
+                       ?, ?, ?, ?, ?,
+                       (SELECT kind FROM installs WHERE install_id = ?),
+                       'SUBMITTED', ?, NULL
                 WHERE (SELECT count FROM daily_counts
                        WHERE install_id = ? AND day = ?) <= ?`,
-          params: [...values, installId, day, deps.quotaPerDay],
+          params: [...values.slice(0, 35), installId, receivedAt,
+            installId, day, deps.quotaPerDay],
         },
         {
           sql: `INSERT INTO eligibility_history
@@ -471,10 +479,11 @@ async function getAggregates(req) {
     filters.push("prompt_sha = ?");
     params.push(query.prompt_sha);
   }
-  // Publication allowlist (H10-02, query-time guard): only rows
-  // whose consent version is approved contribute to public
-  // evidence, including historical PUBLISHED rows.
-  const pub = publishableVersionClause(deps);
+  // Publication guard (H10-02 + PUB-02, query-time): only rows
+  // whose consent version is approved AND whose origin is
+  // device_contribution contribute to public evidence, including
+  // historical PUBLISHED rows.
+  const pub = publicationClause(deps);
   filters.push(pub.clause);
   params.push(...pub.params);
   // Throughput aggregates use completed measurements only;
@@ -511,9 +520,9 @@ async function getAggregates(req) {
 
 async function getModels(req) {
   const { db, deps } = req;
-  // Publication allowlist (H10-02, query-time guard): population
-  // counts include approved-consent rows only.
-  const pub = publishableVersionClause(deps);
+  // Publication guard (H10-02 + PUB-02, query-time): population
+  // counts include approved-consent, device-origin rows only.
+  const pub = publicationClause(deps);
   const rows = await db.all(
     `SELECT model_sha, install_id, collected_at
      FROM submissions
@@ -603,8 +612,8 @@ async function getCandidates(req) {
     filters.push("workload_id = ?");
     params.push(query.workload_id);
   }
-  // Publication allowlist (H10-02, query-time guard).
-  const pub = publishableVersionClause(deps);
+  // Publication guard (H10-02 + PUB-02, query-time).
+  const pub = publicationClause(deps);
   filters.push(pub.clause);
   params.push(...pub.params);
   // v1 has no catalog table: candidates derive from observed

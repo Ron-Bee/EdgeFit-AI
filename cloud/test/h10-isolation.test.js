@@ -34,13 +34,17 @@ function freshRun() {
   };
 }
 
-async function seed3(db, deps) {
+async function seed3(db, deps, kinds) {
   const tokens = { 1: "h10-tok-1", 2: "h10-tok-2", 3: "h10-tok-3" };
   for (let i = 1; i <= 3; i++) {
-    await seedInstall(db, deps, `h10-install-${i}`, tokens[i]);
+    await seedInstall(db, deps, `h10-install-${i}`, tokens[i],
+      kinds ? kinds[i - 1] : "legacy_untrusted");
   }
   return tokens;
 }
+
+const DEVICE_3 = ["device_contribution", "device_contribution",
+  "device_contribution"];
 
 async function submitN(db, deps, tokens, n, version = "v1",
   overrides = {}) {
@@ -163,7 +167,7 @@ test("H10-04: query-time guard hides historical rows", async (t) => {
   const db = await openTestDb();
   t.after(() => db.close());
   const deps = makeDeps();
-  const tokens = await seed3(db, deps);
+  const tokens = await seed3(db, deps, DEVICE_3);
   await submitN(db, deps, tokens, 2);
   await qualify(db, deps);
   const before = await get(db, deps, "/v1/benchmarks/aggregates",
@@ -193,7 +197,7 @@ test("H10-05: synthetic members excluded from quorum math", async (t) => {
   const db = await openTestDb();
   t.after(() => db.close());
   const both = makeDeps({ publishConsentVersions: ["v1", "ef-synth-01"] });
-  const tokens = await seed3(db, both);
+  const tokens = await seed3(db, both, DEVICE_3);
   for (const inst of [1, 2, 1, 2]) {
     await submitValid(db, both, tokens[inst], freshRun(),
       { policy_version: "v1" });
@@ -221,7 +225,7 @@ test("H10-06: mixed published cohort yields approved-only stats",
     t.after(() => db.close());
     const both = makeDeps(
       { publishConsentVersions: ["v1", "ef-synth-01"] });
-    const tokens = await seed3(db, both);
+    const tokens = await seed3(db, both, DEVICE_3);
     await submitN(db, both, tokens, 5, "v1");
     await submitN(db, both, tokens, 3, "ef-synth-01",
       { generated_tokens: 640, gen_ms: 4000 });
@@ -242,7 +246,7 @@ test("H10-07: below-quorum approved cohort stays suppressed",
     const db = await openTestDb();
     t.after(() => db.close());
     const deps = makeDeps();
-    const tokens = await seed3(db, deps);
+    const tokens = await seed3(db, deps, DEVICE_3);
     await submitN(db, deps, tokens, 2);
     await qualify(db, deps);
     const agg = await get(db, deps, "/v1/benchmarks/aggregates",
@@ -276,7 +280,7 @@ test("H10-09: revoked approved rows leave exact counts", async (t) => {
   const db = await openTestDb();
   t.after(() => db.close());
   const deps = makeDeps();
-  const tokens = await seed3(db, deps);
+  const tokens = await seed3(db, deps, DEVICE_3);
   const ids = await submitN(db, deps, tokens, 5);
   await qualify(db, deps);
   const gone = await del(db, deps, `/v1/submissions/${ids[0]}`,
@@ -365,7 +369,10 @@ test("H10-13: revoke during publish attempt never publishes",
     const db = await openTestDb();
     t.after(() => db.close());
     const deps = makeDeps();
-    const tokens = await seed3(db, deps);
+    // Device installs: the race under test is revoke-vs-publish, so
+    // the publish attempt must actually happen (legacy rows would
+    // hold at QUALIFIED and the gate below would never fire).
+    const tokens = await seed3(db, deps, DEVICE_3);
     const [id] = await submitN(db, deps, tokens, 1);
     let release;
     const gate = new Promise((r) => { release = r; });
@@ -403,7 +410,7 @@ test("H10-14: aggregates reveal no private identifiers", async (t) => {
   const db = await openTestDb();
   t.after(() => db.close());
   const deps = makeDeps();
-  const tokens = await seed3(db, deps);
+  const tokens = await seed3(db, deps, DEVICE_3);
   await submitN(db, deps, tokens, 5);
   await qualify(db, deps);
   const agg = await get(db, deps, "/v1/benchmarks/aggregates",
@@ -420,7 +427,7 @@ test("H10-15: candidates reveal no private identifiers", async (t) => {
   const db = await openTestDb();
   t.after(() => db.close());
   const deps = makeDeps();
-  const tokens = await seed3(db, deps);
+  const tokens = await seed3(db, deps, DEVICE_3);
   await submitN(db, deps, tokens, 5);
   await qualify(db, deps);
   const cands = await get(db, deps, "/v1/evidence/model-candidates",
@@ -434,12 +441,12 @@ test("H10-15: candidates reveal no private identifiers", async (t) => {
 });
 
 // 16. Filtering is purely version-driven, path-independent.
-test("H10-16: legacy versions filter by policy, not origin",
+test("H10-16: legacy versions filter by policy on every path",
   async (t) => {
     const db = await openTestDb();
     t.after(() => db.close());
     const legacy = makeDeps({ publishConsentVersions: ["legacy-99"] });
-    const tokens = await seed3(db, legacy);
+    const tokens = await seed3(db, legacy, DEVICE_3);
     await submitN(db, legacy, tokens, 1, "legacy-99");
     await qualify(db, legacy);
     const bare = makeDeps({ publishConsentVersions: [] });
@@ -644,7 +651,7 @@ test("H10-25: mixed workloads separate by policy version",
     const db = await openTestDb();
     t.after(() => db.close());
     const deps = makeDeps();
-    const tokens = await seed3(db, deps);
+    const tokens = await seed3(db, deps, DEVICE_3);
     const approved = await submitN(db, deps, tokens, 2, "v1");
     const synth = await submitN(db, deps, tokens, 2, "ef-synth-01");
     await qualify(db, deps);

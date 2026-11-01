@@ -40,7 +40,8 @@ async function openCtx(t, { faults = {}, depsOverrides = {} } = {}) {
 async function seed3(ctx) {
   const tokens = { 1: "tok-ALPHA-1", 2: "tok-BRAVO-2", 3: "tok-CHARLIE-3" };
   for (let i = 1; i <= 3; i++) {
-    await seedInstall(ctx.db, ctx.deps, `install-G2BW-${i}`, tokens[i]);
+    await seedInstall(ctx.db, ctx.deps, `install-G2BW-${i}`, tokens[i],
+      "device_contribution");
   }
   return tokens;
 }
@@ -204,7 +205,9 @@ test("G2B-W-B2: JSON content type always; retry-after only when honest", async (
 test("G2B-W-B3: default export serves mock env, fails closed alike", async (t) => {
   const mock = openMockD1Binding();
   t.after(() => mock.close());
-  await initSchema(openD1(mock.binding));
+  const b3db = openD1(mock.binding);
+  await initSchema(b3db);
+  await applyMigrations(b3db);
   const env = { DB: mock.binding, INSTALL_SALT: "staging-salt-value" };
   const denied = await workerDefault.fetch(
     new Request(`${ORIGIN}/v1/models`, { method: "GET" }), env);
@@ -378,9 +381,9 @@ test("G2B-W-K1: public responses carry cohorts, never identities", async (t) => 
 // ---------- M. no secret exposure + E. binding failures ----------
 
 test("G2B-W-M1: binding failures are sanitized 500s on every route", async (t) => {
-  const { ctx } = await openCtx(t, {
-    faults: { throwOn: { prepare: new Error("D1_FAKE exploded") } },
-  });
+  const faults = { throwOn: {} };
+  const { ctx } = await openCtx(t, { faults });
+  faults.throwOn.prepare = new Error("D1_FAKE exploded");
   const routes = [
     ["GET", "/v1/benchmarks/aggregates", { model_sha: MODEL_A }],
     ["GET", "/v1/models", {}],
@@ -499,7 +502,9 @@ test("G2B-W-N3: telemetry faults never break requests or leak", async (t) => {
   // Default export wires the hook to a kind-only console.warn.
   const mock = openMockD1Binding();
   t.after(() => mock.close());
-  await initSchema(openD1(mock.binding));
+  const n3db = openD1(mock.binding);
+  await initSchema(n3db);
+  await applyMigrations(n3db);
   const warned = [];
   const origWarn = console.warn;
   console.warn = (s) => warned.push(String(s));

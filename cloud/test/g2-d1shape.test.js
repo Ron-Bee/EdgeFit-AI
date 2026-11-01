@@ -11,6 +11,7 @@ import { openDatabase, initSchema } from "../db.js";
 import { evidenceRetrieve } from "../retrieval.js";
 import {
   openD1Shape, openD1ShapeTestDb, normalizeD1Error,
+  applyProvenanceColumns,
 } from "./d1shape.js";
 import {
   NOW, MODEL_A, PROMPT_SHA, makeDeps, openTestDb, seedInstall, get,
@@ -40,7 +41,7 @@ function freshRun() {
 
 async function seed3(db, deps) {
   const tokens = { 1: "token-one", 2: "token-two", 3: "token-three" };
-  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, tokens[i]);
+  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, tokens[i], "device_contribution");
 }
 
 function tappedDb(db, hooks = {}) {
@@ -73,6 +74,7 @@ async function openSharedD1(t) {
   const path = join(dir, `g2shared-${process.pid}-${fileCounter}.db`);
   const a = openD1Shape(path);
   await initSchema(a);
+  await applyProvenanceColumns(a);
   const b = openD1Shape(path);
   t.after(() => {
     try { a.close(); } catch { /* ignore */ }
@@ -109,7 +111,7 @@ test("G2-A2: batch run/get/all modes return aligned shapes", async () => {
   for (const [name, open] of Object.entries(ADAPTERS)) {
     const deps = makeDeps();
     const db = await open();
-    await seedInstall(db, deps, "install-1", "token-one");
+    await seedInstall(db, deps, "install-1", "token-one", "device_contribution");
     const [ins, one, many] = await db.batch([
       { sql: "INSERT INTO daily_counts (install_id, day, count) VALUES (?, ?, ?)",
         params: ["install-1", DAY, 4] },
@@ -176,7 +178,7 @@ test("G2-A5: unknown batch mode throws before executing", async () => {
 test("G2-B1: UNIQUE failures keep contract shape through D1 errors", async () => {
   const deps = makeDeps();
   const db = await openD1ShapeTestDb();
-  await seedInstall(db, deps, "install-1", "token-one");
+  await seedInstall(db, deps, "install-1", "token-one", "device_contribution");
   let threw = null;
   try {
     await db.batch([
@@ -210,7 +212,7 @@ test("G2-B2: the normalizer round-trips fields, passes unknowns through", async 
 test("G2-C1: prompt SHAs split cohorts on the D1-shape adapter", async () => {
   const deps = makeDeps();
   const db = await openD1ShapeTestDb();
-  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
+  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, `test-token-${i}`, "device_contribution");
   for (const [i, inst] of [1, 2, 3, 1, 2].entries()) {
     await submitValid(db, deps, `test-token-${inst}`, {
       ...freshRun(),
@@ -231,7 +233,7 @@ test("G2-C1: prompt SHAs split cohorts on the D1-shape adapter", async () => {
 test("G2-C2: mixed cohorts publish representative stats on D1-shape", async () => {
   const deps = makeDeps();
   const db = await openD1ShapeTestDb();
-  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
+  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, `test-token-${i}`, "device_contribution");
   const at = (tps) => {
     const ms = Math.round((64 * 1000) / tps);
     return {
@@ -270,7 +272,7 @@ test("G2-C2: mixed cohorts publish representative stats on D1-shape", async () =
 test("G2-C3: exact quorum publishes on the D1-shape adapter", async () => {
   const deps = makeDeps();
   const db = await openD1ShapeTestDb();
-  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
+  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, `test-token-${i}`, "device_contribution");
   for (const inst of [1, 2, 3, 1, 2]) {
     await submitValid(db, deps, `test-token-${inst}`, freshRun());
   }

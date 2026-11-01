@@ -53,7 +53,7 @@ async function openAdapter(t, faults = {}) {
 async function seed3(db, deps) {
   const tokens = { 1: "token-one", 2: "token-two", 3: "token-three" };
   for (let i = 1; i <= 3; i++) {
-    await seedInstall(db, deps, `install-${i}`, tokens[i]);
+    await seedInstall(db, deps, `install-${i}`, tokens[i], "device_contribution");
   }
   return tokens;
 }
@@ -73,7 +73,9 @@ async function submitQuorum(db, deps, tokens, overrides = {}) {
 
 test("G2B-D-E1: binding prepare failure rejects every adapter call", async (t) => {
   const boom = new Error("D1_FAKE_DOWN");
-  const { db } = await openAdapter(t, { throwOn: { prepare: boom } });
+  const faults = { throwOn: {} };
+  const { db } = await openAdapter(t, faults);
+  faults.throwOn.prepare = boom;
   for (const call of [
     () => db.get("SELECT 1"),
     () => db.all("SELECT 1"),
@@ -154,7 +156,9 @@ test("G2B-D-F3: unknown batch mode is an explicit error", async (t) => {
 
 test("G2B-D-G1: missing changes metadata fails loud, never as zero", async (t) => {
   // Negative: silent zero would flip quota/revoke/qualify CAS reads.
-  const { db } = await openAdapter(t, { dropMeta: true });
+  const faults = {};
+  const { db } = await openAdapter(t, faults);
+  faults.dropMeta = true;
   await assert.rejects(
     db.run("DELETE FROM daily_counts"), /missing integer changes metadata/);
   await assert.rejects(
@@ -178,7 +182,9 @@ test("G2B-D-G2: non-integer changes metadata is rejected", async (t) => {
 });
 
 test("G2B-D-G3: missing results array fails loud", async (t) => {
-  const { db } = await openAdapter(t, { dropResults: true });
+  const faults = {};
+  const { db } = await openAdapter(t, faults);
+  faults.dropResults = true;
   await assert.rejects(db.all("SELECT 1"), /missing results array/);
   await assert.rejects(
     db.batch([{ sql: "SELECT 1", mode: "all" }]), /missing results array/);
@@ -417,16 +423,16 @@ test("G2B-D-L1: hostile retrieval inputs never reach SQL", async (t) => {
 
 // ---------- N. migration consistency ----------
 
-function migrationSQL() {
+function migrationSQL(name) {
   const dir = dirname(fileURLToPath(import.meta.url));
-  return readFileSync(join(dir, "..", "migrations", "001_init.sql"), "utf8");
+  return readFileSync(join(dir, "..", "migrations", name), "utf8");
 }
 
-test("G2B-D-N1: 001_init.sql applies via exec and serves the API", async (t) => {
+test("G2B-D-N1: migration chain applies via exec and serves the API", async (t) => {
   const mock = openMockD1Binding();
   t.after(() => mock.close());
   const db = openD1(mock.binding);
-  await db.exec(migrationSQL());
+  await db.exec(migrationSQL("001_init.sql"));
   const tables = (await db.all(
     "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
   )).map((r) => r.name);
@@ -434,7 +440,10 @@ test("G2B-D-N1: 001_init.sql applies via exec and serves the API", async (t) => 
     "submissions"]) {
     assert.ok(tables.includes(name), `missing table ${name}`);
   }
-  // The migrated schema serves a real submission round-trip.
+  // The full chain serves a real submission round-trip: 001 alone
+  // no longer carries the columns the API writes (PUB-02).
+  await db.exec(migrationSQL("002_eligibility_audit_trigger.sql"));
+  await db.exec(migrationSQL("003_evidence_origin.sql"));
   const deps = makeDeps();
   await seedInstall(db, deps, "install-1", "token-one");
   const id = await submitValid(db, deps, "token-one", freshRun());
@@ -445,11 +454,19 @@ test("G2B-D-N2: repeat migration application preserves data", async (t) => {
   const mock = openMockD1Binding();
   t.after(() => mock.close());
   const db = openD1(mock.binding);
-  await db.exec(migrationSQL());
+  await db.exec(migrationSQL("001_init.sql"));
+  await db.exec(migrationSQL("002_eligibility_audit_trigger.sql"));
+  await db.exec(migrationSQL("003_evidence_origin.sql"));
   const deps = makeDeps();
   await seedInstall(db, deps, "install-1", "token-one");
   await submitValid(db, deps, "token-one", freshRun());
-  await db.exec(migrationSQL());
+  // 001/002 stay IF NOT EXISTS-safe to re-execute; 003's ALTERs are
+  // journal-guarded instead (PUB-02), so a bare re-exec must fail
+  // WITHOUT touching data.
+  await db.exec(migrationSQL("001_init.sql"));
+  await db.exec(migrationSQL("002_eligibility_audit_trigger.sql"));
+  await assert.rejects(db.exec(migrationSQL("003_evidence_origin.sql")),
+    /duplicate column name/);
   const count = await db.get("SELECT COUNT(*) AS n FROM submissions");
   assert.equal(count.n, 1);
 });

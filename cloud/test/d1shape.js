@@ -5,6 +5,9 @@
 // satisfy. SQL execution underneath is node:sqlite; this proves
 // INTERFACE compatibility, never D1 service behavior (error text,
 // limits, contention, replication all need staging qualification).
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { openDatabase, initSchema } from "../db.js";
 
 // Staging-extensible mapping: observed real-D1 error shapes
@@ -86,8 +89,21 @@ export function openD1Shape(filename = ":memory:") {
   };
 }
 
+// PUB-02: the D1-shape suite calibrates adapter behavior WITHOUT
+// the 002 audit trigger (history assertions in G2-C assume its
+// absence), but submissions now require the 003 columns. Apply
+// 003 alone: current columns, provenance triggers live, audit
+// trigger absent. Production never holds this hybrid (the journal
+// applies in chain order); it is a test-only calibration choice.
+export async function applyProvenanceColumns(db) {
+  const dir = join(dirname(fileURLToPath(import.meta.url)), "..",
+    "migrations");
+  await db.exec(readFileSync(join(dir, "003_evidence_origin.sql"), "utf8"));
+}
+
 export async function openD1ShapeTestDb() {
   const db = openD1Shape(":memory:");
   await initSchema(db);
+  await applyProvenanceColumns(db);
   return db;
 }

@@ -44,7 +44,7 @@ async function seed3(db, deps) {
   const tokens = { 1: "sched-tok-1", 2: "sched-tok-2",
     3: "sched-tok-3" };
   for (let i = 1; i <= 3; i++) {
-    await seedInstall(db, deps, `sched-install-${i}`, tokens[i]);
+    await seedInstall(db, deps, `sched-install-${i}`, tokens[i], "device_contribution");
   }
   return tokens;
 }

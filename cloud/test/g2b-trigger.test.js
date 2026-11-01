@@ -23,6 +23,9 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const MIGRATION_002 = readFileSync(
   join(HERE, "..", "migrations", "002_eligibility_audit_trigger.sql"),
   "utf8");
+const MIGRATION_003 = readFileSync(
+  join(HERE, "..", "migrations", "003_evidence_origin.sql"),
+  "utf8");
 const PROMPT_B = "b".repeat(64);
 const AT_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
 let runCounter = 9000;
@@ -38,7 +41,7 @@ function freshRun() {
 async function seed3(db, deps) {
   const tokens = { 1: "trig-tok-1", 2: "trig-tok-2", 3: "trig-tok-3" };
   for (let i = 1; i <= 3; i++) {
-    await seedInstall(db, deps, `trig-install-${i}`, tokens[i]);
+    await seedInstall(db, deps, `trig-install-${i}`, tokens[i], "device_contribution");
   }
   return tokens;
 }
@@ -517,6 +520,10 @@ test("GT-19: pre-002 database loses audit; 002 restores it", async (t) => {
   const db = openDatabase(":memory:");
   t.after(() => db.close());
   await initSchema(db);
+  // The faithful "pre-002" state under the current chain: base
+  // tables plus provenance columns (003 has no 002 dependency),
+  // audit trigger absent. Submissions work; audit is lost.
+  await db.exec(MIGRATION_003);
   const deps = makeDeps();
   const tokens = await seed3(db, deps);
   const [idV1] = await submitN(db, deps, tokens, 1);
@@ -524,7 +531,7 @@ test("GT-19: pre-002 database loses audit; 002 restores it", async (t) => {
   assert.equal(await eligibilityOf(db, idV1), "PUBLISHED");
   assert.deepEqual(await trailOf(db, idV1), ["SUBMITTED"],
     "code without migration 002 cannot audit: deploy 002 first");
-  await applyMigrations(db);
+  await db.exec(MIGRATION_002);
   const [idV2] = await submitN(db, deps, tokens, 1);
   await qualify(db, deps);
   assert.deepEqual(await trailOf(db, idV2),
@@ -541,9 +548,10 @@ test("GT-20: migration chain is idempotent with data", async (t) => {
   await applyMigrations(db);
   await applyMigrations(db);
   const triggers = await db.all(
-    "SELECT name FROM sqlite_master WHERE type = 'trigger'");
+    "SELECT name FROM sqlite_master WHERE type = 'trigger' ORDER BY name ASC");
   assert.deepEqual(triggers.map((r) => r.name),
-    ["trg_eligibility_audit"]);
+    ["trg_eligibility_audit", "trg_install_kind_frozen",
+      "trg_submission_origin_check", "trg_submission_origin_frozen"]);
   assert.equal((await db.get(
     "SELECT COUNT(*) AS n FROM submissions")).n, 2);
   await qualify(db, deps);
@@ -705,15 +713,17 @@ test("G2B-D-N3: 002 applies via D1 exec with data preserved",
     t.after(() => mock.close());
     const db = openD1(mock.binding);
     await initSchema(db);
+    await db.exec(MIGRATION_003);
     const deps = makeDeps();
-    await seedInstall(db, deps, "n3-install-1", "n3-token-1");
+    await seedInstall(db, deps, "n3-install-1", "n3-token-1",
+      "device_contribution");
     const id = await submitValid(db, deps, "n3-token-1", freshRun());
     await db.exec(MIGRATION_002);
     await db.exec(MIGRATION_002);
     const triggers = await db.all(
       "SELECT name FROM sqlite_master WHERE type = 'trigger'");
-    assert.deepEqual(triggers.map((r) => r.name),
-      ["trg_eligibility_audit"]);
+    assert.equal(triggers.map((r) => r.name)
+      .filter((n) => n === "trg_eligibility_audit").length, 1);
     assert.equal((await db.get(
       "SELECT eligibility FROM submissions WHERE submission_id = ?",
       id)).eligibility, "SUBMITTED");
@@ -903,7 +913,8 @@ test("RW-07: adapter path revokes and freezes exactly", async (t) => {
   await initSchema(db);
   await applyMigrations(db);
   const deps = makeDeps();
-  await seedInstall(db, deps, "rw-install-1", "rw-token-1");
+  await seedInstall(db, deps, "rw-install-1", "rw-token-1",
+    "device_contribution");
   const id = await submitValid(db, deps, "rw-token-1", freshRun());
   const rep = await qualify(db, deps);
   assert.equal(rep.promoted.length, 3);

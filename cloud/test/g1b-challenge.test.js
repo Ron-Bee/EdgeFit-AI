@@ -18,7 +18,10 @@ let runCounter = 0;
 async function setup() {
   const deps = makeDeps();
   const db = await openTestDb();
-  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, `test-token-${i}`);
+  // Device installs: these suites assert published-surface mechanics,
+  // so fixtures must clear the provenance gate (consent-version and
+  // cohort behavior under test is unchanged).
+  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, `test-token-${i}`, "device_contribution");
   return { deps, db };
 }
 
@@ -223,7 +226,7 @@ test("G1B-X6: v2 cohort identity is stable and unambiguous", async () => {
   // Same cohort rebuilt in a fresh database hashes identically.
   const deps2 = makeDeps();
   const db2 = await openTestDb();
-  for (let i = 1; i <= 3; i++) await seedInstall(db2, deps2, `install-${i}`, `test-token-${i}`);
+  for (let i = 1; i <= 3; i++) await seedInstall(db2, deps2, `install-${i}`, `test-token-${i}`, "device_contribution");
   for (let i = 0; i < 5; i++) await pub(db2, deps2, (i % 3) + 1);
   await qualify(db2, deps2);
   const agg2 = await get(db2, deps2, "/v1/benchmarks/aggregates", { model_sha: MODEL_A });

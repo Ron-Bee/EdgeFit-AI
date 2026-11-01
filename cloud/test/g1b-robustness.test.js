@@ -11,7 +11,9 @@ let runCounter = 0;
 async function setup() {
   const deps = makeDeps();
   const db = await openTestDb();
-  await seedInstall(db, deps, "install-1", "token-one");
+  // Device install: corruption/hold mechanics are asserted around
+  // rows that must otherwise promote normally.
+  await seedInstall(db, deps, "install-1", "token-one", "device_contribution");
   return { deps, db };
 }
 

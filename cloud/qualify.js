@@ -9,7 +9,8 @@
 // deferrals leave no history row (nothing transitioned).
 // Corrupt stored JSON always holds its row, never aborts a pass.
 
-import { MAX_PLAUSIBLE_TPS, isPublishableVersion, validateSubmission } from "./validate.js";
+import { MAX_PLAUSIBLE_TPS, isPublishableVersion, validateSubmission,
+  PUBLISHABLE_ORIGIN } from "./validate.js";
 
 export const BATCH_LIMIT = 1000;
 /** Relative tolerance for tps vs tokens*1000/ms consistency. */
@@ -233,6 +234,19 @@ export async function runQualification(db, nowMs, deps, maxRows = BATCH_LIMIT) {
             submission_id: id,
             state: "QUALIFIED",
             reason: "consent version not approved for publication",
+          });
+          continue;
+        }
+        // Provenance gate (PUB-02): only device_contribution rows
+        // may publish, whatever the consent version. Checked after
+        // the version hold so existing diagnostics keep their
+        // meaning; synthetic and legacy rows hold here even when
+        // their version is allowlisted.
+        if (live.origin !== PUBLISHABLE_ORIGIN) {
+          held.push({
+            submission_id: id,
+            state: "QUALIFIED",
+            reason: "evidence origin not approved for publication",
           });
           continue;
         }

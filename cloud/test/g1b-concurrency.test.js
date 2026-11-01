@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { openDatabase, initSchema } from "../db.js";
 import {
   NOW, makeDeps, openTestDb, seedInstall, makeResult, makeEnvelope, post,
-  submitValid, qualify,
+  submitValid, qualify, applyMigrations,
 } from "./helpers.js";
 
 let fileCounter = 0;
@@ -24,6 +24,7 @@ async function openShared(t) {
   const path = join(dir, `shared-${process.pid}-${fileCounter}.db`);
   const a = openDatabase(path);
   await initSchema(a);
+  await applyMigrations(a);
   const b = openDatabase(path);
   await a.exec("PRAGMA busy_timeout = 5000");
   await b.exec("PRAGMA busy_timeout = 100");
@@ -38,7 +39,7 @@ async function openShared(t) {
 const TOKENS = { 1: "token-one", 2: "token-two", 3: "token-three" };
 
 async function seed3(db, deps) {
-  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, TOKENS[i]);
+  for (let i = 1; i <= 3; i++) await seedInstall(db, deps, `install-${i}`, TOKENS[i], "device_contribution");
 }
 
 // Forwards the adapter interface; hooks observe (never rewrite) statements.

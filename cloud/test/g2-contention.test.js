@@ -8,7 +8,7 @@ import { mkdirSync, unlinkSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { openDatabase, initSchema } from "../db.js";
 import {
-  makeDeps, seedInstall, makeResult, makeEnvelope, post,
+  makeDeps, seedInstall, makeResult, makeEnvelope, post, applyMigrations,
 } from "./helpers.js";
 
 test("G2-L1: locked database answers 503, stores nothing, recovers", async (t) => {
@@ -17,6 +17,7 @@ test("G2-L1: locked database answers 503, stores nothing, recovers", async (t) =
   const path = join(dir, `contention-${process.pid}.db`);
   const a = openDatabase(path);
   await initSchema(a);
+  await applyMigrations(a);
   const b = openDatabase(path);
   t.after(() => {
     try { a.close(); } catch { /* ignore */ }
