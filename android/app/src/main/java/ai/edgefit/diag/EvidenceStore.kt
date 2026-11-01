@@ -47,6 +47,19 @@ class EvidenceStore(rootDir: File) {
         val consentAcceptedAtUtc: String?
     )
 
+    /**
+     * Minimal retained withdrawal record: submission
+     * identity only. No benchmark bytes, no token
+     * (the install vault authorizes withdrawal).
+     */
+    data class Withdrawal(
+        val runId: String,
+        val submissionId: String,
+        val serverEligibility: String?,
+        val lastStatusAtUtc: String?,
+        val deletedLocalAtUtc: String
+    )
+
     private val dir = File(rootDir, "evidence").apply { mkdirs() }
 
     fun isValidId(id: String): Boolean = ID.matches(id)
@@ -76,6 +89,86 @@ class EvidenceStore(rootDir: File) {
         bench.delete()
         meta.delete()
         return had
+    }
+
+    /**
+     * Deletes one local result, retaining a minimal
+     * withdrawal record when the record was shared.
+     * Returns the retained record, or null when
+     * nothing needed retention (unshared/missing).
+     * Invalid ids throw [BadId].
+     */
+    @Synchronized
+    fun deleteRetainingWithdrawal(id: String, nowMs: Long): Withdrawal? {
+        if (!isValidId(id)) throw BadId(id)
+        val record = try {
+            load(id)
+        } catch (_: NotFound) {
+            return null
+        }
+        val submissionId = record.submissionId
+        if (submissionId == null) {
+            delete(id)
+            return null
+        }
+        val deletedAt = BenchResultParse.formatIsoUtc(nowMs)
+        val sidecar = linkedMapOf<String, Any?>(
+            "schema_version" to 1,
+            "run_id" to id,
+            "submission_id" to submissionId,
+            "server_eligibility" to record.serverEligibility,
+            "last_status_at_utc" to record.lastStatusAtUtc,
+            "deleted_local_at_utc" to deletedAt)
+        atomicWrite(
+            File(dir, "$id.withdraw.json"),
+            SessionJson.stringify(sidecar).toByteArray(Charsets.UTF_8), id)
+        File(dir, "$id.bench.json").delete()
+        File(dir, "$id.meta.json").delete()
+        return Withdrawal(id, submissionId, record.serverEligibility,
+            record.lastStatusAtUtc, deletedAt)
+    }
+
+    fun listWithdrawals(): List<Withdrawal> =
+        (dir.listFiles { file ->
+            file.name.endsWith(".withdraw.json") &&
+                isValidId(file.name.removeSuffix(".withdraw.json"))
+        } ?: emptyArray()).mapNotNull {
+            try {
+                loadWithdrawal(it.name.removeSuffix(".withdraw.json"))
+            } catch (_: Exception) {
+                null
+            }
+        }.sortedBy { it.runId }
+
+    @Synchronized
+    fun loadWithdrawal(id: String): Withdrawal {
+        if (!isValidId(id)) throw BadId(id)
+        val file = File(dir, "$id.withdraw.json")
+        if (!file.isFile) throw NotFound(id)
+        val root = try {
+            SessionJson.parse(file.readText(Charsets.UTF_8))
+        } catch (e: SessionJson.JsonError) {
+            throw StoreError("unreadable withdrawal record")
+        } as? Map<*, *> ?: throw StoreError(
+            "unreadable withdrawal record")
+        val submissionId = root["submission_id"] as? String
+            ?: throw StoreError("withdrawal lacks submission id")
+        return Withdrawal(
+            runId = id,
+            submissionId = submissionId,
+            serverEligibility = root["server_eligibility"] as? String,
+            lastStatusAtUtc = root["last_status_at_utc"] as? String,
+            deletedLocalAtUtc = (root["deleted_local_at_utc"] as? String)
+                ?: throw StoreError("withdrawal lacks timestamp"))
+    }
+
+    @Synchronized
+    fun deleteWithdrawal(id: String): Boolean {
+        if (!isValidId(id)) throw BadId(id)
+        val file = File(dir, "$id.withdraw.json")
+        if (!file.isFile) return false
+        file.delete()
+        return true
     }
 
     /**

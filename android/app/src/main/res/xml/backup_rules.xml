@@ -5,4 +5,5 @@
     <exclude domain="file" path="sessions/" />
     <exclude domain="file" path="sessions-quarantine/" />
     <exclude domain="file" path="meta_key.bin" />
+    <exclude domain="file" path="global_upload_token.bin" />
 </full-backup-content>

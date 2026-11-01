@@ -152,4 +152,75 @@ class EvidenceStoreTest {
         } catch (_: EvidenceStore.BadId) {
         }
     }
+
+    @Test
+    fun `deleteRetainingWithdrawal keeps submission-only record`() {
+        val store = freshStore()
+        store.store(BenchResultParseTest.validDoc(),
+            EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
+        store.updateContribution("BENCH-TEST-001",
+            state = GlobalContract.LOCAL_SHARED, submissionId = "SUB-1",
+            serverEligibility = GlobalContract.SUBMITTED)
+        val w = store.deleteRetainingWithdrawal(
+            "BENCH-TEST-001", BenchResultParseTest.NOW)
+        assertTrue(w != null)
+        assertEquals("SUB-1", w!!.submissionId)
+        assertTrue(store.listIds().isEmpty())
+        assertEquals(listOf("BENCH-TEST-001"),
+            store.listWithdrawals().map { it.runId })
+        try {
+            store.load("BENCH-TEST-001")
+            fail("expected NotFound")
+        } catch (_: EvidenceStore.NotFound) {
+        }
+    }
+
+    @Test
+    fun `withdrawal record carries no benchmark bytes`() {
+        val dir = Files.createTempDirectory("evidence-test").toFile()
+        val store = EvidenceStore(dir)
+        store.store(BenchResultParseTest.validDoc(),
+            EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
+        store.updateContribution("BENCH-TEST-001",
+            state = GlobalContract.LOCAL_SHARED, submissionId = "SUB-1",
+            serverEligibility = GlobalContract.SUBMITTED)
+        store.deleteRetainingWithdrawal(
+            "BENCH-TEST-001", BenchResultParseTest.NOW)
+        val text = File(dir, "evidence/BENCH-TEST-001.withdraw.json").readText()
+        assertTrue(!text.contains("measurements"))
+        assertTrue(text.contains("SUB-1"))
+    }
+
+    @Test
+    fun `deleteRetainingWithdrawal unshared just deletes`() {
+        val store = freshStore()
+        store.store(BenchResultParseTest.validDoc(),
+            EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
+        assertTrue(store.deleteRetainingWithdrawal(
+            "BENCH-TEST-001", BenchResultParseTest.NOW) == null)
+        assertTrue(store.listIds().isEmpty())
+        assertTrue(store.listWithdrawals().isEmpty())
+    }
+
+    @Test
+    fun `deleteRetainingWithdrawal missing returns null`() {
+        assertTrue(freshStore().deleteRetainingWithdrawal(
+            "BENCH-NOPE", BenchResultParseTest.NOW) == null)
+    }
+
+    @Test
+    fun `withdrawal dismiss round trip`() {
+        val store = freshStore()
+        store.store(BenchResultParseTest.validDoc(),
+            EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
+        store.updateContribution("BENCH-TEST-001",
+            state = GlobalContract.LOCAL_SHARED, submissionId = "SUB-1",
+            serverEligibility = GlobalContract.SUBMITTED)
+        store.deleteRetainingWithdrawal(
+            "BENCH-TEST-001", BenchResultParseTest.NOW)
+        assertTrue(store.deleteWithdrawal("BENCH-TEST-001"))
+        assertTrue(store.listWithdrawals().isEmpty())
+        assertTrue(!store.deleteWithdrawal("BENCH-TEST-001"))
+    }
+
 }

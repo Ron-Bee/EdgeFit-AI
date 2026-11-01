@@ -334,4 +334,40 @@ class GlobalClientTest {
             .reason.contains("not yet owner-approved"))
         assertEquals(0, fake.calls.size)
     }
+
+    @Test
+    fun `revokeWithdrawal confirms revocation by id`() {
+        val dir = Files.createTempDirectory("global-test").toFile()
+        val store = EvidenceStore(dir)
+        val fake = FakeGlobalTransport()
+        val vault = GlobalTokenVault(dir, FakeSeal())
+        vault.setSessionToken(TOKEN)
+        val client = GlobalClient(store, fake, vault, { ORIGIN },
+            { BenchResultParseTest.NOW }, { true })
+        fake.script.add(GlobalHttpResult(
+            200,
+            """{"submission_id":"SUB-9","eligibility":"REVOKED"}""",
+            null))
+        val outcome = client.revokeWithdrawal("SUB-9")
+        assertTrue(outcome is GlobalClient.RevokeOutcome.Revoked)
+        assertEquals("DELETE", fake.calls.single().method)
+    }
+
+    @Test
+    fun `revokeWithdrawal mismatch stays failed`() {
+        val dir = Files.createTempDirectory("global-test").toFile()
+        val store = EvidenceStore(dir)
+        val fake = FakeGlobalTransport()
+        val vault = GlobalTokenVault(dir, FakeSeal())
+        vault.setSessionToken(TOKEN)
+        val client = GlobalClient(store, fake, vault, { ORIGIN },
+            { BenchResultParseTest.NOW }, { true })
+        fake.script.add(GlobalHttpResult(
+            200,
+            """{"submission_id":"SUB-9","eligibility":"SUBMITTED"}""",
+            null))
+        val outcome = client.revokeWithdrawal("SUB-9")
+        assertTrue(outcome is GlobalClient.RevokeOutcome.Failed)
+    }
+
 }

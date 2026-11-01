@@ -2391,6 +2391,15 @@ class MainActivity : Activity() {
                     } catch (_: Exception) {
                         null
                     }
+                } + try {
+                    evidenceStore.listWithdrawals()
+                } catch (_: Exception) {
+                    emptyList<EvidenceStore.Withdrawal>()
+                }.map { w ->
+                    w.runId to ("Local copy deleted - server: " +
+                        GlobalContract.displayServerState(
+                            w.serverEligibility) +
+                        " - withdrawal available")
                 }
             } catch (e: Exception) {
                 runOnUiThread {
@@ -2412,7 +2421,12 @@ class MainActivity : Activity() {
     private fun deleteLocalResult(id: String, wasShared: Boolean) {
         Thread({
             val deleted = try {
-                evidenceStore.delete(id)
+                if (wasShared) {
+                    evidenceStore.deleteRetainingWithdrawal(
+                        id, System.currentTimeMillis()) != null
+                } else {
+                    evidenceStore.delete(id)
+                }
             } catch (e: Exception) {
                 runOnUiThread {
                     statusText("Local delete failed: " + e.message)
@@ -2423,7 +2437,7 @@ class MainActivity : Activity() {
                 if (!deleted) {
                     statusText("Local result already gone.")
                 } else if (wasShared) {
-                    statusText("Local result deleted. Cloud contribution retained: use Withdraw consent to remove it server-side.")
+                    statusText("Local result deleted. Withdrawal record kept: open Contribution history to withdraw.")
                 } else {
                     statusText("Local result deleted.")
                 }
@@ -2432,13 +2446,66 @@ class MainActivity : Activity() {
         }, "edgefit-evidence").start()
     }
 
+    /** Actions for a locally deleted shared record.
+     * Withdrawal runs against the retained submission id;
+     * the tombstone clears only on terminal REVOKED
+     * acknowledgement, never on failure. */
+    private fun openWithdrawalRecord(id: String) {
+        val w = try {
+            evidenceStore.loadWithdrawal(id)
+        } catch (e: Exception) {
+            statusText("Evidence unavailable: " + e.message)
+            return
+        }
+        CardDialog.show(
+            this, "Withdrawable contribution $id",
+            listOf(InsightCards.Section(
+                "Local copy deleted",
+                listOf(
+                    InsightCards.Row("Submission", w.submissionId),
+                    InsightCards.Row(
+                        "Server state",
+                        GlobalContract.displayServerState(
+                            w.serverEligibility)),
+                    InsightCards.Row(
+                        "Deleted locally",
+                        w.deletedLocalAtUtc)))),
+            listOf(CardDialog.Action("Withdraw consent") {
+                Thread({
+                    val outcome = globalClient.revokeWithdrawal(
+                        w.submissionId)
+                    runOnUiThread {
+                        when (outcome) {
+                            GlobalClient.RevokeOutcome.Revoked -> {
+                                try {
+                                    evidenceStore.deleteWithdrawal(id)
+                                } catch (_: Exception) {
+                                }
+                                statusText(
+                                    "Revocation confirmed REVOKED; " +
+                                    "withdrawal record cleared.")
+                            }
+                            is GlobalClient.RevokeOutcome.Failed ->
+                                statusText(
+                                    "Withdraw failed (" +
+                                    outcome.code + "): " +
+                                    outcome.message +
+                                    ". Record kept for retry.")
+                        }
+                        refreshEvidenceLine()
+                    }
+                }, "edgefit-global").start()
+            }))
+    }
+
     private fun showHistoryActions(id: String) {
         val record = try {
             evidenceStore.load(id)
         } catch (e: Exception) {
-            statusText("Evidence unavailable: ${e.message}")
+            openWithdrawalRecord(id)
             return
         }
+
         if (record.submissionId == null) {
             CardDialog.show(
                 this, "Local result $id",

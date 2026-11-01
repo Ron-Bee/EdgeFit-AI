@@ -393,6 +393,25 @@ class GlobalClient(
         if (submissionId == null) {
             return RevokeOutcome.Failed("NOT_SHARED", "nothing to withdraw")
         }
+        val outcome = revokeRemote(submissionId)
+        if (outcome is RevokeOutcome.Revoked) {
+            store.updateContribution(
+                runId, serverEligibility = GlobalContract.REVOKED,
+                statusAtUtc = BenchResultParse.formatIsoUtc(nowMs()))
+        }
+        return outcome
+    }
+
+    /**
+     * Withdraws by submission id for locally deleted records
+     * with a retained withdrawal record. No local evidence
+     * state to update; the caller clears the tombstone on
+     * terminal REVOKED acknowledgement.
+     */
+    fun revokeWithdrawal(submissionId: String): RevokeOutcome =
+        revokeRemote(submissionId)
+
+    private fun revokeRemote(submissionId: String): RevokeOutcome {
         val origin = getOrigin()
         val url = if (origin == null) null
         else GlobalContract.submissionUrl(origin, submissionId)
@@ -437,9 +456,6 @@ class GlobalClient(
                 return RevokeOutcome.Failed(
                     "MISMATCH", "server did not confirm revocation")
             }
-            store.updateContribution(
-                runId, serverEligibility = GlobalContract.REVOKED,
-                statusAtUtc = BenchResultParse.formatIsoUtc(nowMs()))
             return RevokeOutcome.Revoked
         } finally {
             synchronized(this) { inFlight = false }
