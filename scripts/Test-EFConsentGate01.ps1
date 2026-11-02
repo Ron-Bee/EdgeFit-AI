@@ -92,6 +92,25 @@ $live = Get-Content (Join-Path (Split-Path $PSScriptRoot -Parent) 'android/app/s
 $r = Invoke-Gate $live $GOOD_APPROVAL $SHA
 Assert-True ($r[0] -eq $true) 'live source passes'
 
+# 10. Native stderr progress does not fault; exit code stays real.
+# Runs under $ErrorActionPreference = 'Stop' like the installer.
+$probe = Invoke-ToolText 'cmd.exe' @('/c', 'echo OUT-probe && echo ERR-probe 1>&2')
+Assert-True (($probe.Exit -eq 0) -and (($probe.Lines -join ' ') -match 'OUT-probe') -and (($probe.Lines -join ' ') -match 'ERR-probe')) 'stderr progress tolerated with real exit'
+
+# 11. Genuine nonzero exits surface.
+$probe = Invoke-ToolText 'cmd.exe' @('/c', 'exit 3')
+Assert-True ($probe.Exit -eq 3) 'nonzero exit surfaces'
+
+# 12. Missing executable surfaces as start fault, never throws.
+$probe = Invoke-ToolText 'ef-no-such-tool-xyz.exe' @('fetch')
+Assert-True ($probe.Exit -eq 999) 'missing tool surfaces 999'
+
+# 13. Installer wires gate failure to Fail (structural guardrail:
+# deleting the block must break this test, so a gate failure can
+# never silently fall through to build/install).
+$installer = Get-Content (Join-Path $PSScriptRoot 'Invoke-EFRecoveryInstall01.ps1') -Raw
+Assert-True (($installer -match 'Test-EFConsentActivation') -and ($installer -match 'consent activation rejected')) 'gate failure blocks install'
+
 Write-Output ("PASS={0} FAIL={1}" -f $SCRIPT:Pass, $SCRIPT:Fail)
 if ($SCRIPT:Fail -gt 0) {
     Write-Output ("failures: " + ($SCRIPT:Failures -join '; '))

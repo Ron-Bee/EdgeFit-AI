@@ -78,9 +78,9 @@ function Run-Step([string]$label, [scriptblock]$cmd) {
 # present (via java -jar). $LASTEXITCODE still reflects the tool.
 function Invoke-Signer([string[]]$SignerArgs) {
     if ($script:signerIsJar) {
-        return & $script:javaExe -jar $script:signerPath @SignerArgs 2>&1
+        return Invoke-ToolText $script:javaExe (@('-jar', $script:signerPath) + $SignerArgs)
     }
-    return & $script:signerPath @SignerArgs 2>&1
+    return Invoke-ToolText $script:signerPath $SignerArgs
 }
 
 # Any unexpected terminating fault (including a native tool's
@@ -92,7 +92,9 @@ trap { Fail "unexpected fault: $($_.Exception.Message)" }
 # ---------- 0. repo + report dir ----------
 
 Step '0. Repository baseline'
-$branch = (git branch --show-current 2>&1)
+$branchOut = Invoke-ToolText 'git' @('branch', '--show-current')
+if ($branchOut.Exit -ne 0) { Fail 'git branch check failed' }
+$branch = ($branchOut.Lines | Select-Object -First 1)
 if ($branch -ne $ExpectedBranch) {
     Fail "branch is '$branch', expected '$ExpectedBranch'"
 }
@@ -129,9 +131,11 @@ Note 'https-only: OK (source)'
 $consentBranch = 'implement/ef-global-01-2026-10-30'
 $consentVersion = 'ef-consent-01'
 $consentSha = 'B83E78FBF78AD0FBE4E77CFBBCF37709519A4305A45D86FFCCFF6C72E78CDB21'
-& git fetch origin $consentBranch 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) { Fail "consent evidence fetch failed for $consentBranch" }
-$approvalDoc = (& git show "origin/${consentBranch}:docs/ef-consent-01-approval.md" 2>&1) -join "`n"
+$consentFetch = Invoke-ToolText 'git' @('fetch', 'origin', $consentBranch)
+if ($consentFetch.Exit -ne 0) { Fail "consent evidence fetch failed for $consentBranch" }
+$consentShow = Invoke-ToolText 'git' @('show', "origin/${consentBranch}:docs/ef-consent-01-approval.md")
+if ($consentShow.Exit -ne 0) { Fail 'consent approval file unreadable from backend branch' }
+$approvalDoc = $consentShow.Lines -join "`n"
 $policyTmp = Join-Path $ReportDir 'ef-consent-01-policy.bin'
 $bin = Invoke-NativeBinary 'git' "cat-file -p origin/${consentBranch}:docs/ef-consent-01-policy.md" $policyTmp 60
 if ($bin.Exit -ne 0 -or $bin.Bytes -le 0) { Fail 'consent policy blob unreadable from backend branch' }
@@ -222,8 +226,8 @@ if ($candId -ne $ExpectedAppId) {
 }
 $certs = Invoke-Signer @('verify', '--print-certs',
     '--min-sdk-version', '26', $ApkPath)
-if ($LASTEXITCODE -ne 0) { Fail 'apksigner verify failed on candidate' }
-$candCert = ($certs | Where-Object { $_ -match 'SHA-256 digest: (\S+)' } |
+if ($certs.Exit -ne 0) { Fail 'apksigner verify failed on candidate' }
+$candCert = ($certs.Lines | Where-Object { $_ -match 'SHA-256 digest: (\S+)' } |
     ForEach-Object { $Matches[1] } | Select-Object -First 1)
 if (-not $candCert) { Fail 'candidate certificate digest unreadable' }
 Note "candidate cert sha256: $candCert"
@@ -325,8 +329,8 @@ $pull = Invoke-ToolText $adb @('-s', $Serial, 'pull', $deviceApk, $pulledApk)
 if ($pull.Exit -ne 0) { Fail 'could not pull installed APK for cert check' }
 $instCerts = Invoke-Signer @('verify', '--print-certs',
     '--min-sdk-version', '26', $pulledApk)
-if ($LASTEXITCODE -ne 0) { Fail 'apksigner verify failed on installed APK' }
-$instCert = ($instCerts | Where-Object { $_ -match 'SHA-256 digest: (\S+)' } |
+if ($instCerts.Exit -ne 0) { Fail 'apksigner verify failed on installed APK' }
+$instCert = ($instCerts.Lines | Where-Object { $_ -match 'SHA-256 digest: (\S+)' } |
     ForEach-Object { $Matches[1] } | Select-Object -First 1)
 if (-not $instCert) { Fail 'installed certificate digest unreadable' }
 Note "installed cert sha256: $instCert"
