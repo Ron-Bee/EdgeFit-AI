@@ -4,16 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Evidence status — EdgeFit AI</title>
-<meta name="description" content="What global evidence EdgeFit AI has published: nothing yet. Staging state, quorum rules, and what publication requires.">
+<meta name="description" content="What global evidence EdgeFit AI has published: nothing yet. Deployed backend state, quorum rules, and what publication requires.">
+<meta name="theme-color" content="#081427">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/brand/favicon-16.png">
+<link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+<meta property="og:title" content="EdgeFit AI — Evidence Status">
+<meta property="og:description" content="Zero published cohorts. Deployed backend, honest empty dashboard, clear publication gates.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://edgefit-ai.pages.dev/assets/brand/edgefit-og-1200.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
 <nav aria-label="Main">
-<a class="brand" href="index.html"><b>EdgeFit</b> AI</a>
+<a class="brand" href="index.html"><img src="assets/brand/icon-64.png" width="30" height="30" alt="EdgeFit AI app icon"><span><b>EdgeFit</b> AI</span></a>
 <a href="methodology.html">Methodology</a>
 <a href="evidence.html" aria-current="page">Evidence status</a>
 <a href="dashboard.html">Dashboard</a>
+<a href="download.html">Download</a>
 </nav>
 </header>
 <main class="prose">
@@ -34,17 +44,21 @@ has to happen before a number appears here.</p>
 </div>
 
 <div class="card">
-<h3><span class="dot good"></span>Staging backend <span class="status-tag ok">under test</span></h3>
-<p>Cloudflare Workers + D1, private and not publicly queryable. This page
-makes no calls to it. The pipeline it runs — validate, deduplicate,
-qualify, audit — is the same one genuine contributions will use.</p>
+<h3><span class="dot good"></span>Deployed backend <span class="status-tag ok">live, empty</span></h3>
+<p>Three Cloudflare Workers plus D1, with a public read-only API and an
+authenticated ingest gateway. The public endpoints are live and return
+honest empty results (<code class="inline">artifacts: []</code>):
+staging holds only synthetic test fixtures, the publication allowlist is
+empty, and consent is still proposed — so zero genuine rows exist to
+publish. Backend test suite: 297/297.</p>
 </div>
 
 <div class="card">
 <h3><span class="dot warn"></span>Physical measurements <span class="status-tag pending">unqualified</span></h3>
 <p>Real benchmark runs collected locally during development on physical
-Android phones. Single-device and pre-consent-policy, so interesting to
-the developers — not evidence yet.</p>
+Android phones, including the six-run S22 Ultra study. Single-device and
+pre-consent-policy, so interesting to the developers — not global
+evidence yet.</p>
 </div>
 
 <div class="card">
@@ -52,7 +66,7 @@ the developers — not evidence yet.</p>
 <ul class="tight">
 <li>An approved consent policy (still under review).</li>
 <li>Genuine contributions through explicit per-submission consent.</li>
-<li>5+ eligible runs from 3+ independent installs in one exact cohort.</li>
+<li>5+ eligible runs from 3+ distinct installs in one exact cohort.</li>
 <li>Run-level drill-down stays disabled until its disclosure policy is approved.</li>
 </ul>
 </div>
@@ -65,7 +79,8 @@ pooled mean. Until then: counts without statistics, honestly labeled.</p>
 </div>
 </main>
 <footer>
-<p>EdgeFit AI — hackathon prototype. No published global statistics yet.</p>
+<p>EdgeFit AI — hackathon prototype. No published global statistics yet. ·
+<a href="https://github.com/Ron-Bee/EdgeFit-AI">Source on GitHub</a></p>
 </footer>
 </body>
 </html>

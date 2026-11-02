@@ -3,40 +3,83 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>EdgeFit AI — Evidence-based on-device inference</title>
-<meta name="description" content="EdgeFit AI is a hackathon prototype for evidence-based Android inference experiments: physical on-device benchmarks, explicit consent, and exact-cohort statistics.">
+<title>EdgeFit AI — Find the right AI model for your Android device</title>
+<meta name="description" content="EdgeFit AI measures your hardware, predicts inference with Meta AI, benchmarks locally, and compares results with real evidence.">
+<meta name="theme-color" content="#081427">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/brand/favicon-16.png">
+<link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+<meta property="og:title" content="EdgeFit AI — Hardware-Aware AI. Measured on Your Device.">
+<meta property="og:description" content="Measure your hardware. Predict inference with Meta AI. Benchmark locally. Compare results with real evidence.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://edgefit-ai.pages.dev/assets/brand/edgefit-og-1200.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
 <nav aria-label="Main">
-<a class="brand" href="index.html"><b>EdgeFit</b> AI</a>
+<a class="brand" href="index.html"><img src="assets/brand/icon-64.png" width="30" height="30" alt="EdgeFit AI app icon"><span><b>EdgeFit</b> AI</span></a>
 <a href="methodology.html">Methodology</a>
 <a href="evidence.html">Evidence status</a>
 <a href="dashboard.html">Dashboard</a>
+<a href="download.html">Download</a>
 </nav>
 </header>
 <main>
 <div class="hero">
 <div>
-<h1>Know what your phone can actually run</h1>
-<p class="lede">EdgeFit AI measures real language-model inference on
-physical Android phones — then proves which results are comparable.
-A prototype built for the Meta Global AI Developer Hackathon.</p>
+<h1>Find the right AI model for your Android device.</h1>
+<p class="lede">Measure your hardware. Predict inference with Meta AI.
+Benchmark locally. Compare results with real evidence.</p>
+<p>A prototype built for the Meta Global AI Developer Hackathon —
+real on-device llama.cpp inference, never simulated numbers.</p>
 <div class="cta-row">
-<a class="btn btn-primary" href="evidence.html">See evidence status</a>
-<a class="btn btn-ghost" href="methodology.html">How it works</a>
+<a class="btn btn-primary" href="download.html">Download for Android</a>
+<a class="btn btn-ghost" href="dashboard.html">Explore Global Evidence</a>
+<a class="btn btn-ghost" href="https://github.com/Ron-Bee/EdgeFit-AI">View GitHub</a>
 </div>
+<p class="caption" style="text-align:left">Demo video
+<span class="status-tag pending">coming soon</span> · Full technical
+walkthrough <span class="status-tag pending">coming soon</span></p>
 </div>
 <div>
 <div class="phone">
-<img src="assets/edgefit-home-android.jpg" width="955" height="2048" loading="eager" decoding="async" alt="EdgeFitDiag Home screen on a Samsung phone: device overview with CPU, RAM, battery and thermal metric cards">
+<img src="assets/edgefit-home-android.jpg" width="955" height="2048" loading="eager" decoding="async" alt="EdgeFit AI Home screen on a Samsung phone: device overview with CPU, RAM, battery and thermal metric cards">
 </div>
 <p class="caption">Captured on-device <span class="status-tag ok">real screenshot</span> — status bar and time are from the original capture.</p>
 </div>
 </div>
 
 <hr class="rule">
+
+<h2>Why Android? Hardware decides.</h2>
+<p>Android phones span an enormous range of CPUs, memory, storage, and
+thermal behavior. A model that flies on one phone may crawl on another —
+so EdgeFit starts from <em>your</em> measured hardware, not a
+leaderboard.</p>
+
+<h2>What EdgeFit does</h2>
+<div class="feature-grid">
+<div class="card"><h3>Hardware-aware model selection</h3>
+<p>Profiles your phone and recommends compatible local LLM candidates
+with explicit compatibility estimates.</p></div>
+<div class="card"><h3>Real on-device benchmarking</h3>
+<p>Runs genuine llama.cpp inference on the phone and records measured
+throughput with thermal and memory conditions.</p></div>
+<div class="card"><h3>Meta Muse Spark predictions</h3>
+<p>Predicts inference speed <em>before</em> each measurement, with
+uncertainty — then the phone checks the answer.</p></div>
+<div class="card"><h3>Predicted vs measured</h3>
+<p>Every prediction is stored first; error is computed deterministically
+by the host, never narrated by the model.</p></div>
+<div class="card"><h3>Agentic optimization, gated</h3>
+<p>Bounded experiment proposals with explicit approve / reject and a
+fixed attempt budget. Nothing auto-runs.</p></div>
+<div class="card"><h3>Privacy-first sharing</h3>
+<p>Results stay on-device until you approve per-submission sharing.
+Global aggregates publish only above quorum.</p></div>
+</div>
 
 <h2>Hardware-aware, like the app</h2>
 <p>The Android app starts from your device, not from a leaderboard. The
@@ -80,24 +123,39 @@ is simple size-versus-memory arithmetic.</p></noscript>
 <li><span class="step-num">3</span>Run a physical benchmark; results stay on-device.</li>
 <li><span class="step-num">4</span>Review measured throughput per session.</li>
 <li><span class="step-num">5</span>Optionally contribute with explicit consent
-<em>(in development; staging backend under test, not publicly
-queryable)</em>.</li>
+<em>(backend deployed; first genuine upload pending consent
+approval — see the <a href="dashboard.html">dashboard</a>)</em>.</li>
 </ol>
 <p class="caption">App sections, as shipped: Home · Benchmark · Sessions · Agent · Settings.</p>
 </div>
 <div>
 <div class="phone">
-<img src="assets/edgefit-benchmark-android.jpg" width="955" height="2048" loading="lazy" decoding="async" alt="EdgeFitDiag Benchmark screen: numbered Model, Configure and Run sections with model file and config actions">
+<img src="assets/edgefit-benchmark-android.jpg" width="955" height="2048" loading="lazy" decoding="async" alt="EdgeFit AI Benchmark screen: numbered Model, Configure and Run sections with model file and config actions">
 </div>
 <p class="caption">Captured on-device <span class="status-tag ok">real screenshot</span> — status bar and time are from the original capture.</p>
 </div>
 
 <h2>Meta Muse Spark, honestly scoped</h2>
 <p>EdgeFit uses Meta's Muse Spark model to help <em>analyze</em> validated
-evidence: a validated tool request runs one fixed read-only query over
-local SQLite, and the model reasons over the returned rows. No live model
-outputs are shown on this site, and nothing here implies endorsement by
-Meta.</p>
+evidence: predictions before measurement, evidence-grounded follow-ups,
+and bounded optimization proposals — every one behind explicit human
+authorization. A validated tool request runs one fixed read-only query
+over local SQLite, and the model reasons over the returned rows. No live
+model outputs are shown on this site, and nothing here implies endorsement
+by Meta.</p>
+
+<h2>More than a static demo: technical evidence</h2>
+<div class="card">
+<h3>Six-run physical study <span class="status-tag ok">measured</span></h3>
+<p>Galaxy S22 Ultra, fixed workload: 4-thread median
+<strong>16.52 tok/s</strong> vs 8-thread median
+<strong>10.49 tok/s</strong> (n=3 each, exploratory, one device).
+Muse correctly abstained rather than guess beyond the evidence
+(fabricated-citation rate 0.0). Full artifacts, frozen manifests, and
+methodology live in the
+<a href="https://github.com/Ron-Bee/EdgeFit-AI">source repository</a>,
+with reproducible offline test suites.</p>
+</div>
 
 <h2>Global evidence, gated by proof</h2>
 <p>The long-term goal is a global network where only verified, consented,
@@ -112,7 +170,8 @@ independent projects; EdgeFit does not reuse their code or present their
 results as its own.</p>
 </main>
 <footer>
-<p>EdgeFit AI — hackathon prototype. No published global statistics yet.</p>
+<p>EdgeFit AI — hackathon prototype. No published global statistics yet. ·
+<a href="https://github.com/Ron-Bee/EdgeFit-AI">Source on GitHub</a></p>
 </footer>
 <script src="demo.js" defer></script>
 </body>
