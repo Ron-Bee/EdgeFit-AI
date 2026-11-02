@@ -22,11 +22,19 @@ Historical devices (presence NOT assumed):
   issuance — the two MUST be recorded together then)
 - App version/build: Android branch at 29e5939; rebuilt APK hash
   UNVERIFIED (MUSE-A to confirm)
-- Credential issuance status: READY FOR OWNER ISSUANCE —
-  Collection A recorded 2026-11-01, D1 duplicate check clean (0
-  device_contribution installs), issuer dry-run validated;
-  plaintext prints to stdout so the OWNER runs the --execute
-  step in a private terminal (see P0-TOKEN-01 report)
+- Credential issuance status: ROTATION IN PROGRESS (AUTH-RECOVERY-01)
+  - First credential: install_id
+    `e61abf6b-2ebb-46c5-b0bb-b1014d53fa1d`, issued 2026-11-01T23:03:31Z,
+    REVOKED 2026-11-02T03:04:41Z (token disclosed in conversation;
+    treated as compromised). 0 submissions were accepted under it.
+  - Replacement: SAME kind (`device_contribution`), SAME physical
+    installation — owner runs the issuer privately (plaintext
+    prints to stdout; see AUTH-RECOVERY-01 report). New install_id
+    + issued date to be recorded here after the owner confirms
+    (token itself NEVER recorded).
+  - CONTINUITY: rotation does NOT create another independent
+    physical device for quorum purposes. INSTALL-A remains ONE
+    installation lineage (old id revoked → new id active).
 - Consent-policy version: ef-consent-01, Collection A RECORDED
   2026-11-01, Publication B OFF
 - First submission receipt: NONE (P0 NOT RUN — new benchmark
