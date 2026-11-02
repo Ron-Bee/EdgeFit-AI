@@ -307,3 +307,64 @@ function Get-AppList(
     return ,@($r.Lines | ForEach-Object { "$_".Trim() } |
         Where-Object { $_ -ne '' })
 }
+
+# Verifies the Android consent activation against explicit
+# Collection A approval evidence
+# (EF-ANDROID-CONSENT-INSTALL-GATE-01). Pure string checks: the
+# caller fetches the backend evidence (fetch + show + byte-true
+# blob hash) and passes the observed values in. Returns $true
+# only when every check holds; otherwise $false with a reason.
+# Fails closed: any missing or inconsistent input blocks.
+function Test-EFConsentActivation(
+    [string]$ContractSource,
+    [string]$ExpectedVersion,
+    [string]$ExpectedSha256,
+    [string]$ApprovalDoc,
+    [string]$PolicyBlobSha256,
+    [ref]$Reason
+) {
+    $Reason.Value = ''
+    if ([string]::IsNullOrWhiteSpace($ContractSource)) {
+        $Reason.Value = 'GlobalContract.kt unreadable'; return $false
+    }
+    if ([string]::IsNullOrWhiteSpace($ExpectedVersion)) {
+        $Reason.Value = 'expected policy version missing'; return $false
+    }
+    if ($ExpectedSha256 -notmatch '^[0-9A-Fa-f]{64}$') {
+        $Reason.Value = 'expected policy SHA malformed'; return $false
+    }
+    $sha = $ExpectedSha256.ToUpper()
+    $escVer = [regex]::Escape($ExpectedVersion)
+    if ($ContractSource -notmatch ('CONSENT_POLICY_VERSION\s*=\s*"' + $escVer + '"')) {
+        $Reason.Value = "policy version is not $ExpectedVersion"; return $false
+    }
+    if ($ContractSource -notmatch 'CONSENT_POLICY_APPROVED\s*=\s*true') {
+        $Reason.Value = 'consent flag is not approved-true'; return $false
+    }
+    if ($ContractSource -notmatch 'CONSENT_SCOPES\s*=\s*listOf\("aggregates"\)') {
+        $Reason.Value = 'consent scopes are not aggregates-only'; return $false
+    }
+    if ($ContractSource.ToUpper().IndexOf($sha, [System.StringComparison]::Ordinal) -lt 0) {
+        $Reason.Value = 'approved policy SHA not cited in source'; return $false
+    }
+    if ([string]::IsNullOrWhiteSpace($ApprovalDoc)) {
+        $Reason.Value = 'approval evidence missing'; return $false
+    }
+    if ($ApprovalDoc -notmatch '\-\s*\[x\]\s*A\.\s*COLLECTION APPROVED') {
+        $Reason.Value = 'Collection A approval not recorded'; return $false
+    }
+    if ($ApprovalDoc -match '\[x\]\s*B\.\s*PUBLICATION APPROVED') {
+        $Reason.Value = 'Publication B must remain unapproved'; return $false
+    }
+    if ($ApprovalDoc -notmatch '\-\s*\[\s\]\s*B\.\s*PUBLICATION APPROVED') {
+        $Reason.Value = 'Publication B unapproved record missing'; return $false
+    }
+    if ($ApprovalDoc.ToUpper().IndexOf($sha, [System.StringComparison]::Ordinal) -lt 0) {
+        $Reason.Value = 'approval doc does not cite the expected policy SHA'; return $false
+    }
+    if ([string]::IsNullOrWhiteSpace($PolicyBlobSha256) -or
+        $PolicyBlobSha256.ToUpper() -ne $sha) {
+        $Reason.Value = 'policy blob hash does not match the approval'; return $false
+    }
+    return $true
+}

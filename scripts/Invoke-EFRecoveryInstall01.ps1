@@ -120,12 +120,27 @@ if ($ExpectedCertSha256 -ne '') {
     Note 'cert pin: supplied (candidate + installed must match it)'
 }
 $consent = Get-Content android/app/src/main/java/ai/edgefit/diag/GlobalContract.kt -Raw
-if ($consent -notmatch 'CONSENT_POLICY_APPROVED\s*=\s*false') {
-    Fail 'consent gate is not default-OFF in GlobalContract.kt'
-}
-Note 'consent gate: OFF (source)'
 if ($consent -match 'http://') { Fail 'plaintext http:// found in GlobalContract.kt' }
 Note 'https-only: OK (source)'
+# EF-ANDROID-CONSENT-INSTALL-GATE-01: the consent flag may ONLY
+# be true under the reviewed Collection A approval. Verify the
+# source flag/version/scopes/SHA citation plus the live backend
+# approval record (A yes, B no) and the byte-true policy hash.
+$consentBranch = 'implement/ef-global-01-2026-10-30'
+$consentVersion = 'ef-consent-01'
+$consentSha = 'B83E78FBF78AD0FBE4E77CFBBCF37709519A4305A45D86FFCCFF6C72E78CDB21'
+& git fetch origin $consentBranch 2>&1 | Out-Null
+if ($LASTEXITCODE -ne 0) { Fail "consent evidence fetch failed for $consentBranch" }
+$approvalDoc = (& git show "origin/${consentBranch}:docs/ef-consent-01-approval.md" 2>&1) -join "`n"
+$policyTmp = Join-Path $ReportDir 'ef-consent-01-policy.bin'
+$bin = Invoke-NativeBinary 'git' "cat-file -p origin/${consentBranch}:docs/ef-consent-01-policy.md" $policyTmp 60
+if ($bin.Exit -ne 0 -or $bin.Bytes -le 0) { Fail 'consent policy blob unreadable from backend branch' }
+$blobSha = (Get-FileHash $policyTmp -Algorithm SHA256).Hash
+$consentWhy = ''
+if (-not (Test-EFConsentActivation $consent $consentVersion $consentSha $approvalDoc $blobSha ([ref]$consentWhy))) {
+    Fail "consent activation rejected: $consentWhy"
+}
+Note "consent: APPROVED $consentVersion (backend-verified A, B unapproved)"
 
 # ---------- 2. build ----------
 
@@ -515,7 +530,7 @@ if ($missingQuar.Count -gt 0) {
 $tokenProbe = Invoke-ToolText $adb @('-s', $Serial, 'shell',
     "run-as $ExpectedAppId ls files/global_upload_token.bin")
 if ($tokenProbe.Exit -eq 0) {
-    Note 'device holds a Global upload token: uploads remain gated by consent-OFF plus explicit per-batch tap (source-verified)'
+    Note 'device holds a Global upload token: uploads remain gated by approved-policy (Collection A) plus explicit per-batch tap (source-verified)'
 }
 else {
     Note 'device holds no Global upload token: cloud upload impossible without provisioning'
