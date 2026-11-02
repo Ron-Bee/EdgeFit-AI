@@ -1,3 +1,5 @@
+![EdgeFit AI — Hardware-Aware AI. Measured on Your Device.](assets/brand/edgefit-hero-1600.png)
+
 # EdgeFit AI
 
 <div align="right">
