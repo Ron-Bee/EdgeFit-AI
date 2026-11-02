@@ -33,16 +33,39 @@ EdgeFit AI addresses that problem using hardware profiling, candidate model reco
 
 ## C. Product screenshot gallery
 
-Eleven genuine, full-resolution Samsung Galaxy S22 Ultra captures (Android 16). Click a thumbnail to inspect the original. Benchmark values are device- and run-specific; recommendations are unverified until measured. [File hashes and provenance](docs/screenshot-gallery-2026-11-01.md).
+Eleven genuine Samsung Galaxy S22 Ultra captures (Android 16), presented in Aero showcase panels (system status bars cropped; app pixels untouched). Click any panel to inspect the unaltered original. Benchmark values are device- and run-specific; recommendations are unverified until measured. [File hashes and provenance](docs/screenshot-gallery-2026-11-01.md) · [Presentation-provenance record](assets/screenshots/presentation/PROVENANCE.md).
 
-| | |
-|---|---|
-| **1. Hardware-aware home dashboard**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-01-home-overview.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-01-home-overview.png" width="260" alt="Hardware-aware home dashboard" /></a> | **2. Physical device profile**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-02-device-profile.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-02-device-profile.png" width="260" alt="Physical device profile" /></a> |
-| **3. Candidate recommendations (unverified estimates)**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-04-model-recommendations.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-04-model-recommendations.png" width="260" alt="Candidate recommendations (unverified estimates)" /></a> | **4. Offline model catalog**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-06-model-catalog.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-06-model-catalog.png" width="260" alt="Offline model catalog" /></a> |
-| **5. Native inference in progress**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-09-benchmark-running.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-09-benchmark-running.png" width="260" alt="Native inference in progress" /></a> | **6. Completed 64/64 token measurement**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-10-benchmark-results.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-10-benchmark-results.png" width="260" alt="Completed 64/64 token measurement" /></a> |
-| **7. Persistent local measurement history**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-12-session-history.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-12-session-history.png" width="260" alt="Persistent local measurement history" /></a> | **8. Meta Muse Spark performance prediction**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-13-muse-spark-prediction.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-13-muse-spark-prediction.png" width="260" alt="Meta Muse Spark performance prediction" /></a> |
-| **9. Prediction versus measured evidence**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-14-muse-prediction-vs-measurement.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-14-muse-prediction-vs-measurement.png" width="260" alt="Prediction versus measured evidence" /></a> | **10. Bounded Agent proposal review**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-22-agent-proposal-review.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-22-agent-proposal-review.png" width="260" alt="Bounded Agent proposal review" /></a> |
-| **11. Repeat-series measured comparison**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-25-sessions-repeat-series-compare.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-25-sessions-repeat-series-compare.png" width="260" alt="Repeat-series measured comparison" /></a> |  |
+#### Featured showcase
+
+<a href="assets/screenshots/2026-11-01/edgefit-ss-01-home-overview.png"><img src="assets/screenshots/presentation/edgefit-panel-01-home.png" alt="Home Dashboard showcase panel" /></a>
+
+#### Hardware and model selection
+
+<a href="assets/screenshots/2026-11-01/edgefit-ss-02-device-profile.png"><img src="assets/screenshots/presentation/edgefit-panel-02-device.png" alt="Device Profile showcase panel" /></a>
+
+<a href="assets/screenshots/2026-11-01/edgefit-ss-04-model-recommendations.png"><img src="assets/screenshots/presentation/edgefit-panel-04-recommend.png" alt="Model Recommendations showcase panel" /></a>
+
+<a href="assets/screenshots/2026-11-01/edgefit-ss-06-model-catalog.png"><img src="assets/screenshots/presentation/edgefit-panel-06-catalog.png" alt="Model Catalog showcase panel" /></a>
+
+#### Real inference
+
+<a href="assets/screenshots/2026-11-01/edgefit-ss-09-benchmark-running.png"><img src="assets/screenshots/presentation/edgefit-panel-09-running.png" alt="Live Benchmark showcase panel" /></a>
+
+<a href="assets/screenshots/2026-11-01/edgefit-ss-10-benchmark-results.png"><img src="assets/screenshots/presentation/edgefit-panel-10-results.png" alt="Measured Results showcase panel" /></a>
+
+<a href="assets/screenshots/2026-11-01/edgefit-ss-12-session-history.png"><img src="assets/screenshots/presentation/edgefit-panel-12-sessions.png" alt="Session History showcase panel" /></a>
+
+#### Meta AI intelligence
+
+<a href="assets/screenshots/2026-11-01/edgefit-ss-13-muse-spark-prediction.png"><img src="assets/screenshots/presentation/edgefit-panel-13-predict.png" alt="Muse Spark Prediction showcase panel" /></a>
+
+<a href="assets/screenshots/2026-11-01/edgefit-ss-14-muse-prediction-vs-measurement.png"><img src="assets/screenshots/presentation/edgefit-panel-14-compare.png" alt="Prediction vs Measured showcase panel" /></a>
+
+<a href="assets/screenshots/2026-11-01/edgefit-ss-22-agent-proposal-review.png"><img src="assets/screenshots/presentation/edgefit-panel-22-agent.png" alt="Agent Proposal Review showcase panel" /></a>
+
+#### Repeatable scientific evidence
+
+<a href="assets/screenshots/2026-11-01/edgefit-ss-25-sessions-repeat-series-compare.png"><img src="assets/screenshots/presentation/edgefit-panel-25-repeat.png" alt="Repeat-Series Compare showcase panel" /></a>
 
 ### Judge's evidence map — Indie developer track
 
