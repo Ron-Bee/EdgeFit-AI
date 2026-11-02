@@ -354,7 +354,9 @@ export class HttpProvider {
         "staging backend is not a public evidence source");
     }
     this.baseUrl = baseUrl.replace(/\/$/, "");
-    this.fetchImpl = fetchImpl || fetch;
+    // Bind the default fetch: browsers reject a detached global
+    // fetch called as an object method ("Illegal invocation").
+    this.fetchImpl = fetchImpl || fetch.bind(globalThis);
     this.inFlight = 0;
   }
   get kind() {
