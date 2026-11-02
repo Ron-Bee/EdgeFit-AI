@@ -5,15 +5,25 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Evidence dashboard — EdgeFit AI</title>
 <meta name="description" content="EdgeFit AI global evidence dashboard: live staging contribution counts, qualified benchmark statistics, exact-cohort charts, and publication status.">
+<meta name="theme-color" content="#081427">
+<link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="assets/brand/favicon-16.png">
+<link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png">
+<link rel="manifest" href="site.webmanifest">
+<meta property="og:title" content="EdgeFit AI — Global Evidence Dashboard">
+<meta property="og:description" content="Live contribution counts plus quorum-gated statistics from exact device cohorts.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://edgefit-ai.pages.dev/assets/brand/edgefit-og-1200.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header>
 <nav aria-label="Main">
-<a class="brand" href="index.html"><b>EdgeFit</b> AI</a>
+<a class="brand" href="index.html"><img src="assets/brand/icon-64.png" width="30" height="30" alt="EdgeFit AI app icon"><span><b>EdgeFit</b> AI</span></a>
 <a href="methodology.html">Methodology</a>
 <a href="evidence.html">Evidence status</a>
 <a href="dashboard.html" aria-current="page">Dashboard</a>
+<a href="download.html">Download</a>
 </nav>
 </header>
 <main id="dashboard">
@@ -33,6 +43,20 @@ publication gate opens. Nothing estimated, nothing filled in.</p>
 <h2>Charts</h2>
 <div id="dash-filters"></div>
 <div id="dash-charts"></div>
+
+<h2>Qualification pipeline</h2>
+<div class="card">
+<ul class="pipeline">
+<li><b>SUBMITTED</b><span>Received + schema-checked at the ingest gateway.</span></li>
+<li><b>VALIDATED</b><span>Hash-verified, deduplicated, quota-checked.</span></li>
+<li><b>QUALIFIED</b><span>Eligible run in an exact cohort, awaiting quorum.</span></li>
+<li><b>PUBLISHED</b><span>5 runs / 3 installs in one cohort + allowlisted consent.</span></li>
+</ul>
+<p class="caption">Live stage counts appear in the network block above,
+refreshed on request from the public API. An empty published section
+means no cohort has cleared every gate — not that nothing was
+ever submitted.</p>
+</div>
 
 <h2>Reading this dashboard</h2>
 <div class="card">
@@ -56,7 +80,8 @@ facts above it hold regardless: no public evidence source is active,
 and zero verified global aggregates are published.</p></div></noscript>
 </main>
 <footer>
-<p>EdgeFit AI — hackathon prototype. No published global statistics yet.</p>
+<p>EdgeFit AI — hackathon prototype. No published global statistics yet. ·
+<a href="https://github.com/Ron-Bee/EdgeFit-AI">Source on GitHub</a></p>
 </footer>
 <script type="module" src="js/dashboard.js"></script>
 </body>

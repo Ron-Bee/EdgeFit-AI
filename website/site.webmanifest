@@ -1,0 +1,14 @@
+{
+  "name": "EdgeFit AI",
+  "short_name": "EdgeFit",
+  "description": "Hardware-aware on-device LLM benchmarking with Meta Muse Spark predictions and verifiable evidence.",
+  "start_url": "index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#081427",
+  "theme_color": "#081427",
+  "icons": [
+    { "src": "assets/brand/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "assets/brand/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
