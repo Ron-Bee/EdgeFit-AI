@@ -325,7 +325,7 @@ class GlobalClientTest {
         val vault = GlobalTokenVault(dir, FakeSeal())
         vault.setSessionToken(TOKEN)
         val client = GlobalClient(store, fake, vault, { ORIGIN },
-            { BenchResultParseTest.NOW })
+            { BenchResultParseTest.NOW }, { false })
         store.store(BenchResultParseTest.validDoc(),
             EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
         val outcome = client.submit("BENCH-TEST-001")
@@ -333,6 +333,25 @@ class GlobalClientTest {
         assertTrue((outcome as GlobalClient.SubmitOutcome.Blocked)
             .reason.contains("not yet owner-approved"))
         assertEquals(0, fake.calls.size)
+    }
+
+    @Test
+    fun `submit uses approved default from contract`() {
+        val dir = Files.createTempDirectory("global-test").toFile()
+        val store = EvidenceStore(dir)
+        val fake = FakeGlobalTransport()
+        val vault = GlobalTokenVault(dir, FakeSeal())
+        vault.setSessionToken(TOKEN)
+        val client = GlobalClient(store, fake, vault, { ORIGIN },
+            { BenchResultParseTest.NOW })
+        store.store(BenchResultParseTest.validDoc(),
+            EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
+        fake.script.add(GlobalHttpResult(
+            201,
+            """{"submission_id":"SUB-1","eligibility":"SUBMITTED","duplicate":false}""",
+            null))
+        val outcome = client.submit("BENCH-TEST-001")
+        assertTrue(outcome is GlobalClient.SubmitOutcome.Shared)
     }
 
     @Test
