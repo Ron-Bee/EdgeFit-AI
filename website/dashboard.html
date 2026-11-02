@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Evidence dashboard — EdgeFit AI</title>
-<meta name="description" content="EdgeFit AI global evidence dashboard: qualified benchmark statistics, exact-cohort charts, and publication status. Currently honestly empty.">
+<meta name="description" content="EdgeFit AI global evidence dashboard: live staging contribution counts, qualified benchmark statistics, exact-cohort charts, and publication status.">
 <meta name="theme-color" content="#081427">
 <link rel="icon" type="image/png" sizes="32x32" href="assets/brand/favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="assets/brand/favicon-16.png">
 <link rel="apple-touch-icon" href="assets/brand/apple-touch-icon.png">
 <link rel="manifest" href="site.webmanifest">
 <meta property="og:title" content="EdgeFit AI — Global Evidence Dashboard">
-<meta property="og:description" content="Qualified benchmark statistics from exact device cohorts. Live, and honestly empty until quorum.">
+<meta property="og:description" content="Live contribution counts plus quorum-gated statistics from exact device cohorts.">
 <meta property="og:type" content="website">
 <meta property="og:image" content="https://edgefit-ai.pages.dev/assets/brand/edgefit-og-1200.png">
 <link rel="stylesheet" href="style.css">
@@ -28,11 +28,14 @@
 </header>
 <main id="dashboard">
 <h1>Global evidence dashboard</h1>
-<p class="standfirst">Qualified benchmark statistics, once a genuine
-public source is authorized. Today the dashboard shows its structure
-and honest empty states — nothing estimated, nothing filled in.</p>
+<p class="standfirst">Live staging-contribution counts below, then
+qualified benchmark statistics once a cohort passes quorum and the
+publication gate opens. Nothing estimated, nothing filled in.</p>
 <p><button class="btn btn-ghost" id="dash-refresh" type="button">Refresh</button>
 <span class="caption" id="dash-meta">Source: unavailable.</span></p>
+
+<h2>Live evidence network</h2>
+<div id="dash-network"></div>
 
 <h2>Summary</h2>
 <div id="dash-kpis"></div>
@@ -49,10 +52,10 @@ and honest empty states — nothing estimated, nothing filled in.</p>
 <li><b>QUALIFIED</b><span>Eligible run in an exact cohort, awaiting quorum.</span></li>
 <li><b>PUBLISHED</b><span>5 runs / 3 installs in one cohort + allowlisted consent.</span></li>
 </ul>
-<p class="caption">Stage counts inside staging are not publicly exposed:
-the public API publishes only qualifying aggregates. An empty published
-dashboard means no cohort has cleared every gate — not that nothing was
-ever submitted. Staging rows today are synthetic test fixtures.</p>
+<p class="caption">Live stage counts appear in the network block above,
+refreshed on request from the public API. An empty published section
+means no cohort has cleared every gate — not that nothing was
+ever submitted.</p>
 </div>
 
 <h2>Reading this dashboard</h2>

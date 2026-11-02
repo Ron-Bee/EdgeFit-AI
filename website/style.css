@@ -10,6 +10,7 @@
   --muted: #a9bcd8;
   --disabled: #5f7191;
   --accent: #49bbff;
+  --net-blue: #2f7bff;
   --accent-ink: #04121f;
   --primary: #1265f5;
   --primary-hover: #2e7bf7;
@@ -367,6 +368,42 @@ code.inline {
 }
 .filters .caption { grid-column: 1 / -1; text-align: left; }
 .dash-state h3 { margin-top: 0; }
+
+/* ---- live evidence network ---- */
+.net-hero {
+  border-color: var(--net-blue);
+  box-shadow: 0 0 22px rgba(47, 123, 255, 0.25);
+}
+.net-row {
+  display: grid;
+  grid-template-columns: minmax(7rem, 11rem) 1fr auto;
+  gap: 0.6rem;
+  align-items: center;
+  margin: 0.45rem 0;
+}
+.net-class {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+.net-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 2.5rem;
+  text-align: right;
+}
+.meter {
+  background: var(--bg-raise);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  height: 14px;
+  overflow: hidden;
+}
+.meter-fill {
+  background: linear-gradient(90deg, var(--net-blue), var(--accent));
+  height: 100%;
+}
 button.btn { font: inherit; cursor: pointer; }
 
 /* ---- responsive ---- */
@@ -374,6 +411,8 @@ button.btn { font: inherit; cursor: pointer; }
   .hero { grid-template-columns: 1fr; }
   .phone { max-width: 260px; }
   .grid-2 { grid-template-columns: 1fr; }
+  .net-row { grid-template-columns: 1fr auto; }
+  .net-row .meter { grid-column: 1 / -1; order: 3; }
   h1 { font-size: 1.5rem; }
   nav { gap: 0.8rem; }
   .metric-grid { grid-template-columns: 1fr; }
