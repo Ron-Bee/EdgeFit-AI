@@ -1,3 +1,5 @@
+![EdgeFit AI — Hardware-Aware AI. Measured on Your Device.](assets/brand/edgefit-hero-1600.png)
+
 # EdgeFit AI
 
 **Will this AI model run well on *your* phone? EdgeFit AI answers with measurements, not guesses — Meta Muse Spark predicts on-device inference speed, the phone measures it, and every claim stays traceable to evidence.**
@@ -11,6 +13,7 @@ Built for the **2026 Meta Global AI Developer Hackathon**.
 | 📦 DOWNLOAD EDGEFIT AI (signed public-preview APK) | **PENDING** — no signed release yet ([gate status](docs/release-readiness.md)) |
 | 🎬 WATCH THE DEMO (official 3-minute video) | **PENDING** — no video link published yet |
 | 🌐 GLOBAL EVIDENCE DASHBOARD (live, empty state) | [edgefit-ai.pages.dev/dashboard.html](https://edgefit-ai.pages.dev/dashboard.html) |
+| Visit EdgeFit AI website | [edgefit-ai.pages.dev](https://edgefit-ai.pages.dev/) |
 | 📖 VIEW COMPLETE WALKTHROUGH (browser guide) | **PENDING** — walkthrough in progress in a separate session; link added when the approved artifact is delivered and verified |
 | 📥 DOWNLOAD COMPLETE WALKTHROUGH (PDF/offline) | **PENDING** — same gate as above; no file invented here |
 | 📸 Product screenshot gallery | [Gallery](#c-product-screenshot-gallery) · [provenance](docs/screenshot-gallery.md) |

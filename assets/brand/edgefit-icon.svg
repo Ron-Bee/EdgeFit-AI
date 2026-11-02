@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 108 108">
+  <!-- EdgeFit Aero icon MASTER (ORIGINAL artwork, EF-UX-AERO-01 Step 1).
+       Abstract signal-E: spine + three stadium bars, violet mid-bar,
+       mist dot in the lower counter. All art inside the 66dp safe circle
+       (center 54,54); the 108 canvas bleeds under launcher masks.
+       Palette: abyss #071D3B, deep #081427, azure #1265F5, sky #49BBFF,
+       violet #8054F8, mist #F3F7FE. -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#071D3B"/>
+      <stop offset="1" stop-color="#081427"/>
+    </linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#49BBFF"/>
+      <stop offset="1" stop-color="#1265F5"/>
+    </linearGradient>
+    <radialGradient id="halo" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#1265F5" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#1265F5" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="0" y="0" width="108" height="108" fill="url(#bg)"/>
+  <ellipse cx="54" cy="54" rx="34" ry="34" fill="url(#halo)"/>
+  <g>
+    <path d="M35,38 A5,5 0 0 1 45,38 L45,71 A5,5 0 0 1 35,71 Z" fill="url(#bar)"/>
+    <path d="M40,33 L68,33 A5,5 0 0 1 68,43 L40,43 A5,5 0 0 1 40,33 Z" fill="url(#bar)"/>
+    <path d="M40,66 L68,66 A5,5 0 0 1 68,76 L40,76 A5,5 0 0 1 40,66 Z" fill="url(#bar)"/>
+    <path d="M50,48 L60,48 A5,5 0 0 1 60,58 L50,58 A5,5 0 0 1 50,48 Z" fill="#8054F8"/>
+    <path d="M55,62 a3,3 0 1 0 6,0 a3,3 0 1 0 -6,0" fill="#F3F7FE"/>
+  </g>
+</svg>
