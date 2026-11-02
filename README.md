@@ -135,6 +135,8 @@ The Global backend is **deployed on Cloudflare Free** (three Workers + one D1 da
 
 ### Website and dashboard visual evidence — remaining captures
 
+Capture checklist, publication standards, and exact future image paths: [Website + Global Dashboard screenshot plan](docs/website-dashboard-screenshot-plan.md).
+
 The live project site and Global Evidence dashboard are linked in **Judge Quick Access** above. Their final README screenshots are **pending capture and review**, not mockups. Required capture set:
 
 - Website landing page: clear product value, calls to action, and link to the repository.
