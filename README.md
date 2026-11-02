@@ -31,23 +31,16 @@ EdgeFit AI addresses that problem using hardware profiling, candidate model reco
 
 ## C. Product screenshot gallery
 
-**Current public gallery:** eleven existing, genuine S22 Ultra screenshots. A newly curated eleven-shot set from November 1 is approved for replacement, but its image binaries are not yet in this Git branch. See [gallery provenance](docs/screenshot-gallery.md); no missing-image links are shown here.
+Eleven genuine, full-resolution Samsung Galaxy S22 Ultra captures (Android 16). Click a thumbnail to inspect the original. Benchmark values are device- and run-specific; recommendations are unverified until measured. [File hashes and provenance](docs/screenshot-gallery-2026-11-01.md).
 
-Genuine captures from a Galaxy S22 Ultra (SM-S908U, Android 16), EdgeFit AI 0.2.0. No mockups. Full gallery with provenance: [docs/screenshot-gallery.md](docs/screenshot-gallery.md).
-
-| Screen | Capture |
+| | |
 |---|---|
-| Home dashboard: device card, live telemetry, staged model, last measurement | ![Home dashboard](assets/screenshots/home-dashboard.png) |
-| Device Details (live): specs plus live battery, thermal, memory | ![Device details](assets/screenshots/device-details.png) |
-| Benchmark setup: model, configuration, evidence-sharing steps | ![Benchmark setup](assets/screenshots/benchmark-setup.png) |
-| Benchmark tab: config line, memory readiness, Run Benchmark | ![Benchmark execution](assets/screenshots/benchmark-execution.png) |
-| Completed run: 64/64 tokens, measured 15.3 tok/s with chart | ![Benchmark result](assets/screenshots/benchmark-result.png) |
-| Sessions ledger: durable prediction → benchmark records | ![Sessions](assets/screenshots/sessions.png) |
-| Agent tab: bounded optimization with explicit approvals | ![Agent](assets/screenshots/agent-view.png) |
-| Meta API settings: session-only key custody, explicit authorization | ![Meta BYOK](assets/screenshots/meta-byok.png) |
-| Recommended models: measured values vs unverified estimates | ![Model recommendations](assets/screenshots/model-recommendations.png) |
-| Contribute review: run provenance with consent scope | ![Global contribute](assets/screenshots/global-contribute.png) |
-| Settings: workload, export, diagnostics, Global connection, build | ![Settings](assets/screenshots/settings.png) |
+| **1. Hardware-aware home dashboard**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-01-home-overview.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-01-home-overview.png" width="260" alt="Hardware-aware home dashboard" /></a> | **2. Physical device profile**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-02-device-profile.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-02-device-profile.png" width="260" alt="Physical device profile" /></a> |
+| **3. Candidate recommendations (unverified estimates)**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-04-model-recommendations.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-04-model-recommendations.png" width="260" alt="Candidate recommendations (unverified estimates)" /></a> | **4. Offline model catalog**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-06-model-catalog.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-06-model-catalog.png" width="260" alt="Offline model catalog" /></a> |
+| **5. Native inference in progress**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-09-benchmark-running.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-09-benchmark-running.png" width="260" alt="Native inference in progress" /></a> | **6. Completed 64/64 token measurement**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-10-benchmark-results.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-10-benchmark-results.png" width="260" alt="Completed 64/64 token measurement" /></a> |
+| **7. Persistent local measurement history**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-12-session-history.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-12-session-history.png" width="260" alt="Persistent local measurement history" /></a> | **8. Meta Muse Spark performance prediction**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-13-muse-spark-prediction.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-13-muse-spark-prediction.png" width="260" alt="Meta Muse Spark performance prediction" /></a> |
+| **9. Prediction versus measured evidence**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-14-muse-prediction-vs-measurement.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-14-muse-prediction-vs-measurement.png" width="260" alt="Prediction versus measured evidence" /></a> | **10. Bounded Agent proposal review**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-22-agent-proposal-review.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-22-agent-proposal-review.png" width="260" alt="Bounded Agent proposal review" /></a> |
+| **11. Repeat-series measured comparison**<br><a href="assets/screenshots/2026-11-01/edgefit-ss-25-sessions-repeat-series-compare.png"><img src="assets/screenshots/2026-11-01/edgefit-ss-25-sessions-repeat-series-compare.png" width="260" alt="Repeat-series measured comparison" /></a> |  |
 
 ### Judge's evidence map — Indie developer track
 
