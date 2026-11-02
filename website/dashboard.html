@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Evidence dashboard — EdgeFit AI</title>
-<meta name="description" content="EdgeFit AI global evidence dashboard: qualified benchmark statistics, exact-cohort charts, and publication status. Currently awaiting a public evidence source.">
+<meta name="description" content="EdgeFit AI global evidence dashboard: live staging contribution counts, qualified benchmark statistics, exact-cohort charts, and publication status.">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -18,11 +18,14 @@
 </header>
 <main id="dashboard">
 <h1>Global evidence dashboard</h1>
-<p class="standfirst">Qualified benchmark statistics, once a genuine
-public source is authorized. Today the dashboard shows its structure
-and honest empty states — nothing estimated, nothing filled in.</p>
+<p class="standfirst">Live staging-contribution counts below, then
+qualified benchmark statistics once a cohort passes quorum and the
+publication gate opens. Nothing estimated, nothing filled in.</p>
 <p><button class="btn btn-ghost" id="dash-refresh" type="button">Refresh</button>
 <span class="caption" id="dash-meta">Source: unavailable.</span></p>
+
+<h2>Live evidence network</h2>
+<div id="dash-network"></div>
 
 <h2>Summary</h2>
 <div id="dash-kpis"></div>

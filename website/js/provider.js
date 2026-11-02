@@ -12,8 +12,14 @@ export const QUORUM_RUNS = 5;
 export const QUORUM_INSTALLS = 3;
 export const MAX_GROUPS = 200;
 export const MAX_MODELS = 500;
+export const MAX_NET_CLASSES = 100;
 export const FETCH_TIMEOUT_MS = 10000;
 export const MAX_PAYLOAD_BYTES = 1048576;
+// Server-computed publication-blocker codes. Unknown codes fail the
+// whole payload: new blockers must be reviewed before display.
+export const NET_WHY_CODES = ["no_contributions",
+  "publication_gate_closed", "quorum_unmet",
+  "rows_awaiting_qualification"];
 
 // Dashboard data states (V3-01 Phase I).
 export const STATE = {
@@ -212,6 +218,119 @@ export class EmptyProvider {
     throw new ProviderError(STATE.NO_SOURCE,
       "no public evidence endpoint configured");
   }
+  async getNetworkStatus() {
+    throw new ProviderError(STATE.NO_SOURCE,
+      "no public evidence endpoint configured");
+  }
+}
+
+// Counts-only pre-publication network summary (/v1/network/status).
+// Fail-closed like every other cleaner: wrong scope, unknown
+// blocker codes, negative counts, or oversized listings reject the
+// whole payload. Unknown object keys are dropped, never rendered,
+// so future server fields cannot leak identifiers into the page.
+export function cleanNetworkStatus(s) {
+  if (!isPlainObject(s)) {
+    throw new ProviderError(STATE.SOURCE_ERROR,
+      "network status not an object");
+  }
+  checkVersion(s, "network status");
+  if (s.scope !== "staging-contributions") {
+    throw new ProviderError(STATE.SOURCE_ERROR,
+      "network status scope mismatch");
+  }
+  for (const k of ["accepted_submissions", "contributing_installs"]) {
+    if (!Number.isInteger(s[k]) || s[k] < 0) {
+      throw new ProviderError(STATE.SOURCE_ERROR,
+        `network status ${k} invalid`);
+    }
+  }
+  if (!Array.isArray(s.consent_versions) || s.consent_versions.length > 64 ||
+      !s.consent_versions.every((v) => typeof v === "string")) {
+    throw new ProviderError(STATE.SOURCE_ERROR,
+      "network status consent_versions invalid");
+  }
+  if (!Array.isArray(s.by_device_class) ||
+      s.by_device_class.length > MAX_NET_CLASSES + 1) {
+    throw new ProviderError(STATE.SOURCE_ERROR,
+      "network status by_device_class invalid");
+  }
+  const classes = s.by_device_class.map((c) => {
+    if (!isPlainObject(c) || typeof c.device_class !== "string" ||
+        c.device_class === "" || c.device_class.length > 128 ||
+        !Number.isInteger(c.accepted) || c.accepted < 0) {
+      throw new ProviderError(STATE.SOURCE_ERROR,
+        "network status device class invalid");
+    }
+    return { device_class: c.device_class, accepted: c.accepted };
+  });
+  const stages = {};
+  for (const k of ["SUBMITTED", "VALIDATED", "QUALIFIED", "PUBLISHED",
+      "REVOKED"]) {
+    const v = isPlainObject(s.stages) ? s.stages[k] : undefined;
+    if (!Number.isInteger(v) || v < 0) {
+      throw new ProviderError(STATE.SOURCE_ERROR,
+        `network status stage ${k} invalid`);
+    }
+    stages[k] = v;
+  }
+  let closest = null;
+  if (s.closest_cohort !== null) {
+    if (!isPlainObject(s.closest_cohort)) {
+      throw new ProviderError(STATE.SOURCE_ERROR,
+        "network status closest_cohort invalid");
+    }
+    const q = s.closest_cohort;
+    for (const k of ["runs", "installs", "awaiting_qualification"]) {
+      if (!Number.isInteger(q[k]) || q[k] < 0) {
+        throw new ProviderError(STATE.SOURCE_ERROR,
+          `network status closest ${k} invalid`);
+      }
+    }
+    if (typeof q.cohort_hash !== "string") {
+      throw new ProviderError(STATE.SOURCE_ERROR,
+        "network status cohort_hash invalid");
+    }
+    closest = { cohort: cleanCohort(q.cohort),
+      cohort_hash: q.cohort_hash, runs: q.runs,
+      installs: q.installs,
+      awaiting_qualification: q.awaiting_qualification };
+  }
+  if (!isPlainObject(s.quorum) ||
+      !Number.isInteger(s.quorum.min_runs) || s.quorum.min_runs <= 0 ||
+      !Number.isInteger(s.quorum.min_installs) ||
+      s.quorum.min_installs <= 0) {
+    throw new ProviderError(STATE.SOURCE_ERROR,
+      "network status quorum invalid");
+  }
+  if (typeof s.publication_open !== "boolean") {
+    throw new ProviderError(STATE.SOURCE_ERROR,
+      "network status publication_open invalid");
+  }
+  if (!Array.isArray(s.why_not_published) ||
+      !s.why_not_published.every((w) => NET_WHY_CODES.includes(w))) {
+    throw new ProviderError(STATE.SOURCE_ERROR,
+      "network status why_not_published invalid");
+  }
+  if (typeof s.generated_at !== "string" ||
+      Number.isNaN(Date.parse(s.generated_at))) {
+    throw new ProviderError(STATE.SOURCE_ERROR,
+      "network status generated_at invalid");
+  }
+  return {
+    acceptedSubmissions: s.accepted_submissions,
+    contributingInstalls: s.contributing_installs,
+    consentVersions: [...s.consent_versions],
+    byDeviceClass: classes,
+    classesTruncated: s.classes_truncated === true,
+    stages,
+    closest,
+    quorum: { minRuns: s.quorum.min_runs,
+      minInstalls: s.quorum.min_installs },
+    publicationOpen: s.publication_open,
+    whyNotPublished: [...s.why_not_published],
+    generatedAt: s.generated_at,
+  };
 }
 
 // Future authorized endpoint. NEVER defaults to staging: the base
@@ -353,6 +472,10 @@ export class HttpProvider {
         "candidates not an array");
     }
     return { candidates: body.candidates.map(cleanCandidate) };
+  }
+  async getNetworkStatus() {
+    const body = await this.getJson("/v1/network/status");
+    return cleanNetworkStatus(body);
   }
 }
 

@@ -96,6 +96,130 @@ export function kpiHtml(summary, qualifyingCohorts, opts) {
     `public API cannot honestly deduplicate contributors across models.</p>`;
 }
 
+// Human copy for server-computed publication blockers. Unknown
+// codes never reach here: cleanNetworkStatus rejects them first.
+function netWhyCopy(code, net) {
+  if (code === "no_contributions") {
+    return "No genuine contributions have been accepted yet.";
+  }
+  if (code === "publication_gate_closed") {
+    return "Publication gate is closed: owner Approval B " +
+      "has not been granted, so no cohort can publish.";
+  }
+  if (code === "quorum_unmet") {
+    return `Closest cohort is below the ${net.quorum.minRuns}-run / ` +
+      `${net.quorum.minInstalls}-install quorum.`;
+  }
+  if (code === "rows_awaiting_qualification") {
+    return "Some rows in the closest cohort are " +
+      "still moving through qualification.";
+  }
+  return code;
+}
+
+function meterHtml(value, target, label) {
+  const pct = target > 0
+    ? Math.max(0, Math.min(100, Math.round((value / target) * 100)))
+    : 0;
+  return `<div class="meter" role="img" aria-label="${escapeHtml(label)}: ` +
+    `${value} of ${target}"><div class="meter-fill" style="width:${pct}%">` +
+    `</div></div>`;
+}
+
+// Live evidence network section over a VALIDATED network status.
+// Counts only: accepted contributions, device breakdown, pipeline
+// stages, closest-cohort quorum progress, and publication blockers.
+// Never implies QUALIFIED means PUBLISHED; zeros render only when
+// the source itself reports an empty-but-valid network.
+export function networkHtml(net, checkedAt) {
+  if (net === null || net === undefined) return stateHtml(STATE.NO_SOURCE);
+  const truncWarn = net.classesTruncated
+    ? `<p class="caption warn">Device-class listing was truncated by ` +
+      `the source: classes below are the top contributors only.</p>`
+    : "";
+  const maxClass = Math.max(1,
+    ...net.byDeviceClass.map((c) => c.accepted));
+  const classRows = net.byDeviceClass.map((c) =>
+    `<div class="net-row"><span class="net-class">` +
+    `${escapeHtml(c.device_class)}</span>` +
+    `<div class="meter" role="img" aria-label="` +
+    `${escapeHtml(c.device_class)}: ${c.accepted} accepted">` +
+    `<div class="meter-fill" style="width:` +
+    `${Math.round((c.accepted / maxClass) * 100)}%"></div></div>` +
+    `<span class="net-count">${c.accepted}</span></div>`).join("");
+  const stageCells = ["SUBMITTED", "VALIDATED", "QUALIFIED", "PUBLISHED"]
+    .map((k) => `<div class="metric"><div class="k">${k}</div>` +
+      `<div class="v">${net.stages[k]}</div></div>`).join("") +
+    `<div class="metric"><div class="k">REVOKED (withdrawn)</div>` +
+    `<div class="v">${net.stages.REVOKED}</div></div>`;
+  let cohortCard;
+  if (net.closest === null) {
+    cohortCard = `<div class="card"><h3>Closest cohort to quorum</h3>` +
+      `<p>No contributing cohort yet. Accepted runs will appear here ` +
+      `with their progress toward ${net.quorum.minRuns} runs / ` +
+      `${net.quorum.minInstalls} installs.</p></div>`;
+  } else {
+    const q = net.closest;
+    const c = q.cohort;
+    const ident = `${c.device_class || "?"} · ${c.workload_id || "?"} · ` +
+      `${formatConfig(c.config)} · model ${shortHash(c.model_sha)}`;
+    const runsMet = q.runs >= net.quorum.minRuns;
+    const installsMet = q.installs >= net.quorum.minInstalls;
+    cohortCard = `<div class="card"><h3>Closest cohort to quorum</h3>` +
+      `<p class="caption">${escapeHtml(ident)}</p>` +
+      `<p>Installations toward quorum ` +
+      `<strong>${q.installs} / ${net.quorum.minInstalls}</strong>` +
+      `${installsMet ? " ✓" : ""}</p>` +
+      meterHtml(q.installs, net.quorum.minInstalls,
+        "installations toward quorum") +
+      `<p>Benchmark runs toward quorum ` +
+      `<strong>${q.runs} / ${net.quorum.minRuns}</strong>` +
+      `${runsMet ? " ✓" : ""}</p>` +
+      meterHtml(q.runs, net.quorum.minRuns, "runs toward quorum") +
+      (q.awaiting_qualification > 0
+        ? `<p class="caption">${q.awaiting_qualification} row` +
+          `${q.awaiting_qualification === 1 ? " is" : "s are"} still ` +
+          `qualifying in this cohort.</p>`
+        : "") +
+      `<p class="caption">One exact cohort only — never pooled ` +
+      `across devices or configurations.</p></div>`;
+  }
+  const why = net.whyNotPublished.length === 0
+    ? `<p>All publication gates pass for the closest cohort.</p>`
+    : `<ul class="tight">` + net.whyNotPublished.map((w) =>
+        `<li>${escapeHtml(netWhyCopy(w, net))}</li>`).join("") + `</ul>`;
+  return `<div class="card net-hero"><h3>Live evidence network ` +
+    `<span class="status-tag pending">staging contributions — ` +
+    `not published evidence</span></h3>` +
+    `<p>Real accepted uploads from genuine Android installations, ` +
+    `counted live. Statistics remain withheld until a cohort passes ` +
+    `quorum and the publication gate opens.</p></div>` +
+    truncWarn +
+    `<div class="grid-2">` +
+    `<div class="card kpi"><div class="k">Accepted benchmark submissions</div>` +
+    `<div class="v">${net.acceptedSubmissions}</div>` +
+    `<div class="note">Non-withdrawn genuine contributions. ` +
+    `Consent: ${net.consentVersions.length === 0 ? "none yet"
+      : net.consentVersions.map(escapeHtml).join(", ")}.</div></div>` +
+    `<div class="card kpi"><div class="k">Contributing installations</div>` +
+    `<div class="v">${net.contributingInstalls}</div>` +
+    `<div class="note">Distinct genuine installs with accepted rows.</div>` +
+    `</div></div>` +
+    `<div class="card"><h3>Accepted submissions by device class</h3>` +
+    (classRows === "" ? `<p>No device classes reporting yet.</p>`
+      : classRows) + `</div>` +
+    `<div class="card"><h3>Qualification pipeline</h3>` +
+    `<div class="metric-grid">${stageCells}</div>` +
+    `<p class="caption">QUALIFIED means validated and awaiting the ` +
+    `publication gate — not published.</p></div>` +
+    cohortCard +
+    `<div class="card"><h3>Why results are not published yet</h3>` +
+    why + `</div>` +
+    `<p class="caption">Last successful data refresh: ` +
+    `${escapeHtml(checkedAt || "unknown")}; source snapshot ` +
+    `${escapeHtml(net.generatedAt)}.</p>`;
+}
+
 // Short on-chart label (layout-bounded, truncated with ellipsis).
 // Full exact identity lives in cohortTitle tooltips and the data
 // table's cohort-hash column: cohorts that differ only in hidden
@@ -328,11 +452,27 @@ export function initDashboard(root, provider) {
   const state = { facets: {}, checkedAt: null };
   async function load() {
     const kpi = $("dash-kpis"), charts = $("dash-charts"),
-      meta = $("dash-meta"), filtersBox = $("dash-filters");
+      meta = $("dash-meta"), filtersBox = $("dash-filters"),
+      netBox = $("dash-network");
     try {
       // Sequential: HttpProvider enforces one in-flight request
       // (refresh guard), so a single load must not fire concurrent
       // provider calls.
+      // Network section loads independently: if its endpoint is
+      // unreachable (or an older Worker without the route), only
+      // this section shows an error state; published-data sections
+      // below still render.
+      try {
+        const net = await prov.getNetworkStatus();
+        if (netBox) {
+          netBox.innerHTML = networkHtml(net, new Date().toISOString());
+        }
+      } catch (ne) {
+        if (netBox) {
+          netBox.innerHTML = stateHtml(
+            (ne && ne.state) || STATE.SOURCE_ERROR);
+        }
+      }
       const models = await prov.listModels();
       const candidates = await prov.getCandidates();
       const summary = summarizeModels(models.artifacts);
@@ -369,6 +509,7 @@ export function initDashboard(root, provider) {
       meta.textContent = `Source: ${prov.kind}; checked ${state.checkedAt}.`;
     } catch (e) {
       const st = (e && e.state) || STATE.SOURCE_ERROR;
+      if (netBox) netBox.innerHTML = stateHtml(st);
       kpi.innerHTML = stateHtml(st);
       charts.innerHTML = stateHtml(st);
       if (filtersBox) filtersBox.innerHTML = "";
