@@ -28,10 +28,14 @@ Historical devices (presence NOT assumed):
     REVOKED 2026-11-02T03:04:41Z (token disclosed in conversation;
     treated as compromised). 0 submissions were accepted under it.
   - Replacement: SAME kind (`device_contribution`), SAME physical
-    installation — owner runs the issuer privately (plaintext
-    prints to stdout; see AUTH-RECOVERY-01 report). New install_id
-    + issued date to be recorded here after the owner confirms
-    (token itself NEVER recorded).
+    installation. Owner issued TWICE (both ACTIVE, 0 submissions
+    each — unintended duplicate, same lineage):
+    `b78bcf3b-6823-48dc-898d-a455815c4411` (2026-11-02T03:11:25Z)
+    and `a55897ca-2d91-4e59-8f5a-c3aa26a3106a`
+    (2026-11-02T03:14:50Z). After the AUTH-ROOTCAUSE-02 probe
+    identifies which token the app actually holds, revoke the
+    UNUSED one (separate action; do NOT revoke blindly now).
+    Token itself NEVER recorded.
   - CONTINUITY: rotation does NOT create another independent
     physical device for quorum purposes. INSTALL-A remains ONE
     installation lineage (old id revoked → new id active).
