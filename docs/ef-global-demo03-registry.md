@@ -28,23 +28,32 @@ Historical devices (presence NOT assumed):
     REVOKED 2026-11-02T03:04:41Z (token disclosed in conversation;
     treated as compromised). 0 submissions were accepted under it.
   - Replacement: SAME kind (`device_contribution`), SAME physical
-    installation. Owner issued TWICE (both ACTIVE, 0 submissions
-    each — unintended duplicate, same lineage):
-    `b78bcf3b-6823-48dc-898d-a455815c4411` (2026-11-02T03:11:25Z)
-    and `a55897ca-2d91-4e59-8f5a-c3aa26a3106a`
-    (2026-11-02T03:14:50Z). After the AUTH-ROOTCAUSE-02 probe
-    identifies which token the app actually holds, revoke the
-    UNUSED one (separate action; do NOT revoke blindly now).
+    installation. Owner issued twice; the live P0 upload proved
+    which token the app holds:
+    - WORKING (PRESERVE, never rotate unnecessarily):
+      `a55897ca-2d91-4e59-8f5a-c3aa26a3106a`
+      (issued 2026-11-02T03:14:50Z, ACTIVE, owns the P0 submission).
+    - UNUSED DUPLICATE, revoked 2026-11-02T03:46:35Z after
+      guarded 0-submission confirmation:
+      `b78bcf3b-6823-48dc-898d-a455815c4411`.
     Token itself NEVER recorded.
   - CONTINUITY: rotation does NOT create another independent
     physical device for quorum purposes. INSTALL-A remains ONE
-    installation lineage (old id revoked → new id active).
+    installation lineage (2 ids revoked → 1 id active).
 - Consent-policy version: ef-consent-01, Collection A RECORDED
   2026-11-01, Publication B OFF
-- First submission receipt: NONE (P0 NOT RUN — new benchmark
-  required, historical sessions are 0)
-- Cloud eligibility state: NONE
-- Withdrawal test status: NOT RUN
+- First submission receipt: `SUB-309a42a40dee42debfa69a817ad462ad`
+  ACCEPTED/SUBMITTED 2026-11-02T03:43:00Z (run
+  `BENCH-20261101T232108Z-e5b882dd`, 19.46 tok/s gen / 34.12
+  tok/s prefill, workload `edgefit-prompt-v1`, n_ctx=128,
+  n_threads=4, n_predict=64, sampler=greedy) — P0 LIVE PASS
+- Cloud eligibility state: SUBMITTED (history: null→SUBMITTED
+  "received"); cron qualification pending; PUBLISHED unreachable
+  while allowlist is EMPTY (B OFF). No scientific exclusions:
+  origin, consent, measurements, provenance all valid. Single
+  run / single install — below 5/3 quorum by design so far.
+- Withdrawal test status: NOT RUN (P1; use a SEPARATE designated
+  record — do NOT withdraw the P0 evidence row)
 
 ### INSTALL-B (P2 second installation)
 

@@ -78,7 +78,9 @@ revoke + reissue; there is no promotion path.
 
 | Date (UTC) | install_id | kind | Device model | Purpose | Operator | Status |
 |------------|------------|------|--------------|---------|----------|--------|
-| _pending_  | _pending_  | _pending_ | _pending_ | P0 first submission | _pending_ | NOT ISSUED |
+| 2026-11-02 | a55897ca-2d91-4e59-8f5a-c3aa26a3106a | device_contribution | SM-S908U | P0 first submission | Owner | ACTIVE |
+| 2026-11-01 | e61abf6b-2ebb-46c5-b0bb-b1014d53fa1d | device_contribution | SM-S908U | P0 first submission (superseded: token disclosed) | Owner | REVOKED 2026-11-02 |
+| 2026-11-02 | b78bcf3b-6823-48dc-898d-a455815c4411 | device_contribution | SM-S908U | P0 rotation duplicate (unused, 0 submissions) | Owner | REVOKED 2026-11-02 |
 | _pending_  | _pending_  | _pending_ | _pending_ | P2 second install | _pending_ | NOT ISSUED |
 | _pending_  | _pending_  | _pending_ | _pending_ | P2 third install | _pending_ | NOT ISSUED |
 
