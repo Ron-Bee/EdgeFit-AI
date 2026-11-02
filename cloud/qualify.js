@@ -124,10 +124,19 @@ export async function runQualification(db, nowMs, deps, maxRows = BATCH_LIMIT) {
   // The snapshot is a worklist only: every step below re-reads its
   // row outside the batch and the batch re-guards on from-state,
   // yielding to concurrent writers.
+  // Fairness (SCHEDULER-FAIRNESS-01): order by pipeline stage
+  // first. A pure oldest-first scan lets held QUALIFIED rows
+  // (e.g. allowlist-held while Publication B is OFF) saturate
+  // every capped pass and starve SUBMITTED work forever — the
+  // live FLEET-DASHBOARD-01 stall. Earlier stages sort ahead;
+  // QUALIFIED rows still receive PUBLISHED attempts whenever
+  // slots remain, so the post-approval path is unchanged.
   const pending = await db.all(
     `SELECT * FROM submissions
      WHERE eligibility IN ('SUBMITTED', 'VALIDATED', 'QUALIFIED')
-     ORDER BY received_at ASC, submission_id ASC LIMIT ?`,
+     ORDER BY CASE eligibility
+       WHEN 'SUBMITTED' THEN 0 WHEN 'VALIDATED' THEN 1 ELSE 2 END ASC,
+       received_at ASC, submission_id ASC LIMIT ?`,
     limit,
   );
   for (const snap of pending) {
