@@ -1,19 +1,22 @@
 # EdgeFit AI
 
+<div align="right">
+  <strong>JUDGE QUICK ACCESS</strong><br>
+  <strong>Download Android APK:</strong> <em>Pending signed public release</em> · <a href="docs/release-readiness.md">Release gate</a><br>
+  <strong>Watch demo:</strong> <em>Pending final video</em> · <a href="docs/demo.md">Demo guide</a><br>
+  <strong>Project website:</strong> <a href="https://edgefit-ai.pages.dev/">EdgeFit AI</a><br>
+  <strong>Global Evidence dashboard:</strong> <a href="https://edgefit-ai.pages.dev/dashboard.html">Explore dashboard</a><br>
+  <strong>Full walkthrough PDF:</strong> <em>Pending approved PDF</em><br>
+</div>
+
 **Will this AI model run well on *your* phone? EdgeFit AI answers with measurements, not guesses — Meta Muse Spark predicts on-device inference speed, the phone measures it, and every claim stays traceable to evidence.**
 
 Built for the **2026 Meta Global AI Developer Hackathon**.
 
 > **Status snapshot (2026-11-01):** on-device benchmark + prediction sessions are implemented and physically demonstrated on a Galaxy S22 Ultra; the **Global Evidence backend is deployed and the public dashboard is live** (honestly empty — zero genuine publications yet). No demo-video link is published yet. No signed public APK exists yet. See [Limitations](#p-limitations-known-issues-and-roadmap).
 
-| Access | Link |
-|---|---|
-| 📦 DOWNLOAD EDGEFIT AI (signed public-preview APK) | **PENDING** — no signed release yet ([gate status](docs/release-readiness.md)) |
-| 🎬 WATCH THE DEMO (official 3-minute video) | **PENDING** — no video link published yet |
-| 🌐 GLOBAL EVIDENCE DASHBOARD (live, empty state) | [edgefit-ai.pages.dev/dashboard.html](https://edgefit-ai.pages.dev/dashboard.html) |
-| 📖 VIEW COMPLETE WALKTHROUGH (browser guide) | **PENDING** — walkthrough in progress in a separate session; link added when the approved artifact is delivered and verified |
-| 📥 DOWNLOAD COMPLETE WALKTHROUGH (PDF/offline) | **PENDING** — same gate as above; no file invented here |
-| 📸 Product screenshot gallery | [Gallery](#c-product-screenshot-gallery) · [provenance](docs/screenshot-gallery.md) |
+**Quick access:** APK and walkthrough downloads will become active only after verified release artifacts exist. Until then, the direct website and dashboard links above are available for inspection; public aggregate data is not yet qualified.
+
 
 ## A. Why Android? Hardware fragmentation is the problem
 
@@ -27,6 +30,8 @@ EdgeFit AI addresses that problem using hardware profiling, candidate model reco
 - **Solution:** profile → recommend → predict → authorize → benchmark → compare → retain → contribute. Each step is explicit, authorized, and evidence-bound; nothing uploads silently, nothing measures silently.
 
 ## C. Product screenshot gallery
+
+**Current public gallery:** eleven existing, genuine S22 Ultra screenshots. A newly curated eleven-shot set from November 1 is approved for replacement, but its image binaries are not yet in this Git branch. See [gallery provenance](docs/screenshot-gallery.md); no missing-image links are shown here.
 
 Genuine captures from a Galaxy S22 Ultra (SM-S908U, Android 16), EdgeFit AI 0.2.0. No mockups. Full gallery with provenance: [docs/screenshot-gallery.md](docs/screenshot-gallery.md).
 
@@ -43,6 +48,20 @@ Genuine captures from a Galaxy S22 Ultra (SM-S908U, Android 16), EdgeFit AI 0.2.
 | Recommended models: measured values vs unverified estimates | ![Model recommendations](assets/screenshots/model-recommendations.png) |
 | Contribute review: run provenance with consent scope | ![Global contribute](assets/screenshots/global-contribute.png) |
 | Settings: workload, export, diagnostics, Global connection, build | ![Settings](assets/screenshots/settings.png) |
+
+### Judge's evidence map — Indie developer track
+
+The [official hackathon overview](https://cerebralvalley.ai/e/meta-ai-developer-hackathon) describes the Indie track in terms of **creativity, technical ambition, and whether it works**. This repository is organized so each claim has something a judge can inspect:
+
+| What judges should assess | EdgeFit evidence |
+|---|---|
+| **Creativity / user impact** | [Problem and solution](#b-problem-and-solution), [hardware-aware recommendations](#d-model-recommendations), device-first use case |
+| **Meta AI use** | [Muse Spark's prediction, follow-up and bounded proposals](#f-meta-ai-capabilities), [integration details](docs/muse-integration.md) |
+| **Technical ambition / depth** | [Architecture](#l-architecture-diagram-and-technical-stack), [native harness and tests](#h-test-harness-and-engineering-achievements), [measured evidence](#g-scientific-methodology-and-measured-findings) |
+| **Working implementation / demo** | [Physical screenshots](#c-product-screenshot-gallery), [reproduction guide](#n-reproduction-instructions), [demo instructions](docs/demo.md), [qualification limitations](#p-limitations-known-issues-and-roadmap) |
+| **Transparent scale claims** | [Global Evidence status](#i-global-evidence-system-deployed-honestly-empty), [provenance](docs/evidence-methodology.md); no invented multi-device publications |
+
+All screenshots are genuine device captures. Model-compatibility estimates are unverified until measured; public Global aggregates should not be claimed until qualified contributions exist.
 
 ## D. Model recommendations
 
@@ -113,6 +132,17 @@ The Global backend is **deployed on Cloudflare Free** (three Workers + one D1 da
 **Current status (2026-11-01): zero genuine publications.** 19 legacy/synthetic test rows, 0 `device_contribution` rows, empty allowlist, consent `ef-consent-01` PROPOSED not approved, first genuine upload (P0) not run. The dashboard's empty charts and `artifacts:[]` API responses are the *correct* output — nothing estimated, nothing filled in.
 
 **Independently verified by this workstream:** dashboard 200 with honest empty copy; `/v1/models` → `artifacts:[]`; ingest `GET /v1/models` → 404 (narrow routing intact); backend suite 297/297 re-run from the pinned-commit archive; rate-limit (120) and scheduler ceiling (10) confirmed in source. D1 census and 401 behavior attributed to Muse B's dated handoff (`cba27c3`).
+
+### Website and dashboard visual evidence — remaining captures
+
+The live project site and Global Evidence dashboard are linked in **Judge Quick Access** above. Their final README screenshots are **pending capture and review**, not mockups. Required capture set:
+
+- Website landing page: clear product value, calls to action, and link to the repository.
+- Dashboard overview: real deployed UI, current data count, explicit empty/pending state if no publications exist.
+- Dashboard detail: real device/cohort/provenance cards only after actual qualified entries appear.
+- Consent-controlled contribution flow: Android review, successful receipt, and status distinction; show only completed authentic flows.
+
+Never fabricate populated dashboards, device fleet results, or signed-download links to fill visual gaps.
 
 ## J. Download / install / requirements
 
@@ -208,6 +238,6 @@ Built for the **2026 Meta Global AI Developer Hackathon** (deadline Nov 4, 2026)
 
 ## R. Video and verified submission links
 
-**Demo video coming soon (official maximum: THREE minutes).** No video link is published yet; this section will be updated with the verified URL. A demonstration script is ready in [docs/demo.md](docs/demo.md).
+**Demo video coming soon.** No video link is published yet; this section will be updated with the verified URL. A demonstration script is ready in [docs/demo.md](docs/demo.md).
 
 Verified links: this repository, the [live dashboard](https://edgefit-ai.pages.dev/dashboard.html), and the public read API above. No download, video, or walkthrough URL is claimed anywhere in this README beyond what exists — pending items are labeled PENDING with no href.
