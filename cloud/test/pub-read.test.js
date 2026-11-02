@@ -1,5 +1,5 @@
 // PUB-03 public read-only evidence Worker (PR-01..PR-30).
-// Proves the separate anonymous GET dispatcher: exact three-route
+// Proves the separate anonymous GET dispatcher: exact four-route
 // allowlist, no mutation path, server-side publication guards,
 // exact-origin CORS, no-store caching, and Free-tier rate limiting
 // with worker.js-identical fail-open semantics. Nonempty positive

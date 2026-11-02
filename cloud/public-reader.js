@@ -6,7 +6,9 @@
 // API uses (api.js handleRequest + publicationClause), behind a
 // route allowlist so submission/withdrawal/admin paths structurally
 // cannot be reached. While the publication allowlist is EMPTY this
-// Worker truthfully serves empty-but-valid populations.
+// Worker truthfully serves empty-but-valid populations, plus the
+// counts-only /v1/network/status pre-publication contribution
+// summary (no identifiers, payloads, or statistics).
 //
 // Security notes:
 // * CORS allows exactly the public website origin; it is browser
@@ -32,6 +34,7 @@ export const PUBLIC_ROUTES = [
   "/v1/models",
   "/v1/benchmarks/aggregates",
   "/v1/evidence/model-candidates",
+  "/v1/network/status",
 ];
 
 /** Methods answered (HEAD rides GET handling, body stripped). */
@@ -158,7 +161,7 @@ export function makePublicDepsFromEnv(env) {
  * rateLimit?, onRateLimitError? }. Never throws for
  * request-shaped input: every failure surfaces as a sanitized
  * JSON response with CORS + no-store headers. No code path here
- * can mutate D1: only the three GET builders run, and only with
+ * can mutate D1: only the four GET builders run, and only with
  * GET/HEAD semantics (HEAD strips the body after handling).
  */
 export async function publicFetch(request, ctx) {
@@ -230,7 +233,7 @@ export async function publicFetch(request, ctx) {
   const path = url.pathname;
   // Path before method: unknown routes are 404 for EVERY method,
   // so error codes never oracle private-route existence. Only the
-  // three allowlisted paths can answer 405.
+  // four allowlisted paths can answer 405.
   if (!PUBLIC_ROUTES.includes(path)) {
     return failClosed(404, "not_found", "no such route", cors());
   }

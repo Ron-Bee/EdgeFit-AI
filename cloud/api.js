@@ -16,9 +16,13 @@ import {
   validateSubmission,
   configHashFor,
   publicationClause,
+  publishConsentVersions,
+  PUBLISHABLE_ORIGIN,
 } from "./validate.js";
 import { mean, median, iqr } from "./stats.js";
-import { groupCohorts, passesQuorum, saltedInstall } from "./cohort.js";
+import {
+  groupCohorts, passesQuorum, saltedInstall, cohortOf, cohortHash,
+} from "./cohort.js";
 
 export const DEFAULTS = {
   quorumRuns: 5,
@@ -689,6 +693,100 @@ async function getCandidates(req) {
   };
 }
 
+// ---------- public network status (pre-publication contribution counts) ----------
+
+/** Cap on the per-device-class listing (counts stay exact below it). */
+export const NETWORK_MAX_CLASSES = 100;
+
+// The nine canonical cohort parts (cohort.js), plus the four config
+// parts that config_hash covers. Grouping by hash-plus-parts equals
+// grouping by hash alone (same hash => same parts), and keeps the
+// closest-cohort descriptor exact without a second sample query.
+const NETWORK_COHORT_COLS = ["model_sha", "quantization_label",
+  "device_class", "workload_id", "prompt_sha", "runtime_impl",
+  "runtime_backend", "build_key", "config_hash"];
+const NETWORK_CONFIG_COLS = ["n_ctx", "n_threads", "n_predict",
+  "sampler"];
+
+async function getNetworkStatus(req) {
+  const { db, deps, nowMs } = req;
+  const GENUINE = `origin = '${PUBLISHABLE_ORIGIN}'`;
+  const LIVE = `${GENUINE} AND eligibility <> 'REVOKED'`;
+  const stageRows = await db.all(
+    `SELECT eligibility, COUNT(*) AS n FROM submissions
+     WHERE ${GENUINE} GROUP BY eligibility`);
+  const stages = { SUBMITTED: 0, VALIDATED: 0, QUALIFIED: 0,
+    PUBLISHED: 0, REVOKED: 0 };
+  for (const r of stageRows) {
+    if (r.eligibility in stages) stages[r.eligibility] = r.n;
+  }
+  const acc = await db.get(
+    `SELECT COUNT(*) AS n, COUNT(DISTINCT install_id) AS m
+     FROM submissions WHERE ${LIVE}`);
+  const classRows = await db.all(
+    `SELECT device_class, COUNT(*) AS n FROM submissions
+     WHERE ${LIVE} GROUP BY device_class
+     ORDER BY n DESC, device_class ASC`);
+  const classesTruncated = classRows.length > NETWORK_MAX_CLASSES;
+  const versionRows = await db.all(
+    `SELECT DISTINCT consent_policy_version AS v FROM submissions
+     WHERE ${LIVE} ORDER BY v ASC LIMIT 20`);
+  const groupCols = [...NETWORK_COHORT_COLS, ...NETWORK_CONFIG_COLS];
+  const cohorts = await db.all(
+    `SELECT ${groupCols.join(", ")}, COUNT(*) AS n,
+       COUNT(DISTINCT install_id) AS m,
+       SUM(CASE WHEN eligibility IN ('SUBMITTED', 'VALIDATED')
+         THEN 1 ELSE 0 END) AS awaiting
+     FROM submissions WHERE ${LIVE}
+     GROUP BY ${groupCols.join(", ")}
+     ORDER BY m DESC, n DESC, ${NETWORK_COHORT_COLS.join(" ASC, ")} ASC`);
+  let closest = null;
+  if (cohorts.length > 0) {
+    const w = cohorts[0];
+    closest = {
+      cohort: cohortOf(w),
+      cohort_hash: cohortHash(deps, w),
+      runs: w.n,
+      installs: w.m,
+      awaiting_qualification: w.awaiting,
+    };
+  }
+  const why = [];
+  if (acc.n === 0) why.push("no_contributions");
+  const open = publishConsentVersions(deps).length > 0;
+  if (!open) why.push("publication_gate_closed");
+  if (closest !== null) {
+    if (closest.installs < deps.quorumInstalls ||
+        closest.runs < deps.quorumRuns) {
+      why.push("quorum_unmet");
+    }
+    if (closest.awaiting_qualification > 0) {
+      why.push("rows_awaiting_qualification");
+    }
+  }
+  return {
+    status: 200,
+    body: {
+      api_version: API_VERSION,
+      scope: "staging-contributions",
+      accepted_submissions: acc.n,
+      contributing_installs: acc.m,
+      consent_versions: versionRows.map((r) => r.v),
+      by_device_class: (classesTruncated
+        ? classRows.slice(0, NETWORK_MAX_CLASSES) : classRows)
+        .map((r) => ({ device_class: r.device_class, accepted: r.n })),
+      classes_truncated: classesTruncated,
+      stages,
+      closest_cohort: closest,
+      quorum: { min_runs: deps.quorumRuns,
+        min_installs: deps.quorumInstalls },
+      publication_open: open,
+      why_not_published: why,
+      generated_at: new Date(nowMs ?? Date.now()).toISOString(),
+    },
+  };
+}
+
 // ---------- dispatcher ----------
 
 export function withDefaults(deps) {
@@ -714,6 +812,9 @@ async function dispatch(req) {
   if (method === "GET" && path === "/v1/models") return await getModels(req);
   if (method === "GET" && path === "/v1/evidence/model-candidates") {
     return await getCandidates(req);
+  }
+  if (method === "GET" && path === "/v1/network/status") {
+    return await getNetworkStatus(req);
   }
   if (method === "GET" && path === "/v1/benchmarks/runs") {
     // Scaffolding present, explicitly inactive: individual-run
