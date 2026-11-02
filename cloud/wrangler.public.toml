@@ -2,9 +2,10 @@
 #
 # SEPARATE Worker from staging: anonymous GET-only aggregate reads
 # for the public dashboard. Entry cloud/public-reader.js answers
-# exactly three routes (models, aggregates, model-candidates) plus
-# CORS preflight; no POST/DELETE, no scheduler, no writes exist in
-# its code. Publication is enforced server-side by publicationClause
+# exactly four routes (models, aggregates, model-candidates,
+# network/status counts-only) plus CORS preflight; no POST/DELETE,
+# no scheduler, no writes exist in its code. Publication is
+# enforced server-side by publicationClause
 # (approved consent AND device_contribution origin); the allowlist
 # stays EMPTY until a real consent version is owner-approved.
 #
