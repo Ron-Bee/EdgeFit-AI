@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 1600 1000">
+<style>html,body{margin:0;padding:0}text{font-family:'Segoe UI',Verdana,sans-serif}</style>
+<defs>
+<marker id="aB" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#49BBFF"/></marker>
+<marker id="aG" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#34C77B"/></marker>
+<marker id="aM" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#9DB2D6"/></marker>
+</defs>
+<rect width="1600" height="1000" fill="#0A1830"/>
+<text x="60" y="80" font-size="42" font-weight="700" fill="#F3F7FE">EdgeFit AI — Complete System Architecture</text>
+<text x="60" y="118" font-size="20" fill="#9DB2D6">On-device first · external prediction · governed cloud · public evidence (FIG 02)</text>
+<!-- lane headers -->
+<rect x="40" y="150" width="330" height="640" rx="20" fill="#0E2140" stroke="#1265F5" stroke-width="3"/>
+<text x="60" y="195" font-size="24" font-weight="700" fill="#49BBFF">ON-DEVICE</text>
+<rect x="390" y="150" width="330" height="640" rx="20" fill="#0E2140" stroke="#8054F8" stroke-width="3"/>
+<text x="410" y="195" font-size="24" font-weight="700" fill="#B9A5FF">META API (external)</text>
+<rect x="740" y="150" width="400" height="640" rx="20" fill="#0E2140" stroke="#49BBFF" stroke-width="3"/>
+<text x="760" y="195" font-size="24" font-weight="700" fill="#49BBFF">GOVERNED CLOUD</text>
+<rect x="1160" y="150" width="400" height="640" rx="20" fill="#0E2140" stroke="#F3F7FE" stroke-width="3"/>
+<text x="1180" y="195" font-size="24" font-weight="700" fill="#F3F7FE">PUBLIC</text>
+<!-- device boxes -->
+<rect x="65" y="220" width="280" height="96" rx="14" fill="#12294D" stroke="#1265F5" stroke-width="2.5"/>
+<text x="85" y="258" font-size="22" font-weight="600" fill="#F3F7FE">Android app · 5 tabs</text>
+<text x="85" y="288" font-size="17" fill="#9DB2D6">Home · Benchmark · Sessions</text>
+<rect x="65" y="330" width="280" height="96" rx="14" fill="#12294D" stroke="#1265F5" stroke-width="2.5"/>
+<text x="85" y="368" font-size="22" font-weight="600" fill="#F3F7FE">Capability collector</text>
+<text x="85" y="398" font-size="17" fill="#9DB2D6">hardware + telemetry + gates</text>
+<rect x="65" y="440" width="280" height="96" rx="14" fill="#12294D" stroke="#1265F5" stroke-width="2.5"/>
+<text x="85" y="478" font-size="22" font-weight="600" fill="#F3F7FE">llama.cpp (native)</text>
+<text x="85" y="508" font-size="17" fill="#9DB2D6">load · prefill · generate</text>
+<rect x="65" y="550" width="280" height="96" rx="14" fill="#12294D" stroke="#49BBFF" stroke-width="2.5"/>
+<text x="85" y="588" font-size="22" font-weight="600" fill="#F3F7FE">Session evidence store</text>
+<text x="85" y="618" font-size="17" fill="#9DB2D6">local · hashed · exportable</text>
+<rect x="65" y="660" width="280" height="96" rx="14" fill="#12294D" stroke="#34C77B" stroke-width="2.5" stroke-dasharray="8 5"/>
+<text x="85" y="698" font-size="22" font-weight="600" fill="#F3F7FE">Contribution client</text>
+<text x="85" y="728" font-size="17" fill="#9DB2D6">optional · consent + auth</text>
+<!-- meta boxes -->
+<rect x="415" y="220" width="280" height="140" rx="14" fill="#12294D" stroke="#8054F8" stroke-width="2.5" stroke-dasharray="8 5"/>
+<text x="435" y="258" font-size="22" font-weight="600" fill="#F3F7FE">Muse Spark</text>
+<text x="435" y="288" font-size="17" fill="#9DB2D6">throughput prediction</text>
+<text x="435" y="314" font-size="17" fill="#9DB2D6">BYOK · owner key only</text>
+<rect x="415" y="374" width="280" height="140" rx="14" fill="#12294D" stroke="#8054F8" stroke-width="2.5" stroke-dasharray="8 5"/>
+<text x="435" y="412" font-size="22" font-weight="600" fill="#F3F7FE">Agentic proposals</text>
+<text x="435" y="442" font-size="17" fill="#9DB2D6">model proposes · app validates</text>
+<text x="435" y="468" font-size="17" fill="#9DB2D6">owner approves each run</text>
+<text x="415" y="570" font-size="18" fill="#9DB2D6">Estimates are NEVER</text>
+<text x="415" y="598" font-size="18" fill="#9DB2D6">recorded as measured</text>
+<text x="415" y="626" font-size="18" fill="#9DB2D6">evidence.</text>
+<!-- cloud boxes -->
+<rect x="765" y="220" width="350" height="96" rx="14" fill="#12294D" stroke="#49BBFF" stroke-width="2.5"/>
+<text x="785" y="258" font-size="22" font-weight="600" fill="#F3F7FE">Ingest API (authed)</text>
+<text x="785" y="288" font-size="17" fill="#9DB2D6">per-install token · consent check</text>
+<rect x="765" y="330" width="350" height="96" rx="14" fill="#12294D" stroke="#49BBFF" stroke-width="2.5"/>
+<text x="785" y="368" font-size="22" font-weight="600" fill="#F3F7FE">Cloudflare D1 store</text>
+<text x="785" y="398" font-size="17" fill="#9DB2D6">provenance · dedup · tombstones</text>
+<rect x="765" y="440" width="350" height="110" rx="14" fill="#12294D" stroke="#F5A623" stroke-width="2.5"/>
+<text x="785" y="478" font-size="22" font-weight="600" fill="#F3F7FE">Qualification + quorum</text>
+<text x="785" y="508" font-size="17" fill="#9DB2D6">5 runs · 3 installs · exact cohort</text>
+<rect x="765" y="564" width="350" height="110" rx="14" fill="#12294D" stroke="#E5484D" stroke-width="2.5"/>
+<text x="785" y="602" font-size="22" font-weight="600" fill="#F3F7FE">Publication gate B — OFF</text>
+<text x="785" y="632" font-size="17" fill="#9DB2D6">no public aggregates yet</text>
+<!-- public boxes -->
+<rect x="1185" y="220" width="350" height="110" rx="14" fill="#12294D" stroke="#F3F7FE" stroke-width="2.5"/>
+<text x="1205" y="258" font-size="22" font-weight="600" fill="#F3F7FE">Public read API</text>
+<text x="1205" y="288" font-size="17" fill="#9DB2D6">aggregates only · no raw rows</text>
+<rect x="1185" y="344" width="350" height="110" rx="14" fill="#12294D" stroke="#F3F7FE" stroke-width="2.5"/>
+<text x="1205" y="382" font-size="22" font-weight="600" fill="#F3F7FE">Evidence dashboard</text>
+<text x="1205" y="412" font-size="17" fill="#9DB2D6">staging counts live · 0 published</text>
+<text x="1185" y="510" font-size="18" fill="#9DB2D6">Receipt ≠ qualified</text>
+<text x="1185" y="538" font-size="18" fill="#9DB2D6">≠ published.</text>
+<!-- arrows device internal -->
+<line x1="205" y1="316" x2="205" y2="328" stroke="#49BBFF" stroke-width="3" marker-end="url(#aB)"/>
+<line x1="205" y1="426" x2="205" y2="438" stroke="#49BBFF" stroke-width="3" marker-end="url(#aB)"/>
+<line x1="205" y1="536" x2="205" y2="548" stroke="#49BBFF" stroke-width="3" marker-end="url(#aB)"/>
+<line x1="205" y1="646" x2="205" y2="658" stroke="#34C77B" stroke-width="3" stroke-dasharray="6 4" marker-end="url(#aG)"/>
+<!-- app <-> meta -->
+<line x1="345" y1="268" x2="413" y2="268" stroke="#9DB2D6" stroke-width="2.5" stroke-dasharray="6 4" marker-end="url(#aM)"/>
+<line x1="413" y1="444" x2="345" y2="300" stroke="#9DB2D6" stroke-width="2.5" stroke-dasharray="6 4" marker-end="url(#aM)"/>
+<!-- contribution -> cloud (routed under lanes, up the gap) -->
+<path d="M 205 756 L 205 815 L 730 815 L 730 268 L 761 268" fill="none" stroke="#34C77B" stroke-width="3" stroke-dasharray="8 5" marker-end="url(#aG)"/>
+<text x="467" y="808" font-size="17" fill="#34C77B" text-anchor="middle">upload (consent + auth)</text>
+<!-- cloud internal -->
+<line x1="940" y1="316" x2="940" y2="328" stroke="#49BBFF" stroke-width="3" marker-end="url(#aB)"/>
+<line x1="940" y1="426" x2="940" y2="438" stroke="#49BBFF" stroke-width="3" marker-end="url(#aB)"/>
+<line x1="940" y1="550" x2="940" y2="562" stroke="#F5A623" stroke-width="3" marker-end="url(#aB)"/>
+<!-- gate -> public -->
+<line x1="1115" y1="619" x2="1183" y2="275" stroke="#E5484D" stroke-width="3" stroke-dasharray="8 5" marker-end="url(#aB)"/>
+<line x1="1360" y1="330" x2="1360" y2="342" stroke="#F3F7FE" stroke-width="3" marker-end="url(#aB)"/>
+<!-- footer -->
+<text x="60" y="860" font-size="20" fill="#F3F7FE">Contribution: IMPLEMENTED · PHYSICALLY VERIFIED (P0)  |  Publication: PROPOSED — Approval B OFF</text>
+<text x="60" y="892" font-size="20" fill="#9DB2D6">Sources: SessionState/BenchRunner/DeviceCapabilityCollector · bridge contract v1.1 · walkthrough ch. 07–09 · G2-B2 staging reports</text>
+<rect x="40" y="915" width="1520" height="3" fill="#2A4A7A"/>
+<text x="60" y="955" font-size="18" fill="#9DB2D6">Legend:</text>
+<rect x="160" y="935" width="26" height="16" rx="4" fill="none" stroke="#1265F5" stroke-width="3"/><text x="196" y="949" font-size="18" fill="#9DB2D6">on-device</text>
+<rect x="330" y="935" width="26" height="16" rx="4" fill="none" stroke="#8054F8" stroke-width="3"/><text x="366" y="949" font-size="18" fill="#9DB2D6">Meta external</text>
+<rect x="540" y="935" width="26" height="16" rx="4" fill="none" stroke="#49BBFF" stroke-width="3"/><text x="576" y="949" font-size="18" fill="#9DB2D6">evidence/store</text>
+<rect x="750" y="935" width="26" height="16" rx="4" fill="none" stroke="#34C77B" stroke-width="3"/><text x="786" y="949" font-size="18" fill="#9DB2D6">owner-gated</text>
+<rect x="940" y="935" width="26" height="16" rx="4" fill="none" stroke="#E5484D" stroke-width="3"/><text x="976" y="949" font-size="18" fill="#9DB2D6">blocked</text>
+<text x="1100" y="949" font-size="18" fill="#9DB2D6">dashed = optional / not yet open</text>
+</svg>

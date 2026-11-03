@@ -106,6 +106,52 @@ profile → recommend → predict → authorize → benchmark → compare → re
 7. **Retain** — sessions persist in the on-device ledger; exports are contract-v1 JSON; workstation SQLite keeps additive history.
 8. **Contribute** — consent-gated per-submission review uploads to the deployed Global backend (client ready; first genuine upload not yet run).
 
+## EdgeFit AI — How It Works
+
+Visual companion to §E above: five source-grounded diagrams from the [Definitive Walkthrough v1.1](docs/walkthrough/v1.1/README.md) ([PDF](https://ronbeesoftware.com/downloads/EdgeFit_AI_Definitive_Walkthrough_v1.1.pdf) · [walkthrough page](https://ronbeesoftware.com/edgefit/walkthrough/)). No interfaces or measurements were fabricated. Figure numbers below are v1.1 numbers; the small `FIG NN` labels baked inside some graphics are the original master identities (see the [asset manifest](docs/assets/visual-showcase/v1.1/README.md)).
+
+### 1. System architecture (Walkthrough Fig 02)
+
+<a href="docs/assets/visual-showcase/v1.1/edgefit-fig-02-system-architecture.svg"><img src="docs/assets/visual-showcase/v1.1/edgefit-fig-02-system-architecture.svg" width="800" height="500" alt="EdgeFit AI system architecture: on-device app and native inference, optional Meta Muse Spark prediction, governed Cloudflare backend, public dashboard"></a>
+
+Everything starts on the phone: the Android app profiles hardware, runs native llama.cpp benchmarks, and keeps evidence in a local hashed store. Meta Muse Spark (external, optional, owner-keyed) predicts throughput and proposes bounded experiments — estimates are never recorded as measured evidence. Consented contributions flow to the governed Cloudflare backend (ingest → D1 → qualification → quorum → publication gate B, currently OFF); only quorum-satisfied aggregates reach the public dashboard, and zero are published yet.
+
+<details>
+<summary><b>2. Native benchmark pipeline (Walkthrough Fig 26)</b> — preflight, execution, measurement, outcomes</summary>
+
+<a href="docs/assets/visual-showcase/v1.1/edgefit-fig-26-benchmark-pipeline.svg"><img src="docs/assets/visual-showcase/v1.1/edgefit-fig-26-benchmark-pipeline.svg" width="800" height="500" alt="Native benchmark pipeline: preflight guards, worker thread with load prefill generate assemble, watchdog, terminal outcomes"></a>
+
+BenchRunner guards every run: preflight checks (model staged, memory, thermal) run before one worker thread performs load → prefill → generate → assemble under a watchdog, producing exactly one BenchResult per run with distinct terminal outcomes (success, cancelled, failed, refused). Throughput is measured generation tokens/sec with per-run conditions — never estimated.
+
+</details>
+
+<details>
+<summary><b>3. Meta Muse Spark agent loop (Walkthrough Fig 43)</b> — bounded proposals, validation, owner approval</summary>
+
+<a href="docs/assets/visual-showcase/v1.1/edgefit-fig-41-agent-lifecycle.svg"><img src="docs/assets/visual-showcase/v1.1/edgefit-fig-41-agent-lifecycle.svg" width="800" height="500" alt="Muse Spark bounded agent lifecycle: model proposes, host validates, owner approves each run, device measures"></a>
+
+Muse Spark works inside a five-attempt budget: the model proposes an experiment, the host validates it against a fixed schema (SUPPORTED / CAUTION / INVALID, fail-closed at zero budget cost), and the owner approves, modifies, or rejects each run before the phone measures it. Follow-up interpretations cite run ids only — and the model correctly abstained rather than guess beyond the evidence in the six-run study.
+
+</details>
+
+<details>
+<summary><b>4. Global Evidence Network (Walkthrough Fig 50)</b> — consent to publication, every gate explicit</summary>
+
+<a href="docs/assets/visual-showcase/v1.1/edgefit-fig-48-global-network.svg"><img src="docs/assets/visual-showcase/v1.1/edgefit-fig-48-global-network.svg" width="800" height="500" alt="Global evidence pipeline: consent, ingestion, quorum, publication gate and revocation"></a>
+
+Consent → ingestion → validation → qualification → exact-cohort quorum (≥5 eligible runs from ≥3 installs) → Publication Approval B → public aggregate. Accepted ≠ qualified ≠ published: a submission receipt is not evidence of qualification, and with gate B OFF and zero genuine publications, the dashboard's empty state is the correct output.
+
+</details>
+
+<details>
+<summary><b>5. Exploratory device performance (Walkthrough Fig 53)</b> — measured S22 Ultra study, honestly small</summary>
+
+<a href="docs/assets/visual-showcase/v1.1/edgefit-fig-51-study-chart.svg"><img src="docs/assets/visual-showcase/v1.1/edgefit-fig-51-study-chart.svg" width="800" height="500" alt="Measured generation throughput chart: candidate A 4 threads median 16.52, candidate B 8 threads median 10.49, n=3 each, exploratory"></a>
+
+Galaxy S22 Ultra, fixed workload, exploratory six-run study: 4-thread median **16.52 tok/s** (range 15.28–16.66, n=3) vs 8-thread median **10.49 tok/s** (range 6.82–13.38, n=3) — more threads measured *slower* on this device/workload. Bars are medians, whiskers observed ranges; the chart states NOT significant. Single device, generation only, no fleet claims. Full method: [§G](#g-scientific-methodology-and-measured-findings).
+
+</details>
+
 ## F. Meta AI capabilities
 
 Three distinct roles, each independently validated by host checks:

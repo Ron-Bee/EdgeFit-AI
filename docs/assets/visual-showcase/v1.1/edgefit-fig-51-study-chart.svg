@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 1600 1000">
+<style>html,body{margin:0;padding:0}text{font-family:'Segoe UI',Verdana,sans-serif}</style>
+<rect width="1600" height="1000" fill="#0A1830"/>
+<text x="60" y="70" font-size="42" font-weight="700" fill="#F3F7FE">S22 Ultra Six-Run Study — Generation Throughput</text>
+<text x="60" y="106" font-size="20" fill="#9DB2D6">Exploratory · single device · n = 3 per candidate · generation only — no population claims (FIG 51)</text>
+<!-- grid -->
+<g font-size="18" fill="#9DB2D6" text-anchor="end">
+<line x1="180" y1="760" x2="1450" y2="760" stroke="#2A4A7A" stroke-width="2"/>
+<text x="165" y="767">0</text>
+<line x1="180" y1="663" x2="1450" y2="663" stroke="#1B3358" stroke-width="1"/><text x="165" y="670">3</text>
+<line x1="180" y1="567" x2="1450" y2="567" stroke="#1B3358" stroke-width="1"/><text x="165" y="574">6</text>
+<line x1="180" y1="470" x2="1450" y2="470" stroke="#1B3358" stroke-width="1"/><text x="165" y="477">9</text>
+<line x1="180" y1="373" x2="1450" y2="373" stroke="#1B3358" stroke-width="1"/><text x="165" y="380">12</text>
+<line x1="180" y1="277" x2="1450" y2="277" stroke="#1B3358" stroke-width="1"/><text x="165" y="284">15</text>
+<line x1="180" y1="180" x2="1450" y2="180" stroke="#1B3358" stroke-width="1"/><text x="165" y="187">18</text>
+</g>
+<text x="60" y="470" font-size="20" fill="#9DB2D6" text-anchor="middle" transform="rotate(-90 60 470)">tokens / second</text>
+<!-- bars: A median 16.52 -> y228; B median 10.49 -> y422 -->
+<rect x="420" y="228" width="240" height="532" rx="10" fill="#1265F5" opacity="0.85"/>
+<rect x="940" y="422" width="240" height="338" rx="10" fill="#49BBFF" opacity="0.85"/>
+<!-- whiskers: A 15.28-16.66 -> y268-223; B 6.82-13.38 -> y540-329 -->
+<g stroke="#F3F7FE" stroke-width="4">
+<line x1="540" y1="268" x2="540" y2="223"/>
+<line x1="490" y1="223" x2="590" y2="223"/>
+<line x1="490" y1="268" x2="590" y2="268"/>
+<line x1="1060" y1="540" x2="1060" y2="329"/>
+<line x1="1010" y1="329" x2="1110" y2="329"/>
+<line x1="1010" y1="540" x2="1110" y2="540"/>
+</g>
+<!-- median markers -->
+<g stroke="#0A1830" stroke-width="3">
+<line x1="420" y1="228" x2="660" y2="228"/>
+<line x1="940" y1="422" x2="1180" y2="422"/>
+</g>
+<!-- labels -->
+<text x="540" y="200" font-size="26" font-weight="700" fill="#F3F7FE" text-anchor="middle">16.52</text>
+<text x="540" y="800" font-size="24" font-weight="700" fill="#F3F7FE" text-anchor="middle">Candidate A · 4 threads</text>
+<text x="540" y="832" font-size="20" fill="#9DB2D6" text-anchor="middle">range 15.28–16.66 · n = 3</text>
+<text x="995" y="400" font-size="26" font-weight="700" fill="#F3F7FE" text-anchor="end">10.49</text>
+<text x="1060" y="800" font-size="24" font-weight="700" fill="#F3F7FE" text-anchor="middle">Candidate B · 8 threads</text>
+<text x="1060" y="832" font-size="20" fill="#9DB2D6" text-anchor="middle">range 6.82–13.38 · n = 3</text>
+<text x="700" y="250" font-size="18" fill="#F3F7FE">bar = median · whisker = observed range</text>
+<rect x="1330" y="150" width="230" height="120" rx="12" fill="#2A1626" stroke="#E5484D" stroke-width="2.5"/>
+<text x="1445" y="188" font-size="19" font-weight="700" fill="#E5484D" text-anchor="middle">NOT significant.</text>
+<text x="1445" y="218" font-size="18" fill="#F3F7FE" text-anchor="middle">n = 3 cannot rank</text>
+<text x="1445" y="244" font-size="18" fill="#9DB2D6" text-anchor="middle">configs in general.</text>
+<text x="60" y="890" font-size="19" fill="#F3F7FE">Prefill error (+14.8% in exp-4) is a SEPARATE measurement — this chart covers generation throughput only.</text>
+<text x="60" y="922" font-size="18" fill="#9DB2D6">Sources: walkthrough ch. 11 six-run study (SM-S908U) · SessionComparison measured values · exp-4 prediction audit</text>
+<rect x="40" y="940" width="1520" height="3" fill="#2A4A7A"/>
+<text x="60" y="972" font-size="18" fill="#9DB2D6">Read as: “on this phone, that day, A’s three runs clustered near 16.5 tok/s; B’s varied widely near 10.5.” Nothing more.</text>
+</svg>
