@@ -17,11 +17,11 @@ screenshots, source-grounded diagrams, and honest evidence-status labels.
 ## Downloads
 
 - [EdgeFit_AI_Definitive_Walkthrough_v1.1.pdf](EdgeFit_AI_Definitive_Walkthrough_v1.1.pdf)
-  (PDF, __V11_PDF_BYTES__ bytes, __V11_PDF_PAGES__ pages, searchable)
+  (PDF, 7,196,833 bytes, 71 pages, searchable)
 - [EdgeFit_AI_Definitive_Walkthrough_v1.1.docx](EdgeFit_AI_Definitive_Walkthrough_v1.1.docx)
   (editable Word master, 17,207,933 bytes)
 
-PDF SHA-256: `__V11_PDF_SHA256__`
+PDF SHA-256: `C8ED7ECA53D96BD58B0B48CA090975183C0B5A6DC8E4E631A4BF2A2F20B25B2C`
 
 DOCX SHA-256: `8F62A020F2E533443638C9F93CA1458BFFE14DBA2D26F66BA52EFAB67CA9C396`
 
