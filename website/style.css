@@ -406,6 +406,30 @@ code.inline {
 }
 button.btn { font: inherit; cursor: pointer; }
 
+/* ---- visual showcase (walkthrough diagrams) ---- */
+.figure-showcase {
+  margin: 1rem 0;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  padding: 1rem;
+  box-shadow: 0 0 24px rgba(18, 101, 245, 0.18);
+}
+.figure-showcase a {
+  display: block;
+  border-radius: 10px;
+}
+.figure-showcase img {
+  width: 100%;
+  height: auto;
+  display: block;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+.figure-showcase figcaption {
+  margin-top: 0.6rem;
+}
+
 /* ---- responsive ---- */
 @media (max-width: 48rem) {
   .hero { grid-template-columns: 1fr; }

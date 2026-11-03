@@ -83,6 +83,26 @@ fixed attempt budget. Nothing auto-runs.</p></div>
 Global aggregates publish only above quorum.</p></div>
 </div>
 
+<h2>How EdgeFit AI Works</h2>
+<p>One picture of the whole system — from your phone to public evidence.
+This is Walkthrough v1.1, Fig 02, drawn from the shipped sources:</p>
+<figure class="figure-showcase">
+<a href="assets/visual-showcase/v1.1/edgefit-fig-02-system-architecture.svg"><img src="assets/visual-showcase/v1.1/edgefit-fig-02-system-architecture.svg" width="1600" height="1000" loading="lazy" decoding="async" alt="EdgeFit AI system architecture diagram: on-device app and native inference, optional Meta Muse Spark prediction, governed Cloudflare backend, public dashboard"></a>
+<figcaption class="caption">System architecture — tap the diagram to view it full size.
+On-device contribution is implemented; public publication is proposed, gate B off.</figcaption>
+</figure>
+<div class="card">
+<ol class="tight">
+<li><span class="step-num">1</span>Read actual device constraints — CPU, memory, ABI, thermal state.</li>
+<li><span class="step-num">2</span>Evaluate model suitability against the offline catalog, with explicit uncertainty.</li>
+<li><span class="step-num">3</span>Run native llama.cpp inference benchmarks on the phone.</li>
+<li><span class="step-num">4</span>Validate and preserve each measurement as hashed on-device evidence.</li>
+<li><span class="step-num">5</span>Optionally use Meta Muse Spark for bounded prediction and owner-approved experiments.</li>
+<li><span class="step-num">6</span>Contribute evidence to the Global network only with explicit consent.</li>
+</ol>
+<p><a class="btn btn-ghost" href="https://ronbeesoftware.com/edgefit/walkthrough/">Read the Definitive Walkthrough v1.1</a></p>
+</div>
+
 <h2>Hardware-aware, like the app</h2>
 <p>The Android app starts from your device, not from a leaderboard. The
 same idea, on the web:</p>

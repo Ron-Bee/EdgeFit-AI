@@ -1,0 +1,4 @@
+# Visual-showcase assets are hash-manifested in the main-line
+# docs/assets/visual-showcase/v1.1/SHA256SUMS.txt: preserve exact
+# bytes on every platform (no CRLF conversion).
+* -text
