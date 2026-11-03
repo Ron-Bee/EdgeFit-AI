@@ -4,6 +4,38 @@ Hackathon prototype: Meta-assisted, evidence-based Android inference experiments
 
 **Development started October 26, 2026.** This repository is intended for new hackathon work. Honey LLM and BeeBench are pre-existing independent projects; their code and results are not claimed as new work.
 
+## EdgeFit AI — Definitive Walkthrough v1.0
+
+The illustrated technical guide to the complete EdgeFit AI project, intended
+for hackathon judges, developers, technical reviewers, and Android and
+on-device AI researchers.
+
+- [Download the walkthrough PDF](docs/walkthrough/v1.0/EdgeFit_AI_Definitive_Walkthrough_v1.0.pdf)
+- [View the documentation landing page](docs/walkthrough/v1.0/README.md)
+- [Visit the website walkthrough page](https://ronbeesoftware.com/edgefit/walkthrough/)
+
+Highlights: hardware-aware device profiling, GGUF model compatibility and
+selection, native llama.cpp inference measurements, benchmark configuration
+and execution, sessions with evidence provenance and exports, Meta Muse Spark
+BYOK integration, bounded agentic optimization with owner-controlled proposal
+approval, the Global Evidence Network, privacy and consent protections, and
+scientific methodology with stated limitations.
+
+## Project Status — November 3, 2026
+
+Dated status snapshot; see the repository history and workstream records for
+details.
+
+- Walkthrough v1.0 published: 40 genuine screenshots, 16 technical diagrams,
+  searchable 65-page PDF plus the editable Word master.
+- Global Evidence Network: staging pipeline accepts authenticated
+  contributions; public aggregates remain unpublished pending the
+  exact-cohort quorum (5 eligible runs / 3 independent installations) and
+  Publication Approval B (OFF).
+- Public website and evidence dashboard: <https://edgefit-ai.pages.dev/>.
+- EdgeFit AI is independently developed hackathon work; it does not reuse
+  Honey LLM or BeeBench code or functionality.
+
 ## EF-META-05 evidence flow
 
 Muse Spark 1.3 → validated tool request → read-only SQLite query → evidence response → Muse analysis.
