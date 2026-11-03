@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 1600 1000">
+<style>html,body{margin:0;padding:0}text{font-family:'Segoe UI',Verdana,sans-serif}</style>
+<defs><marker id="aB15" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#49BBFF"/></marker></defs>
+<rect width="1600" height="1000" fill="#0A1830"/>
+<text x="60" y="80" font-size="42" font-weight="700" fill="#F3F7FE">Device Intelligence — Reported vs Unavailable</text>
+<text x="60" y="118" font-size="20" fill="#9DB2D6">DeviceCapabilityCollector: platform APIs → CollectedProfile · no permissions · never zero-filled, never inferred (FIG 15)</text>
+<rect x="40" y="150" width="500" height="640" rx="20" fill="#0E2140" stroke="#34C77B" stroke-width="3"/>
+<text x="60" y="195" font-size="24" font-weight="700" fill="#34C77B">REPORTED (when readable)</text>
+<g font-size="19" fill="#F3F7FE">
+<text x="70" y="240">Device: manufacturer · model · codename</text>
+<text x="70" y="274">Android release + SDK int</text>
+<text x="70" y="308">Supported ABIs (needs arm64-v8a)</text>
+<text x="70" y="342">Logical processors (CPU cores)</text>
+<text x="70" y="376">Total RAM · Available RAM (live)</text>
+<text x="70" y="410">Thermal status (API 29+, PowerManager)</text>
+<text x="70" y="444">Battery: level · status · health · plugged</text>
+<text x="70" y="478">Battery: temperature · voltage · technology</text>
+<text x="70" y="512">UTC collection timestamp</text>
+</g>
+<rect x="70" y="540" width="440" height="120" rx="12" fill="#12294D" stroke="#34C77B" stroke-width="2"/>
+<text x="90" y="578" font-size="19" fill="#F3F7FE">Home shows: model, cores, total +</text>
+<text x="90" y="608" font-size="19" fill="#F3F7FE">available RAM, battery, thermal —</text>
+<text x="90" y="638" font-size="19" fill="#9DB2D6">all from this collector (ss-01).</text>
+<text x="70" y="710" font-size="19" fill="#9DB2D6">ProfileSerializer exports the same</text>
+<text x="70" y="740" font-size="19" fill="#9DB2D6">structure as JSON evidence.</text>
+<rect x="580" y="150" width="480" height="640" rx="20" fill="#0E2140" stroke="#F5A623" stroke-width="3"/>
+<text x="600" y="195" font-size="24" font-weight="700" fill="#F5A623">UNAVAILABLE (recorded, not faked)</text>
+<g font-size="19" fill="#F3F7FE">
+<text x="610" y="240">API &lt; 29 → “thermal.status” listed</text>
+<text x="610" y="274">read exception → key listed, null kept</text>
+<text x="610" y="308">no battery intent → “battery.level” listed</text>
+<text x="610" y="342">missing extras → per-key entries</text>
+<text x="610" y="376">list is sorted, shipped with profile</text>
+</g>
+<rect x="610" y="410" width="420" height="150" rx="12" fill="#12294D" stroke="#E5484D" stroke-width="2.5"/>
+<text x="630" y="448" font-size="20" font-weight="600" fill="#E5484D">BenchGuards fail closed:</text>
+<text x="630" y="480" font-size="19" fill="#F3F7FE">thermal null → “thermal unknown”</text>
+<text x="630" y="510" font-size="19" fill="#F3F7FE">avail ≤ 0 → “memory unknown”</text>
+<text x="630" y="540" font-size="19" fill="#9DB2D6">unknown state never approved</text>
+<text x="610" y="610" font-size="19" fill="#9DB2D6">Unsafe thermal (severe / critical /</text>
+<text x="610" y="640" font-size="19" fill="#9DB2D6">emergency / shutdown) also refuses.</text>
+<rect x="1100" y="150" width="460" height="640" rx="20" fill="#0E2140" stroke="#1265F5" stroke-width="3"/>
+<text x="1120" y="195" font-size="24" font-weight="700" fill="#49BBFF">WHERE IT GATES</text>
+<g font-size="19" fill="#F3F7FE">
+<text x="1130" y="240">1. Recommendations use</text>
+<text x="1130" y="270">    cores + RAM + ABI</text>
+<text x="1130" y="320">2. Preflight refuses unsafe</text>
+<text x="1130" y="350">    or unknown states</text>
+<text x="1130" y="400">3. Results carry device</text>
+<text x="1130" y="430">    provenance forward</text>
+<text x="1130" y="480">4. Global cohort keys on</text>
+<text x="1130" y="510">    exact device class</text>
+</g>
+<rect x="1130" y="550" width="400" height="110" rx="12" fill="#12294D" stroke="#1265F5" stroke-width="2"/>
+<text x="1150" y="588" font-size="19" fill="#F3F7FE">Wrong telemetry can never</text>
+<text x="1150" y="618" font-size="19" fill="#F3F7FE">become a fake benchmark:</text>
+<text x="1150" y="648" font-size="19" fill="#9DB2D6">gates refuse first.</text>
+<line x1="540" y1="470" x2="576" y2="470" stroke="#49BBFF" stroke-width="3" marker-end="url(#aB15)"/>
+<line x1="1060" y1="470" x2="1096" y2="470" stroke="#49BBFF" stroke-width="3" marker-end="url(#aB15)"/>
+<text x="60" y="860" font-size="20" fill="#9DB2D6">Sources: DeviceCapabilityCollector.kt · ProfileContract.kt · BenchGuards.kt · ss-01/ss-02/ss-03</text>
+<rect x="40" y="890" width="1520" height="3" fill="#2A4A7A"/>
+<text x="60" y="930" font-size="19" fill="#F3F7FE">Rule: missing hardware facts are LABELED unavailable — the app shows gaps honestly and refuses to benchmark blind.</text>
+</svg>

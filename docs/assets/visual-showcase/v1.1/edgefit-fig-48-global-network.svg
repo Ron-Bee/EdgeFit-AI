@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 1600 1000">
+<style>html,body{margin:0;padding:0}text{font-family:'Segoe UI',Verdana,sans-serif}</style>
+<defs><marker id="aB48" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#49BBFF"/></marker></defs>
+<rect width="1600" height="1000" fill="#0A1830"/>
+<text x="60" y="70" font-size="42" font-weight="700" fill="#F3F7FE">Global Evidence Network — Submission to Publication</text>
+<text x="60" y="106" font-size="20" fill="#9DB2D6">Every stage is a separate gate: passing one never implies passing the next (FIG 48)</text>
+<g font-size="19" text-anchor="middle">
+<rect x="40" y="140" width="280" height="170" rx="16" fill="#12294D" stroke="#49BBFF" stroke-width="2.5"/>
+<text x="180" y="182" font-size="21" font-weight="700" fill="#F3F7FE">1 · Local evidence</text>
+<text x="180" y="214" fill="#9DB2D6">measured session +</text>
+<text x="180" y="242" fill="#9DB2D6">provenance (ss-12)</text>
+<rect x="340" y="140" width="280" height="170" rx="16" fill="#12294D" stroke="#34C77B" stroke-width="2.5"/>
+<text x="480" y="182" font-size="21" font-weight="700" fill="#F3F7FE">2 · Per-batch review</text>
+<text x="480" y="214" fill="#9DB2D6">owner sees exact</text>
+<text x="480" y="242" fill="#9DB2D6">fields (ss-34)</text>
+<rect x="640" y="140" width="280" height="170" rx="16" fill="#12294D" stroke="#34C77B" stroke-width="2.5"/>
+<text x="780" y="182" font-size="21" font-weight="700" fill="#F3F7FE">3 · Consent</text>
+<text x="780" y="214" fill="#9DB2D6">ef-consent-01</text>
+<text x="780" y="242" fill="#9DB2D6">Approval A ✓</text>
+<rect x="940" y="140" width="280" height="170" rx="16" fill="#12294D" stroke="#34C77B" stroke-width="2.5"/>
+<text x="1080" y="182" font-size="21" font-weight="700" fill="#F3F7FE">4 · Authenticate</text>
+<text x="1080" y="214" fill="#9DB2D6">per-install token</text>
+<text x="1080" y="242" fill="#9DB2D6">(ss-33/35)</text>
+<rect x="1240" y="140" width="280" height="170" rx="16" fill="#12294D" stroke="#1265F5" stroke-width="2.5"/>
+<text x="1380" y="182" font-size="21" font-weight="700" fill="#F3F7FE">5 · Submit</text>
+<text x="1380" y="214" fill="#9DB2D6">POST + receipt</text>
+<text x="1380" y="242" fill="#9DB2D6">(ss-36)</text>
+<rect x="1240" y="360" width="280" height="170" rx="16" fill="#12294D" stroke="#49BBFF" stroke-width="2.5"/>
+<text x="1380" y="402" font-size="21" font-weight="700" fill="#F3F7FE">6 · Validate</text>
+<text x="1380" y="434" fill="#9DB2D6">schema · dedup ·</text>
+<text x="1380" y="462" fill="#9DB2D6">provenance</text>
+<rect x="940" y="360" width="280" height="170" rx="16" fill="#12294D" stroke="#F5A623" stroke-width="2.5"/>
+<text x="1080" y="402" font-size="21" font-weight="700" fill="#F3F7FE">7 · Qualify</text>
+<text x="1080" y="434" fill="#9DB2D6">eligibility rules</text>
+<text x="1080" y="462" fill="#9DB2D6">per run</text>
+<rect x="640" y="360" width="280" height="170" rx="16" fill="#12294D" stroke="#F5A623" stroke-width="2.5"/>
+<text x="780" y="402" font-size="21" font-weight="700" fill="#F3F7FE">8 · Quorum</text>
+<text x="780" y="434" fill="#9DB2D6">5 runs · 3 installs</text>
+<text x="780" y="462" fill="#9DB2D6">exact cohort</text>
+<rect x="340" y="360" width="280" height="170" rx="16" fill="#12294D" stroke="#E5484D" stroke-width="3"/>
+<text x="480" y="402" font-size="21" font-weight="700" fill="#E5484D">9 · Gate B — OFF</text>
+<text x="480" y="434" fill="#9DB2D6">owner publication</text>
+<text x="480" y="462" fill="#9DB2D6">approval pending</text>
+<rect x="40" y="360" width="280" height="170" rx="16" fill="#0E2140" stroke="#5A6B8C" stroke-width="2.5" stroke-dasharray="8 5"/>
+<text x="180" y="402" font-size="21" font-weight="700" fill="#9DB2D6">10 · Dashboard</text>
+<text x="180" y="434" fill="#9DB2D6">staging counts live</text>
+<text x="180" y="462" fill="#9DB2D6">0 published</text>
+</g>
+<g stroke="#49BBFF" stroke-width="3">
+<line x1="320" y1="225" x2="336" y2="225" marker-end="url(#aB48)"/>
+<line x1="620" y1="225" x2="636" y2="225" marker-end="url(#aB48)"/>
+<line x1="920" y1="225" x2="936" y2="225" marker-end="url(#aB48)"/>
+<line x1="1220" y1="225" x2="1236" y2="225" marker-end="url(#aB48)"/>
+<line x1="1380" y1="310" x2="1380" y2="356" marker-end="url(#aB48)"/>
+<line x1="1236" y1="445" x2="1220" y2="445" marker-end="url(#aB48)"/>
+<line x1="936" y1="445" x2="920" y2="445" marker-end="url(#aB48)"/>
+<line x1="636" y1="445" x2="620" y2="445" marker-end="url(#aB48)"/>
+<line x1="336" y1="445" x2="320" y2="445" marker-end="url(#aB48)"/>
+</g>
+<rect x="40" y="570" width="740" height="150" rx="14" fill="#2A1626" stroke="#E5484D" stroke-width="3"/>
+<text x="410" y="615" font-size="24" font-weight="700" fill="#E5484D" text-anchor="middle">RECEIPT ≠ QUALIFIED ≠ PUBLISHED</text>
+<text x="410" y="650" font-size="19" fill="#F3F7FE" text-anchor="middle">A 201 + submission ID proves intake only.</text>
+<text x="410" y="682" font-size="19" fill="#9DB2D6" text-anchor="middle">Publication needs quorum AND gate B.</text>
+<rect x="820" y="570" width="740" height="150" rx="14" fill="#0E2140" stroke="#F5A623" stroke-width="2.5"/>
+<text x="1190" y="615" font-size="22" font-weight="700" fill="#F5A623" text-anchor="middle">Withdrawal → tombstone</text>
+<text x="1190" y="650" font-size="19" fill="#F3F7FE" text-anchor="middle">Owner DELETE revokes the contribution;</text>
+<text x="1190" y="682" font-size="19" fill="#9DB2D6" text-anchor="middle">a minimal audit tombstone remains.</text>
+<text x="60" y="780" font-size="19" fill="#9DB2D6">Sources: bridge contract v1.1 · ef-consent-01 (A approved, B OFF) · Global P0 receipt · G2-B2 staging reports · ss-33/34/35/36</text>
+<rect x="40" y="810" width="1520" height="3" fill="#2A4A7A"/>
+<text x="60" y="850" font-size="20" fill="#F3F7FE">Status honesty: SUBMITTED / VALIDATED / QUALIFIED / PUBLISHED / REVOKED are distinct — the dashboard shows each count separately.</text>
+<text x="60" y="890" font-size="18" fill="#9DB2D6">Snapshot (staging census, Nov 2026): 31 accepted · 3 installs · 31 qualified · 0 published — quorum unmet, gate B OFF.</text>
+</svg>

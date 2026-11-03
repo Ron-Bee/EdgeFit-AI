@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="100%" height="100%" viewBox="0 0 1600 1000">
+<style>html,body{margin:0;padding:0}text{font-family:'Segoe UI',Verdana,sans-serif}</style>
+<defs><marker id="aB52" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#49BBFF"/></marker></defs>
+<rect width="1600" height="1000" fill="#0A1830"/>
+<text x="60" y="80" font-size="42" font-weight="700" fill="#F3F7FE">Evidence Provenance + Verification Stack</text>
+<text x="60" y="118" font-size="20" fill="#9DB2D6">Every claim traces down to a measured run on a known device — or it is labeled, not claimed (FIG 52)</text>
+<g font-size="20" text-anchor="middle">
+<rect x="60" y="680" width="900" height="80" rx="14" fill="#12294D" stroke="#1265F5" stroke-width="2.5"/>
+<text x="510" y="716" font-weight="600" fill="#F3F7FE">L1 · Device + model + configuration</text>
+<text x="510" y="744" font-size="17" font-weight="400" fill="#9DB2D6">collector profile · SHA-256 model id · BenchConfig</text>
+<rect x="60" y="580" width="900" height="80" rx="14" fill="#12294D" stroke="#1265F5" stroke-width="2.5"/>
+<text x="510" y="616" font-weight="600" fill="#F3F7FE">L2 · Measured result</text>
+<text x="510" y="644" font-size="17" font-weight="400" fill="#9DB2D6">load / prefill / generation timings · outcome label</text>
+<rect x="60" y="480" width="900" height="80" rx="14" fill="#12294D" stroke="#49BBFF" stroke-width="2.5"/>
+<text x="510" y="516" font-weight="600" fill="#F3F7FE">L3 · Artifact hashes</text>
+<text x="510" y="544" font-size="17" font-weight="400" fill="#9DB2D6">SHA-256 over result + profile JSON · tamper-evident</text>
+<rect x="60" y="380" width="900" height="80" rx="14" fill="#12294D" stroke="#49BBFF" stroke-width="2.5"/>
+<text x="510" y="416" font-weight="600" fill="#F3F7FE">L4 · Session record</text>
+<text x="510" y="444" font-size="17" font-weight="400" fill="#9DB2D6">SessionState trail · prediction↔measurement links</text>
+<rect x="60" y="280" width="900" height="80" rx="14" fill="#12294D" stroke="#F5A623" stroke-width="2.5"/>
+<text x="510" y="316" font-weight="600" fill="#F3F7FE">L5 · Qualification + validation records</text>
+<text x="510" y="344" font-size="17" font-weight="400" fill="#9DB2D6">host suites · physical checks · review verdicts</text>
+<rect x="60" y="180" width="900" height="80" rx="14" fill="#0E2140" stroke="#34C77B" stroke-width="3"/>
+<text x="510" y="216" font-weight="700" fill="#34C77B">L6 · Evidence-supported claim</text>
+<text x="510" y="244" font-size="17" font-weight="400" fill="#9DB2D6">only what L1–L5 jointly support</text>
+</g>
+<g stroke="#49BBFF" stroke-width="3">
+<line x1="1020" y1="720" x2="1020" y2="620" marker-end="url(#aB52)"/>
+<line x1="1020" y1="620" x2="1020" y2="520" marker-end="url(#aB52)"/>
+<line x1="1020" y1="520" x2="1020" y2="420" marker-end="url(#aB52)"/>
+<line x1="1020" y1="420" x2="1020" y2="320" marker-end="url(#aB52)"/>
+<line x1="1020" y1="320" x2="1020" y2="220" marker-end="url(#aB52)"/>
+</g>
+<text x="1020" y="790" font-size="18" fill="#9DB2D6" text-anchor="middle">trace up to verify;</text>
+<text x="1020" y="816" font-size="18" fill="#9DB2D6" text-anchor="middle">drill down to audit</text>
+<rect x="1100" y="180" width="460" height="580" rx="16" fill="#0E2140" stroke="#2A4A7A" stroke-width="2.5"/>
+<text x="1120" y="225" font-size="23" font-weight="700" fill="#F3F7FE">Confidence taxonomy</text>
+<rect x="1120" y="245" width="420" height="72" rx="10" fill="#12294D" stroke="#34C77B" stroke-width="2.5"/>
+<text x="1330" y="273" font-size="20" font-weight="600" fill="#34C77B" text-anchor="middle">MEASURED</text>
+<text x="1330" y="301" font-size="17" fill="#9DB2D6" text-anchor="middle">device ran it · full stack</text>
+<rect x="1120" y="330" width="420" height="72" rx="10" fill="#12294D" stroke="#8054F8" stroke-width="2.5"/>
+<text x="1330" y="358" font-size="20" font-weight="600" fill="#B9A5FF" text-anchor="middle">ESTIMATE</text>
+<text x="1330" y="386" font-size="17" fill="#9DB2D6" text-anchor="middle">predicted · never a result</text>
+<rect x="1120" y="415" width="420" height="72" rx="10" fill="#12294D" stroke="#F5A623" stroke-width="2.5"/>
+<text x="1330" y="443" font-size="20" font-weight="600" fill="#F5A623" text-anchor="middle">ABSTAIN</text>
+<text x="1330" y="471" font-size="17" fill="#9DB2D6" text-anchor="middle">insufficient basis · said so</text>
+<rect x="1120" y="500" width="420" height="72" rx="10" fill="#12294D" stroke="#E5484D" stroke-width="2.5"/>
+<text x="1330" y="528" font-size="20" font-weight="600" fill="#E5484D" text-anchor="middle">REFUSED</text>
+<text x="1330" y="556" font-size="17" fill="#9DB2D6" text-anchor="middle">unsafe / unknown · blocked</text>
+<text x="1120" y="620" font-size="18" fill="#9DB2D6">Status words used in this doc:</text>
+<text x="1120" y="650" font-size="18" fill="#9DB2D6">IMPLEMENTED · PHYSICALLY</text>
+<text x="1120" y="680" font-size="18" fill="#9DB2D6">VERIFIED · HOST PASS ·</text>
+<text x="1120" y="710" font-size="18" fill="#9DB2D6">PROPOSED · DEPLOYED (empty)</text>
+<text x="60" y="870" font-size="19" fill="#9DB2D6">Sources: ProfileSerializer · BenchResultJson · SessionJson · SessionComparison · ch. 11 methodology · G1 audit evidence rules</text>
+<rect x="40" y="895" width="1520" height="3" fill="#2A4A7A"/>
+<text x="60" y="930" font-size="19" fill="#F3F7FE">A chart without a drill-down path is decoration — every figure in this walkthrough names its source layer.</text>
+</svg>
