@@ -8,7 +8,7 @@
   <strong>Watch demo:</strong> <em>Pending final video</em> · <a href="docs/demo.md">Demo guide</a><br>
   <strong>Project website:</strong> <a href="https://edgefit-ai.pages.dev/">EdgeFit AI</a><br>
   <strong>Global Evidence dashboard:</strong> <a href="https://edgefit-ai.pages.dev/dashboard.html">Explore dashboard</a><br>
-  <strong>Full walkthrough PDF:</strong> <em>Pending approved PDF</em><br>
+  <strong>Full walkthrough PDF:</strong> <a href="docs/walkthrough/v1.0/EdgeFit_AI_Definitive_Walkthrough_v1.0.pdf">Definitive Walkthrough v1.0 (PDF)</a> · <a href="docs/walkthrough/v1.0/README.md">Guide</a><br>
 </div>
 
 **Will this AI model run well on *your* phone? EdgeFit AI answers with measurements, not guesses — Meta Muse Spark predicts on-device inference speed, the phone measures it, and every claim stays traceable to evidence.**
@@ -17,7 +17,9 @@ Built for the **2026 Meta Global AI Developer Hackathon**.
 
 > **Status snapshot (2026-11-01):** on-device benchmark + prediction sessions are implemented and physically demonstrated on a Galaxy S22 Ultra; the **Global Evidence backend is deployed and the public dashboard is live** (honestly empty — zero genuine publications yet). No demo-video link is published yet. No signed public APK exists yet. See [Limitations](#p-limitations-known-issues-and-roadmap).
 
-**Quick access:** APK and walkthrough downloads will become active only after verified release artifacts exist. Until then, the direct website and dashboard links above are available for inspection; public aggregate data is not yet qualified.
+**Quick access:** The walkthrough PDF is published (see Judge Quick Access above). The APK download will become active only after a verified release artifact exists. The direct website and dashboard links above are available for inspection; public aggregate data is not yet qualified.
+
+> **Status update (2026-11-03):** Definitive Walkthrough v1.0 published — the illustrated technical guide (40 genuine screenshots, 16 technical diagrams) as a searchable 65-page PDF plus the editable Word master: [docs/walkthrough/v1.0/](docs/walkthrough/v1.0/README.md). No demo-video link is published yet. No signed public APK exists yet.
 
 
 ## A. Why Android? Hardware fragmentation is the problem
@@ -203,6 +205,7 @@ Deeper reference: [docs/architecture.md](docs/architecture.md) and the authorita
 - [docs/evidence-methodology.md](docs/evidence-methodology.md) — provenance and eligibility
 - [docs/ef-repo-judge-01-feature-matrix.md](docs/ef-repo-judge-01-feature-matrix.md) — 28-feature audit
 - [`eval/comp-01b/`](eval/comp-01b/) — frozen six-run study corpus
+- [docs/walkthrough/v1.0/](docs/walkthrough/v1.0/README.md) — Definitive Walkthrough v1.0 (illustrated judge/developer guide, PDF + editable Word)
 
 ## N. Reproduction instructions
 
@@ -260,4 +263,4 @@ Built for the **2026 Meta Global AI Developer Hackathon** (deadline Nov 4, 2026)
 
 **Demo video coming soon.** No video link is published yet; this section will be updated with the verified URL. A demonstration script is ready in [docs/demo.md](docs/demo.md).
 
-Verified links: this repository, the [live dashboard](https://edgefit-ai.pages.dev/dashboard.html), and the public read API above. No download, video, or walkthrough URL is claimed anywhere in this README beyond what exists — pending items are labeled PENDING with no href.
+Verified links: this repository, the [live dashboard](https://edgefit-ai.pages.dev/dashboard.html), the [walkthrough PDF](docs/walkthrough/v1.0/EdgeFit_AI_Definitive_Walkthrough_v1.0.pdf), and the public read API above. No download or video URL is claimed anywhere in this README beyond what exists — pending items are labeled PENDING with no href.
