@@ -18,7 +18,8 @@ Built for the 2026 Meta Global AI Developer Hackathon.
 <a href="https://edgefit-ai.pages.dev/">Project Website</a> ·
 <a href="https://edgefit-ai.pages.dev/dashboard">Global Evidence Dashboard</a> ·
 <a href="https://youtu.be/8IhWPMv60Gw">Extended 10:09 Demo</a> ·
-<a href="https://github.com/Ron-Bee/EdgeFit-AI/releases/download/v0.2.1-preview.1/SHA256SUMS.txt">APK Checksum</a>
+<a href="https://github.com/Ron-Bee/EdgeFit-AI/releases/download/v0.2.1-preview.1/SHA256SUMS.txt">APK Checksum</a> ·
+<a href="https://tally.so/r/Ge68P2"><b>Request Contributor Access</b></a>
 </p>
 
 
@@ -226,6 +227,16 @@ The live project site and Global Evidence dashboard are linked in **Start Here**
 
 Never fabricate populated dashboards, device fleet results, or signed-download links to fill visual gaps.
 
+## Contribute to EdgeFit Global
+
+Help build a real-world evidence network for on-device AI: run benchmarks on your own Android device and voluntarily contribute verified performance measurements. Any adult with a compatible physical device may request access; participation is voluntary, requests are reviewed before approval, and a unique per-install credential is required.
+
+What contributors need: a physical arm64-v8a device, the [pre-release APK](#j-download--install--requirements), a self-provided GGUF model, and — after approval — one credential per installation, pasted into Settings > EdgeFit Global Connection. You choose which sessions to submit, review each payload, and tap **Approve and upload**; nothing uploads automatically or in the background, and model files and Meta API keys are never collected.
+
+> **Contributor access requests are now accepted** through the [EdgeFit Global registration form](https://tally.so/r/Ge68P2). Requests are manually reviewed. Approval and credential issuance are not automatic. Full procedure, contribution terms, and consent rules: [Contributor onboarding guide](docs/global-contributor-onboarding.md).
+
+Accepted submissions are not automatically published: evidence must still clear validation, qualification, the exact-cohort quorum (≥5 eligible runs from ≥3 installs), and Publication Approval B (OFF). Consent contact details never enter the dataset or dashboard.
+
 ## J. Download / install / requirements
 
 **Android pre-release v0.2.1-preview.1 is published** ([release](https://github.com/Ron-Bee/EdgeFit-AI/releases/tag/v0.2.1-preview.1), [direct APK](https://github.com/Ron-Bee/EdgeFit-AI/releases/download/v0.2.1-preview.1/EdgeFit-AI-Android-v0.2.1-preview.1-arm64.apk), [SHA-256](https://github.com/Ron-Bee/EdgeFit-AI/releases/download/v0.2.1-preview.1/SHA256SUMS.txt)); signed-release physical-install testing is not yet verified. Earlier builds were debuggable owner-testing images and are explicitly not release candidates — do not distribute them. Gate tracker: [docs/release-readiness.md](docs/release-readiness.md).
@@ -319,6 +330,14 @@ Live Meta round trips are owner-executed only, require `MODEL_API_KEY`, and neve
 ## Q. Hackathon information and original-work scope
 
 Built for the **2026 Meta Global AI Developer Hackathon** (deadline Nov 4, 2026). Original work: Android harness + Aero UI, session/agent/consent architecture, cloud foundation + deployed Global backend, dashboard website, study design + frozen corpus, and all documentation. Pinned third-party code: llama.cpp v0.7.0 (reviewed, ownership-tested). Meta Muse Spark (`muse-spark-1.3`) used via API for predictions, follow-ups, and agent proposals; Muse Code assisted test-harness and scaffolding development. Original project materials are rights-reserved under [LICENSE](LICENSE); third-party notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+### AI-Assisted Development at Scale
+
+EdgeFit AI was developed for the 2026 Meta Global AI Developer Hackathon using an intensive AI-assisted engineering workflow with Meta Muse Spark.
+
+The October 29–November 4 development-account usage export records **20,620 model requests, 2.56 billion cached input tokens, 164.7 million uncached input tokens, and 13.6 million output tokens**.
+
+These account-level figures are not isolated exclusively to EdgeFit AI. Muse assisted with implementation, testing, debugging, documentation, and release preparation. Project claims remain grounded in code, tests, and real-device evidence.
 
 ## R. Video and verified submission links
 
