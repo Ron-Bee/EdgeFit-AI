@@ -20,7 +20,7 @@ flowchart TB
         Disp["Validated dispatchers\n(tool-call gate + retrieval)"]
     end
     Muse["Meta Muse Spark\napi.meta.ai"]
-    subgraph Cloud["Global backend (DEPLOYED, honestly empty)"]
+    subgraph Cloud["Global backend (DEPLOYED — staging contributions received; publication gated)"]
         API["v1 submission API"]
         GDB[("Evidence database")]
         Web["Public explorer"]
@@ -29,7 +29,7 @@ flowchart TB
     Bench --> Sess --> JSON --> Lite --> Disp --> Muse
     Muse -->|"prediction stored first"| Sess
     Bench -->|"measured result"| Sess
-    Sess -.->|"consent-gated upload\n(deployed; upload pending)"| API
+    Sess -.->|"consent-gated upload\n(genuine uploads accepted)"| API
     API --> GDB --> Web
 ```
 
