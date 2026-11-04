@@ -22,7 +22,7 @@ flowchart TB
     Muse["Meta Muse Spark\napi.meta.ai"]
     subgraph Cloud["Global backend (DEPLOYED — staging contributions received; publication gated)"]
         API["v1 submission API"]
-        GDB[("Evidence database")]
+        GDB["Evidence database"]
         Web["Public explorer"]
     end
 
