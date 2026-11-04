@@ -2,7 +2,8 @@
 
 Parses the Kotlin and C++ sources to prove the JNI progress interface
 matches on both sides: mailbox layout, stage/error codes, nativeRun
-signature, and the no-logging rule. Runnable on any host with Python.
+signature, and the no-token-or-prompt-logging rule. Runnable on any
+host with Python.
 
 This complements (never replaces) JVM unit tests, native compilation,
 and physical validation.
@@ -104,9 +105,54 @@ class JniBoundaryTest(unittest.TestCase):
         self.assertGreaterEqual(len(re.findall(r"cancel->load\(\)", self.cpp)), 2)
 
     def test_no_token_or_prompt_logging(self):
-        self.assertNotIn("android/log.h", self.cpp)
-        self.assertNotIn("__android_log", self.cpp)
+        # EF-BENCH-STALL-02 stage/timing markers are allowed through
+        # the BENCH_LOGI macro only: counts, codes and timings, never
+        # prompt text, tokens or paths. Raw log calls stay banned.
         self.assertNotIn("LOGD", self.cpp)
+        self.assertEqual(
+            len(re.findall(r"#include <android/log\.h>", self.cpp)), 1)
+        lines = self.cpp.splitlines()
+        in_define = False
+        for number, line in enumerate(lines, start=1):
+            if line.strip().startswith("#define BENCH_LOGI"):
+                in_define = True
+            if "__android_log" in line:
+                self.assertTrue(
+                    in_define,
+                    "raw __android_log outside BENCH_LOGI (line %d)"
+                    % number)
+            if in_define and not line.rstrip().endswith("\\"):
+                in_define = False
+        code = []
+        skip_cont = False
+        for line in lines:
+            if line.strip().startswith("#define BENCH_LOGI"):
+                skip_cont = line.rstrip().endswith("\\")
+                continue
+            if skip_cont:
+                skip_cont = line.rstrip().endswith("\\")
+                continue
+            code.append(line)
+        calls = re.findall(r"BENCH_LOGI\((.*?)\);", "\n".join(code), re.S)
+        self.assertGreater(len(calls), 5, "expected stage markers")
+        sensitive = re.compile(
+            r"\b(model_path|j_model_path|j_prompt|prompt|model|"
+            r"prompt_text|token_text|generated_text|out|c_str|"
+            r"GetStringUTFChars)\b")
+        for call in calls:
+            fmt, _, args = call.partition('",')
+            for bad in sensitive.findall(args):
+                self.fail("sensitive identifier %r in log call: %s"
+                          % (bad, call.strip()[:80]))
+            if "%s" in fmt:
+                bare = re.sub(r'"[^"]*"', "", args)
+                words = set(re.findall(r"[A-Za-z_][A-Za-z0-9_]*", bare))
+                self.assertLessEqual(
+                    words,
+                    {"cancel", "progress", "n_ctx", "n_threads",
+                     "n_predict"})
+                lits = set(re.findall(r'"([^"]*)"', args))
+                self.assertLessEqual(lits, {"ok", "NULL", "unavailable"})
         # Progress flows only through relaxed mailbox stores.
         self.assertGreater(len(re.findall(r"pwrite\(progress", self.cpp)), 5)
         self.assertIn("__ATOMIC_RELAXED", self.cpp)
