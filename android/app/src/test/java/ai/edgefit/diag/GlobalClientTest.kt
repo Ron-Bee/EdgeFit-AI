@@ -20,15 +20,14 @@ class GlobalClientTest {
             cipher.reversedArray()
     }
 
-    private fun harness(): Triple<EvidenceStore, FakeGlobalTransport, GlobalClient> {
+    private fun harness(origin: String = ORIGIN): Triple<EvidenceStore, FakeGlobalTransport, GlobalClient> {
         val dir = Files.createTempDirectory("global-test").toFile()
         val store = EvidenceStore(dir)
         val fake = FakeGlobalTransport()
         val vault = GlobalTokenVault(dir, FakeSeal())
         vault.setSessionToken(TOKEN)
-        val client = GlobalClient(store, fake, vault, { ORIGIN }) {
-            BenchResultParseTest.NOW
-        }
+        val client = GlobalClient(store, fake, vault, { origin },
+            { BenchResultParseTest.NOW }, { true })
         store.store(BenchResultParseTest.validDoc(),
             EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
         return Triple(store, fake, client)
@@ -167,9 +166,8 @@ class GlobalClientTest {
         val fake = FakeGlobalTransport()
         val vault = GlobalTokenVault(dir, FakeSeal())
         vault.setSessionToken(TOKEN)
-        val client = GlobalClient(store, fake, vault, { null }) {
-            BenchResultParseTest.NOW
-        }
+        val client = GlobalClient(store, fake, vault, { null },
+            { BenchResultParseTest.NOW }, { true })
         store.store(BenchResultParseTest.validDoc(),
             EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
         val outcome = client.submit("BENCH-TEST-001")
@@ -183,9 +181,8 @@ class GlobalClientTest {
         val store = EvidenceStore(dir)
         val fake = FakeGlobalTransport()
         val vault = GlobalTokenVault(dir, FakeSeal())
-        val client = GlobalClient(store, fake, vault, { ORIGIN }) {
-            BenchResultParseTest.NOW
-        }
+        val client = GlobalClient(store, fake, vault, { ORIGIN },
+            { BenchResultParseTest.NOW }, { true })
         store.store(BenchResultParseTest.validDoc(),
             EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
         val outcome = client.submit("BENCH-TEST-001")
@@ -299,9 +296,8 @@ class GlobalClientTest {
         vault2.setSessionToken(TOKEN)
         store2.store(BenchResultParseTest.validDoc(),
             EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
-        val client2 = GlobalClient(store2, blocking, vault2, { ORIGIN }) {
-            BenchResultParseTest.NOW
-        }
+        val client2 = GlobalClient(store2, blocking, vault2, { ORIGIN },
+            { BenchResultParseTest.NOW }, { true })
         val first = Thread { client2.submit("BENCH-TEST-001") }
         first.start()
         Thread.sleep(300)
@@ -320,4 +316,135 @@ class GlobalClientTest {
         assertEquals(ORIGIN, review.origin)
         assertEquals(0, fake.calls.size)
     }
+
+    @Test
+    fun `submit blocked while consent policy unapproved`() {
+        val dir = Files.createTempDirectory("global-test").toFile()
+        val store = EvidenceStore(dir)
+        val fake = FakeGlobalTransport()
+        val vault = GlobalTokenVault(dir, FakeSeal())
+        vault.setSessionToken(TOKEN)
+        val client = GlobalClient(store, fake, vault, { ORIGIN },
+            { BenchResultParseTest.NOW }, { false })
+        store.store(BenchResultParseTest.validDoc(),
+            EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
+        val outcome = client.submit("BENCH-TEST-001")
+        assertTrue(outcome is GlobalClient.SubmitOutcome.Blocked)
+        assertTrue((outcome as GlobalClient.SubmitOutcome.Blocked)
+            .reason.contains("not yet owner-approved"))
+        assertEquals(0, fake.calls.size)
+    }
+
+    @Test
+    fun `submit uses approved default from contract`() {
+        val dir = Files.createTempDirectory("global-test").toFile()
+        val store = EvidenceStore(dir)
+        val fake = FakeGlobalTransport()
+        val vault = GlobalTokenVault(dir, FakeSeal())
+        vault.setSessionToken(TOKEN)
+        val client = GlobalClient(store, fake, vault, { ORIGIN },
+            { BenchResultParseTest.NOW })
+        store.store(BenchResultParseTest.validDoc(),
+            EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
+        fake.script.add(GlobalHttpResult(
+            201,
+            """{"submission_id":"SUB-1","eligibility":"SUBMITTED","duplicate":false}""",
+            null))
+        val outcome = client.submit("BENCH-TEST-001")
+        assertTrue(outcome is GlobalClient.SubmitOutcome.Shared)
+    }
+
+    @Test
+    fun `revokeWithdrawal confirms revocation by id`() {
+        val dir = Files.createTempDirectory("global-test").toFile()
+        val store = EvidenceStore(dir)
+        val fake = FakeGlobalTransport()
+        val vault = GlobalTokenVault(dir, FakeSeal())
+        vault.setSessionToken(TOKEN)
+        val client = GlobalClient(store, fake, vault, { ORIGIN },
+            { BenchResultParseTest.NOW }, { true })
+        fake.script.add(GlobalHttpResult(
+            200,
+            """{"submission_id":"SUB-9","eligibility":"REVOKED"}""",
+            null))
+        val outcome = client.revokeWithdrawal("SUB-9")
+        assertTrue(outcome is GlobalClient.RevokeOutcome.Revoked)
+        assertEquals("DELETE", fake.calls.single().method)
+    }
+
+    @Test
+    fun `revokeWithdrawal mismatch stays failed`() {
+        val dir = Files.createTempDirectory("global-test").toFile()
+        val store = EvidenceStore(dir)
+        val fake = FakeGlobalTransport()
+        val vault = GlobalTokenVault(dir, FakeSeal())
+        vault.setSessionToken(TOKEN)
+        val client = GlobalClient(store, fake, vault, { ORIGIN },
+            { BenchResultParseTest.NOW }, { true })
+        fake.script.add(GlobalHttpResult(
+            200,
+            """{"submission_id":"SUB-9","eligibility":"SUBMITTED"}""",
+            null))
+        val outcome = client.revokeWithdrawal("SUB-9")
+        assertTrue(outcome is GlobalClient.RevokeOutcome.Failed)
+    }
+
+    @Test
+    fun `submit malformed origin blocks without network`() {
+        val (_, fake, client) = harness(origin = "http://insecure.example.com/x")
+        val outcome = client.submit("BENCH-TEST-001")
+        assertTrue(outcome is GlobalClient.SubmitOutcome.Blocked)
+        assertEquals(0, fake.calls.size)
+    }
+
+    @Test
+    fun `submit failed result blocks without network`() {
+        val (store, fake, client) = harness()
+        store.store(BenchResultParseTest.validDoc("BENCH-FAIL-001", "FAILED"),
+            EvidenceStore.PROVENANCE_CAPTURED, BenchResultParseTest.NOW)
+        val outcome = client.submit("BENCH-FAIL-001")
+        assertTrue(outcome is GlobalClient.SubmitOutcome.Blocked)
+        assertTrue((outcome as GlobalClient.SubmitOutcome.Blocked)
+            .reason.contains("COMPLETED"))
+        assertEquals(0, fake.calls.size)
+    }
+
+    @Test
+    fun `submit imported result blocks without network`() {
+        val (store, fake, client) = harness()
+        store.store(BenchResultParseTest.validDoc("BENCH-IMP-001"),
+            EvidenceStore.PROVENANCE_IMPORTED, BenchResultParseTest.NOW)
+        val outcome = client.submit("BENCH-IMP-001")
+        assertTrue(outcome is GlobalClient.SubmitOutcome.Blocked)
+        assertTrue((outcome as GlobalClient.SubmitOutcome.Blocked)
+            .reason.contains("imported"))
+        assertEquals(0, fake.calls.size)
+    }
+
+    @Test
+    fun `review and idle client perform no requests`() {
+        val (_, fake, client) = harness()
+        val review = client.review("BENCH-TEST-001")
+        assertEquals("BENCH-TEST-001", review.runId)
+        assertEquals("COMPLETED", review.status)
+        assertEquals(0, fake.calls.size)
+    }
+
+    @Test
+    fun `approved submit sends exactly result plus consent`() {
+        val (_, fake, client) = harness()
+        fake.script.add(GlobalHttpResult(
+            201,
+            """{"submission_id":"SUB-1","eligibility":"SUBMITTED","duplicate":false}""",
+            null))
+        val outcome = client.submit("BENCH-TEST-001")
+        assertTrue(outcome is GlobalClient.SubmitOutcome.Shared)
+        assertEquals(1, fake.calls.size)
+        val sent = SessionJson.parse(fake.bodies.single()!!) as Map<*, *>
+        assertEquals(setOf("result", "consent"), sent.keys)
+        val consent = sent["consent"] as Map<*, *>
+        assertEquals("ef-consent-01", consent["policy_version"])
+        assertEquals(listOf("aggregates"), consent["scopes"])
+    }
+
 }

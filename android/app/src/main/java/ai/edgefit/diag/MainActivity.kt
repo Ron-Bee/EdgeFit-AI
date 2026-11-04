@@ -18,7 +18,9 @@ import android.view.WindowInsets
 import android.view.WindowInsetsController
 import android.widget.Button
 import android.widget.FrameLayout
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -33,13 +35,32 @@ import java.util.Locale
 /**
  * Presentation layer: device summary + benchmark console. Profile export
  * and benchmark-result saving use the Storage Access Framework on explicit
- * tap only. Rotation or backgrounding cancels a running benchmark
- * (fail-safe: no uncontrolled workload survives lifecycle changes).
+ * tap only.
+ *
+ * Lifecycle persistence (EF-ANDROID-LIFECYCLE-PERSISTENCE-P0-01):
+ * working state survives rotation, backgrounding, relaunch, and
+ * reboot. The benchmark runner, staged model, config override,
+ * last result, and in-flight trackers live in [RetainedState]
+ * (kept across configuration changes); the selected model bytes
+ * live in [ModelStore] (durable); everything else rides the
+ * [UiSnapshot] bundle. Rotation and backgrounding never cancel
+ * a run; only an explicit exit (back out / finish) or process
+ * death ends one, and process death is marked honestly by the
+ * session recovery that already ran on the next launch.
  */
 class MainActivity : Activity() {
 
     private lateinit var deviceTitleView: TextView
     private lateinit var deviceUpdatedView: TextView
+    // EF-ANDROID-AGENT-HOME-POLISH-03: live intro tile
+    // refs, bound in buildIntroTile. Title, RAM, and
+    // the updated cue refresh on the home ticker;
+    // model and storage refresh with the dashboard.
+    private lateinit var introTitleView: TextView
+    private lateinit var introRamValue: TextView
+    private lateinit var introStorageValue: TextView
+    private lateinit var introModelValue: TextView
+    private lateinit var introUpdatedView: TextView
     private val deviceTileValues = mutableMapOf<String, TextView>()
     private lateinit var modelReadinessView: TextView
     private lateinit var runHintView: TextView
@@ -55,18 +76,36 @@ class MainActivity : Activity() {
     private lateinit var memDiagButton: Button
     private var pendingJson: String? = null
     private var pendingFilename: String? = null
-    private var staged: StagedModel? = null
     /**
-     * EF-MEM-03 standalone config override (process-local,
-     * cleared on staging a new model). Applies ONLY to
-     * unbound runs; a bound session's config always wins.
-     * Set explicitly through the recovery assistant; the
-     * benchmark tab always shows it while active.
+     * Lifecycle-persistence holder (see [RetainedState]).
+     * Assigned first in [onCreate], adopted across
+     * configuration changes, fresh after process death.
+     * The working-state properties below delegate to it so
+     * every existing use keeps compiling unchanged.
      */
-    private var standaloneOverride: BenchConfigData? = null
-    private var benchJson: String? = null
-    private var lastResult: BenchResult? = null
-    private lateinit var runner: BenchRunner
+    private lateinit var retained: RetainedState
+    private var staged: StagedModel?
+        get() = retained.staged
+        set(value) { retained.staged = value }
+    /**
+     * EF-MEM-03 standalone config override (cleared on
+     * staging a new model). Applies ONLY to unbound runs;
+     * a bound session's config always wins. Set explicitly
+     * through the recovery assistant; the benchmark tab
+     * always shows it while active. Survives rotation via
+     * [RetainedState] and process death via [UiSnapshot].
+     */
+    private var standaloneOverride: BenchConfigData?
+        get() = retained.standaloneOverride
+        set(value) { retained.standaloneOverride = value }
+    private var benchJson: String?
+        get() = retained.benchJson
+        set(value) { retained.benchJson = value }
+    private var lastResult: BenchResult?
+        get() = retained.lastResult
+        set(value) { retained.lastResult = value }
+    private val runner: BenchRunner
+        get() = retained.runner
     private lateinit var shellRoot: View
     private lateinit var contentFrame: FrameLayout
     private lateinit var benchScreen: BenchScreenView
@@ -99,6 +138,9 @@ class MainActivity : Activity() {
     // run; Details opens the full sections (raw IDs).
     private lateinit var resultHeroBox: LinearLayout
     private lateinit var resultDetailsButton: Button
+    // EF-ANDROID-AERO-OVERHAUL-01 Decision Card host,
+    // rebuilt on every dashboard refresh.
+    private lateinit var decisionCardBox: LinearLayout
     private lateinit var agentSummaryView: TextView
     // EF-UX-AERO-01 Step 5 agent workspace: bounded
     // inline parent cards, rebuilt on every refresh.
@@ -107,17 +149,52 @@ class MainActivity : Activity() {
     // EF-UX-AERO-01 Step 5 contribute preview + settings
     // status lines (read-only; actions stay explicit).
     private lateinit var contributePreviewView: TextView
+    // EF-ANDROID-AERO-OVERHAUL-01 journey strip host.
+    private lateinit var journeyBox: LinearLayout
     private lateinit var settingsMetaView: TextView
     private lateinit var settingsGlobalView: TextView
-    private var benchActive: Boolean = false
-    private val requestTracker = RequestTracker()
+    private var benchActive: Boolean
+        get() = retained.benchActive
+        set(value) { retained.benchActive = value }
+    private val requestTracker: RequestTracker
+        get() = retained.requestTracker
+    /** Durable selected-model repository (see [ModelStore]). */
+    private lateinit var modelStore: ModelStore
+    /**
+     * Open dialog-sheet stack (see [Sheets]): each entry is
+     * the id plus one opaque arg needed to reopen that
+     * sheet after recreation. A stack (not a single slot)
+     * because sheets nest (evidence over catalog, review
+     * over agent): dismissing the top reveals the one
+     * below. Only the top persists to the snapshot.
+     */
+    private val sheetStack = ArrayDeque<Pair<String, String?>>()
+    private val openSheet: String?
+        get() = sheetStack.lastOrNull()?.first
+    private val openSheetArg: String?
+        get() = sheetStack.lastOrNull()?.second
+    /** Unapplied manual-config dialog selection. */
+    private var manualCheckedDraft: Int? = null
+    /** Modify-proposal number drafts (ctx, threads, predict). */
+    private var modifyDraftParent: String? = null
+    private var modifyDraft: Triple<String, String, String>? = null
+    /** Session-create rate drafts (gen, prefill). */
+    private var createDraft: Pair<String, String>? = null
+    /** Global-connection origin draft (non-sensitive). */
+    private var originDraft: String? = null
+    private var globalRememberDraft: Boolean = false
+    private var metaRememberDraft: Boolean = false
     private lateinit var sessionManager: SessionManager
     private lateinit var sessionLine: TextView
-    private var activeSessionId: String? = null
+    private var activeSessionId: String?
+        get() = retained.activeSessionId
+        set(value) { retained.activeSessionId = value }
     /** Repeat-prep screen to reopen after model staging. */
     private var pendingRepeatPrepId: String? = null
-    /** EF-UX-01D onboarding state (process-local by design). */
-    private var onboardingDismissedThisLaunch = false
+    /** EF-UX-01D onboarding state (holder-local by design). */
+    private var onboardingDismissedThisLaunch: Boolean
+        get() = retained.onboardingDismissed
+        set(value) { retained.onboardingDismissed = value }
     private var onboardingOpen = false
     private var onboardingPage = 0
     private var agentDialogOpen = false
@@ -132,15 +209,67 @@ class MainActivity : Activity() {
     private lateinit var globalClient: GlobalClient
     private lateinit var evidenceLine: TextView
     private var globalOrigin: String? = null
+    /** EF-ANDROID-RECOVERY-INSTALL-01 durable install marker. */
+    private var installRecord: InstallIdentity.Record? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        pendingJson = savedInstanceState?.getString(KEY_PENDING_JSON)
-        pendingFilename = savedInstanceState?.getString(KEY_PENDING_FILENAME)
-        activeSessionId = savedInstanceState?.getString(KEY_ACTIVE_SESSION)
-        onboardingPage = savedInstanceState?.getInt(KEY_ONBOARDING_PAGE, 0) ?: 0
-        runner = BenchRunner(this)
+        // Lifecycle persistence: adopt the retained holder
+        // across configuration changes, else start fresh.
+        // The runner keeps the APPLICATION context so the
+        // retained holder never pins a dead Activity.
+        @Suppress("DEPRECATION")
+        val adopted = lastNonConfigurationInstance as? RetainedState
+        val configChange = adopted != null
+        retained = adopted ?: RetainedState(
+            BenchRunner(applicationContext))
+        retained.current = this
+        val snapshot = UiSnapshotCodec.decode(
+            bundleToSnapshotMap(savedInstanceState))
+        pendingJson = snapshot.pendingJson
+        pendingFilename = snapshot.pendingFilename
+        if (!configChange) {
+            // Fresh process only: across rotation the
+            // holder carries the live binding (a
+            // background approval may have bound after
+            // the bundle was saved).
+            activeSessionId = snapshot.activeSessionId
+        }
+        onboardingPage = snapshot.onboardingPage
+        manualCheckedDraft = snapshot.manualChecked
+        modifyDraft = parseModifyDraft(snapshot.draftModify)
+        createDraft = parseCreateDraft(snapshot.draftCreate)
+        originDraft = snapshot.draftOrigin
+        globalRememberDraft = snapshot.draftRememberGlobal
+        metaRememberDraft = snapshot.draftRememberMeta
+        pickerActive = snapshot.pickerActive
+        pendingRepeatPrepId = snapshot.pendingRepeatPrepId
+        if (!configChange) {
+            // Fresh process: restore the durable working
+            // state. After a configuration change the
+            // retained holder already carries the live
+            // objects (runner included) — including the
+            // live benchActive flag, which
+            // [reattachRunner] reconciles below.
+            retained.standaloneOverride = snapshot.standaloneOverride
+            retained.benchJson = snapshot.benchJson
+            retained.lastResult = snapshot.benchJson?.let {
+                try {
+                    BenchResultJson.parse(it)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            retained.benchActive = false
+        }
         sessionManager = SessionManager(filesDir)
+        modelStore = ModelStore(filesDir, cacheDir)
+        if (retained.stagingThread?.isAlive != true) {
+            // No staging in flight (adopted runs keep
+            // writing their temp): drop an abandoned
+            // staging temp, never the retained model.
+            modelStore.clearStaleTemp()
+        }
         metaVault = MetaKeyVault(filesDir, AndroidKeySeal())
         metaClient = MetaSessionClient(
             sessionManager, HttpsMetaTransport(), metaVault)
@@ -151,29 +280,45 @@ class MainActivity : Activity() {
         globalClient = GlobalClient(
             evidenceStore, HttpsGlobalTransport(), globalVault,
             { globalOrigin }, { System.currentTimeMillis() })
-        Thread({
-            val actions = try {
-                val found = sessionManager.recoverOnLaunch().toMutableList()
-                try {
-                    for (parent in sessionManager.listSessions()) {
-                        if (parent.mode == "agent") {
-                            found.addAll(agentManager.reconcile(parent.sessionId))
+        installRecord = try {
+            InstallIdentity.ensure(filesDir, BuildConfig.APPLICATION_ID,
+                appVersionCode(), SessionManager.utcNow())
+        } catch (_: Exception) {
+            null
+        }
+        // Launch recovery runs on a FRESH process only.
+        // Across rotation the runner (and its RUNNING
+        // session) is still alive in the retained holder;
+        // recovering there would mark a live run FAILED.
+        if (!configChange) {
+            Thread({
+                val actions = try {
+                    val found = sessionManager.recoverOnLaunch()
+                        .toMutableList()
+                    try {
+                        for (parent in sessionManager.listSessions()) {
+                            if (parent.mode == "agent") {
+                                found.addAll(agentManager.reconcile(
+                                    parent.sessionId))
+                            }
                         }
+                    } catch (e: Exception) {
+                        found.add(
+                            "agent reconcile failed: ${e.message}")
                     }
+                    found
                 } catch (e: Exception) {
-                    found.add("agent reconcile failed: ${e.message}")
+                    listOf("recovery failed: ${e.message}")
                 }
-                found
-            } catch (e: Exception) {
-                listOf("recovery failed: ${e.message}")
-            }
-            runOnUiThread {
-                refreshSessionLine()
-                if (actions.isNotEmpty()) {
-                    statusText("Session recovery: ${actions.joinToString("; ")}")
+                runOnUiThread {
+                    refreshSessionLine()
+                    if (actions.isNotEmpty()) {
+                        statusText("Session recovery: " +
+                            actions.joinToString("; "))
+                    }
                 }
-            }
-        }, "edgefit-session-recover").start()
+            }, "edgefit-session-recover").start()
+        }
         val density = resources.displayMetrics.density
         fun dp(value: Int): Int = (value * density + 0.5f).toInt()
         val basePadding = dp(16)
@@ -206,6 +351,10 @@ class MainActivity : Activity() {
         cancelButton = Button(this).apply { text = "Cancel"; isEnabled = false }
         saveButton = Button(this).apply { text = "Save Result"; isEnabled = false }
         val select = Button(this).apply { text = "Select Model File" }
+        val findModelsButton = Button(this).apply {
+            text = "Find Compatible Models"
+        }
+        findModelsButton.setOnClickListener { showModelSources() }
         val workloadButton = Button(this).apply { text = "View Workload" }
         val sessionsButton = Button(this).apply {
             text = "Open session browser"
@@ -341,6 +490,32 @@ class MainActivity : Activity() {
             tileRoots[2], tileRoots[3])
         val tileRowC = AeroUi.tileRow(this,
             tileRoots[4], tileRoots[5])
+        // EF-ANDROID-AERO-OVERHAUL-01: device metric
+        // tiles collapse behind one toggle (default
+        // hidden); values keep refreshing live underneath
+        // and Device Details stays one tap away.
+        val tilesBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+        }
+        val tileParams = LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT)
+        tilesBox.addView(tileRowA, tileParams)
+        tilesBox.addView(tileRowB, tileParams)
+        tilesBox.addView(tileRowC, tileParams)
+        tilesBox.addView(tileRoots[6], tileParams)
+        val tilesToggleButton = Button(this).apply {
+            text = "Show details"
+        }
+        AeroUi.styleGhost(this, tilesToggleButton)
+        tilesToggleButton.setOnClickListener {
+            val show = tilesBox.visibility != View.VISIBLE
+            tilesBox.visibility =
+                if (show) View.VISIBLE else View.GONE
+            tilesToggleButton.text =
+                if (show) "Hide details" else "Show details"
+        }
         // EF-MODEL-01A: offline catalog, no key needed.
         // Quick access owns all Home navigation now; a
         // null tab opens the catalog dialog instead.
@@ -367,21 +542,26 @@ class MainActivity : Activity() {
         metaGoButton.setOnClickListener {
             selectTab(NavTab.SETTINGS)
         }
-        val hero = HomeDashboard.hero()
+        // EF-ANDROID-AERO-OVERHAUL-01: Decision host must
+        // exist before the Home destination references it.
+        decisionCardBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
         destinations[NavTab.HOME] = destination(
-            AeroUi.heroCard(this, hero.overline, hero.title,
-                hero.subtitle),
+            buildIntroTile(),
+            sectionHeader("Decision"),
+            decisionCardBox,
             sectionHeader("Next Up"),
             cardGroup(nextActionView, nextActionButton),
-            sectionHeader("This Device"),
-            cardGroup(deviceTitleView, tileRowA, tileRowB,
-                tileRowC, tileRoots[6], deviceUpdatedView,
-                deviceDetailsButton),
+            sectionHeader("Last Measurement"),
+            cardGroup(lastRunView),
             sectionHeader("Model"),
             cardGroup(modelReadinessView, modelCardView,
                 sessionLine),
-            sectionHeader("Last Measurement"),
-            cardGroup(lastRunView),
+            sectionHeader("This Device"),
+            cardGroup(deviceTitleView,
+                tilesToggleButton, tilesBox,
+                deviceUpdatedView, deviceDetailsButton),
             sectionHeader("Quick Access"),
             cardGroup(quickRowA, quickRowB),
             sectionHeader("Meta Muse"),
@@ -418,6 +598,9 @@ class MainActivity : Activity() {
         }
         // Step 5 inline preview: device/model/result
         // plus connection state; read-only, no gating.
+        journeyBox = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+        }
         contributePreviewView = TextView(this).apply {
             textSize = 13f
             setTextColor(inkColor())
@@ -460,7 +643,8 @@ class MainActivity : Activity() {
         // each tab shows live inline content).
         destinations[NavTab.BENCHMARK] = destination(
             sectionHeader("1 · Model"),
-            cardGroup(modelView, select, benchModelsButton),
+            cardGroup(modelView, select, benchModelsButton,
+                findModelsButton),
             sectionHeader("2 · Configure"),
             cardGroup(benchConfigView, configButton),
             sectionHeader("3 · Run"),
@@ -471,6 +655,7 @@ class MainActivity : Activity() {
             cardGroup(resultHeroBox, resultDetailsButton,
                 saveButton, evidenceLine,
                 contributePreviewView,
+                journeyBox,
                 contributeButton, importButton,
                 historyButton))
         destinations[NavTab.SESSIONS] = destination(
@@ -548,12 +733,6 @@ class MainActivity : Activity() {
         settingsHistoryButton.setOnClickListener {
             showContributionHistory()
         }
-        val settingsReviewButton = Button(this).apply {
-            text = "Review or withdraw uploads"
-        }
-        settingsReviewButton.setOnClickListener {
-            showContributionHistory()
-        }
         destinations[NavTab.SETTINGS] = destination(
             sectionHeader(AeroSettings.title(
                 AeroSettings.Group.APPEARANCE)),
@@ -599,8 +778,7 @@ class MainActivity : Activity() {
             cardGroup(info(AeroSettings.Group.PRIVACY),
                 export,
                 cap(detail(AeroSettings.Group.PRIVACY,
-                    AeroSettings.Action.EXPORT_PROFILE)),
-                settingsReviewButton),
+                    AeroSettings.Action.EXPORT_PROFILE))),
             sectionHeader(AeroSettings.title(
                 AeroSettings.Group.ABOUT)),
             cap(AeroSettings.helper(AeroSettings.Group.ABOUT)),
@@ -618,7 +796,7 @@ class MainActivity : Activity() {
             historyButton, helpButton, memDiagButton,
             globalButton, settingsCatalogButton,
             settingsDeviceButton, settingsHistoryButton,
-            settingsReviewButton) +
+            findModelsButton) +
             quickButtons) {
             AeroUi.styleSecondary(this, button)
         }
@@ -687,17 +865,10 @@ class MainActivity : Activity() {
             // first); otherwise the bench overlay returns to tabs.
             onBack = { if (!benchActive) showMain() }
             onWorkload = {
-                val result = lastResult
-                if (result == null) {
+                if (lastResult == null) {
                     statusText("No benchmark result yet.")
                 } else {
-                    BenchWorkloadView.show(
-                        this@MainActivity, result.config,
-                        "%s (%d MB)".format(
-                            result.model.displayName,
-                            result.model.sizeBytes / 1048576),
-                        result.measurements.prefillTokens
-                    )
+                    openWorkloadSheet("result")
                 }
             }
             // EF-MEM-03 recovery: assistance, catalog,
@@ -705,16 +876,7 @@ class MainActivity : Activity() {
             // inference.
             onRecover = { showRecoveryAssistant(null) }
             onModels = { showModelCatalog() }
-            onFailureDetails = {
-                val result = lastResult
-                if (result == null) {
-                    statusText("No benchmark result yet.")
-                } else {
-                    CardDialog.show(this@MainActivity,
-                        "Failure Details",
-                        InsightCards.failureDetailSections(result))
-                }
-            }
+            onFailureDetails = { showFailureDetails() }
         }
         benchScreen.setOnApplyWindowInsetsListener { view, insets ->
             val bars = systemBarInsets(insets)
@@ -738,12 +900,13 @@ class MainActivity : Activity() {
         window.statusBarColor = paperColor()
         window.navigationBarColor = paperColor()
         applyBenchChrome(dark = true)
-        currentTab = NavTab.fromName(savedInstanceState?.getString(KEY_TAB))
+        currentTab = NavTab.fromName(snapshot.tab)
         selectTab(currentTab)
         refresh()
         refreshSessionLine()
         // EF-MEM-02 checkpoint A: UI built, pre-interaction.
         diagNote(MemDiag.Checkpoint.APP_IDLE)
+        restoreWorkingState(snapshot, configChange)
         export.setOnClickListener {
             val json = refresh()
             if (json == null) {
@@ -756,14 +919,7 @@ class MainActivity : Activity() {
         }
         select.setOnClickListener { launchPicker() }
         workloadButton.setOnClickListener {
-            val model = staged
-            BenchWorkloadView.show(
-                this, currentBenchConfig(),
-                model?.let {
-                    "%s (%d MB)".format(it.name, it.bytes / 1048576)
-                },
-                lastResult?.measurements?.prefillTokens
-            )
+            openWorkloadSheet("current")
         }
         runButton.setOnClickListener { startBench() }
         sessionsButton.setOnClickListener { showSessions() }
@@ -805,24 +961,66 @@ class MainActivity : Activity() {
     override fun onStop() {
         activityStarted = false
         updateTelemetrySubscriptions()
-        runner.cancel()
+        // Lifecycle persistence: stopping (rotation,
+        // backgrounding, screen recording) never cancels a
+        // run. Only an explicit exit cancels (see
+        // onDestroy), and the OS killing the process is
+        // marked honestly by launch recovery.
         super.onStop()
     }
 
     override fun onDestroy() {
-        runner.cancel()
-        runner.setProgressListener(null)
+        if (retained.current === this) retained.current = null
+        // Defensive: dialogs torn down with the Activity may
+        // not deliver onDismiss, so stop this instance's
+        // tickers here. The successor re-subscribes in
+        // onStart; updateTelemetrySubscriptions is idempotent.
         try {
-            runner.joinGracefully(1000)
+            detailsTicker?.stop()
         } catch (_: Exception) {
         }
+        detailsTicker = null
+        detailsView = null
+        try {
+            homeTicker?.stop()
+        } catch (_: Exception) {
+        }
+        homeTicker = null
+        try {
+            telemetryReceiver?.let { unregisterReceiver(it) }
+        } catch (_: Exception) {
+        }
+        telemetryReceiver = null
+        if (isFinishing) {
+            // Explicit exit: fail-safe cancel, as before.
+            runner.cancel()
+            runner.setProgressListener(null)
+            runner.setCompletionListener(null)
+            try {
+                runner.joinGracefully(1000)
+            } catch (_: Exception) {
+            }
+        } else {
+            // Configuration change: the successor reattaches
+            // in onCreate. Drop this instance's progress
+            // sink now so ticks never touch dead views; the
+            // completion sink is swapped by the successor
+            // (or adopted via runner.lastResult).
+            runner.setProgressListener(null)
+        }
         super.onDestroy()
+    }
+
+    @Suppress("DEPRECATION")
+    override fun onRetainNonConfigurationInstance(): Any {
+        return retained
     }
 
     private fun showBenchScreen() {
         applyBenchChrome(dark = true)
         benchScreen.visibility = View.VISIBLE
         shellRoot.visibility = View.GONE
+        retained.overlayVisible = true
     }
 
     private fun showMain() {
@@ -830,6 +1028,7 @@ class MainActivity : Activity() {
         applyBenchChrome(dark = true)
         benchScreen.visibility = View.GONE
         shellRoot.visibility = View.VISIBLE
+        retained.overlayVisible = false
         selectTab(currentTab)
     }
 
@@ -893,7 +1092,7 @@ class MainActivity : Activity() {
      * through production rules; writes standaloneOverride
      * (or clears it). Never starts a run.
      */
-    private fun showManualBenchConfig() {
+    private fun showManualBenchConfig(initialChecked: Int? = null) {
         val logical = try {
             DeviceCapabilityCollector(this).collect()
                 .device.logicalProcessors
@@ -902,24 +1101,35 @@ class MainActivity : Activity() {
         }
         val options = ManualBenchConfig.options(logical)
         val current = standaloneOverride
-        val checked = options.indexOfFirst { option ->
+        val derived = options.indexOfFirst { option ->
             option.config == current
         }.coerceAtLeast(0)
+        val checked = initialChecked
+            ?.takeIf { it in options.indices } ?: derived
+        manualCheckedDraft = checked
         val items = options.map { option ->
             (if (option.supported) "" else "[unavailable] ") +
                 option.label + "\n" + option.detail
         }.toTypedArray()
+        trackSheet(Sheets.MANUAL_CONFIG, checked.toString())
         AlertDialog.Builder(this)
             .setTitle("Benchmark config (unbound runs)" +
                 if (activeSessionId == null) "" else
                     " — session bound, selection parked")
-            .setSingleChoiceItems(items, checked, null)
+            .setSingleChoiceItems(items, checked) { _, which ->
+                manualCheckedDraft = which
+                trackSheet(Sheets.MANUAL_CONFIG, which.toString())
+            }
+            .setOnDismissListener {
+                clearSheet(Sheets.MANUAL_CONFIG)
+            }
             .setPositiveButton("Apply") { dialog, _ ->
                 val list =
                     (dialog as AlertDialog).listView
                 val position = list.checkedItemPosition
                 if (position < 0 || position >= options.size) return@setPositiveButton
                 val chosen = options[position]
+                manualCheckedDraft = null
                 when (val result = ManualBenchConfig.choose(
                     chosen.id, logical)
                 ) {
@@ -1039,6 +1249,24 @@ class MainActivity : Activity() {
             if (modelInk) inkColor() else secondaryColor())
         modelCardView.setTextColor(
             if (modelInk) inkColor() else secondaryColor())
+        introModelValue.text = when (readiness.state) {
+            HomeDashboard.ModelReadiness.MEASURED -> "Measured"
+            HomeDashboard.ModelReadiness.STAGED -> "Staged"
+            HomeDashboard.ModelReadiness.NONE -> "No model"
+        }
+        introModelValue.setTextColor(
+            if (modelInk) inkColor() else secondaryColor())
+        introModelValue.contentDescription =
+            HomeDashboard.tileDescription("MODEL",
+                introModelValue.text.toString())
+        introStorageValue.text = try {
+            MemDiag.formatMb(filesDir.usableSpace)
+        } catch (_: Exception) {
+            "--"
+        }
+        introStorageValue.contentDescription =
+            HomeDashboard.tileDescription("STORAGE FREE",
+                introStorageValue.text.toString())
         lastRunView.text =
             HomeDashboard.lastRunLines(lastRun).joinToString("\n")
         lastRunView.setTextColor(
@@ -1058,6 +1286,7 @@ class MainActivity : Activity() {
             SessionView.buildActiveLine(null, null)
         }
         sessionsSummaryView.text = "$head\n$activeLine"
+        refreshDecisionCard(records)
         refreshResultHero(records)
         refreshSessionsList(records)
         // Step 5 workspace: honest headline (real
@@ -1069,6 +1298,101 @@ class MainActivity : Activity() {
             (workspace.budgetLine?.let { "\n$it" } ?: "")
         refreshAgentWorkspace(records)
         refreshSettingsLines()
+    }
+
+    /**
+     * EF-ANDROID-AERO-OVERHAUL-01 Priority One Decision
+     * Card refresh: rebuilds the Decision section from
+     * the already-loaded records plus a fresh cheap
+     * telemetry sample. Assessment and recommendation
+     * reuse the existing catalog/derivation functions
+     * over the catalog entry matching the staged hash
+     * (absent when the staged file is not cataloged).
+     * Fail-closed: any failure leaves an honest
+     * unavailable line, never a crash or stale card.
+     */
+    private fun refreshDecisionCard(records: List<SessionRecord>) {
+        decisionCardBox.removeAllViews()
+        try {
+            val sample = try {
+                DeviceTelemetry.sample(this)
+            } catch (_: Exception) {
+                null
+            }
+            val avail = sample?.availRamBytes?.takeIf { it > 0 }
+            val want = staged?.sha256?.lowercase()
+            val entry = try {
+                val text = resources
+                    .openRawResource(R.raw.model_catalog)
+                    .bufferedReader(Charsets.UTF_8)
+                    .use { it.readText() }
+                ModelCatalog.parse(text).firstOrNull {
+                    it.sha256 != null && want != null &&
+                        it.sha256.lowercase() == want
+                }
+            } catch (_: Exception) {
+                null
+            }
+            val stamped = SimpleDateFormat(
+                "HH:mm:ss", Locale.US).format(Date())
+            val device = ModelSuitability.DeviceInput(
+                supportedAbis = Build.SUPPORTED_ABIS.toList(),
+                availBytes = avail,
+                availSampledAt = "$stamped local",
+                measuredArtifactShas = measuredArtifactShas())
+            val assessment = entry?.let {
+                ModelSuitability.assess(it, device)
+            }
+            val current = ModelContext.CurrentModel(
+                staged = staged?.let {
+                    ModelContext.StagedRef(
+                        it.name, it.sha256, it.bytes)
+                },
+                lastMeasurement = try {
+                    ModelContext.lastCompletedMeasurement(
+                        records)
+                } catch (_: Exception) {
+                    null
+                })
+            val sizeDiff = assessment?.let {
+                ModelContext.sizeVsCurrent(
+                    it.sizeBoundBytes, it.sizeBasis, current)
+            }
+            val evidence = entry?.let {
+                try {
+                    ModelRecommend.localEvidenceFor(
+                        it, records)
+                } catch (_: Exception) {
+                    null
+                }
+            }
+            val recommendation = entry?.let { catalogEntry ->
+                assessment?.let { assess ->
+                    try {
+                        ModelRecommend.recommend(
+                            catalogEntry, assess, evidence,
+                            current, sizeDiff)
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+            }
+            val card = AeroDecision.derive(
+                current.staged, records, assessment,
+                recommendation, avail)
+            decisionCardBox.addView(EdgeFitCards.decisionCard(
+                this, card,
+                HomeDashboard.primaryAction(
+                    pendingNextAction)) {
+                // Same handler as the Next Up button:
+                // reads the live action at tap time.
+                selectTab(HomeDashboard.actionTab(
+                    pendingNextAction))
+            })
+        } catch (_: Exception) {
+            decisionCardBox.addView(AeroUi.captionText(
+                this, "Decision unavailable."))
+        }
     }
 
     /**
@@ -1131,9 +1455,15 @@ class MainActivity : Activity() {
         })
         resultHeroBox.addView(AeroUi.bodyText(this,
             AeroResult.bindingChip(result.runId, session)))
-        AeroResult.deltaLine(session)?.let { delta ->
-            resultHeroBox.addView(AeroUi.bodyText(this, delta))
-        }
+        // EF-ANDROID-AERO-OVERHAUL-01 Priority Two: labeled
+        // predicted-vs-measured block over the bound session's
+        // stored maps (replaces the one-line delta).
+        val runMismatch = session != null &&
+            AeroSessions.runIdOf(session) != result.runId
+        resultHeroBox.addView(EdgeFitCards.comparisonBlock(
+            this, AeroCompare.block(
+                session?.prediction, session?.benchmark,
+                session?.comparison, runMismatch)))
         for (row in AeroResult.specRows(result)) {
             resultHeroBox.addView(TextView(this).apply {
                 text = "${row.label}: ${row.value}"
@@ -1286,6 +1616,19 @@ class MainActivity : Activity() {
             agentMoreView.visibility = View.GONE
             return
         }
+        // EF-ANDROID-AERO-OVERHAUL-01 Priority Three:
+        // workflow stepper over the newest active agent
+        // (else the newest agent), above the cards.
+        val focus = agents.filter { AeroAgent.isActive(it) }
+            .maxByOrNull { it.updatedAtUtc }
+            ?: agents.maxByOrNull { it.updatedAtUtc }
+        focus?.let {
+            agentWorkspaceList.addView(EdgeFitCards.stepStrip(
+                this, AeroAgentSteps.workflow(it,
+                    records.filter { child ->
+                        child.parentSessionId == it.sessionId
+                    })))
+        }
         val childrenByParent = records.groupBy { it.parentSessionId }
         val density = resources.displayMetrics.density
         val gap = (12 * density + 0.5f).toInt()
@@ -1422,6 +1765,23 @@ class MainActivity : Activity() {
         }
     }
 
+    /**
+     * Version code for the install marker; -1 when unreadable.
+     * Diagnostic only; never gates launch or storage.
+     */
+    private fun appVersionCode(): Int = try {
+        val info = packageManager.getPackageInfo(packageName, 0)
+        if (android.os.Build.VERSION.SDK_INT >=
+            android.os.Build.VERSION_CODES.P
+        ) {
+            info.longVersionCode.toInt()
+        } else {
+            @Suppress("DEPRECATION") info.versionCode
+        }
+    } catch (_: Exception) {
+        -1
+    }
+
     /** Real-state context for the AeroSettings model. */
     private fun settingsCtx(): AeroSettings.Context {
         val suffix = try {
@@ -1447,7 +1807,12 @@ class MainActivity : Activity() {
             globalTokenPersisted = persisted,
             versionName = BuildConfig.VERSION_NAME,
             packageName = packageName,
-            workloadId = BenchContract.WORKLOAD_ID)
+            workloadId = BenchContract.WORKLOAD_ID,
+            installLine = try {
+                installRecord?.let { InstallIdentity.statusLine(it) }
+            } catch (_: Exception) {
+                null
+            })
     }
 
     /** Static caption detail for one settings action row. */
@@ -1473,8 +1838,10 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
             null
         }
+        trackSheet(Sheets.RESULT_DETAILS)
         CardDialog.show(this, "Result Details",
-            AeroResult.detailSections(result, session))
+            AeroResult.detailSections(result, session),
+            onDismiss = { clearSheet(Sheets.RESULT_DETAILS) })
     }
 
     /**
@@ -1503,13 +1870,668 @@ class MainActivity : Activity() {
         }
     }
 
+    // ---- lifecycle persistence (EF-ANDROID-LIFECYCLE-PERSISTENCE-P0-01) ----
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        outState.putString(KEY_PENDING_JSON, pendingJson)
-        outState.putString(KEY_PENDING_FILENAME, pendingFilename)
-        outState.putString(KEY_ACTIVE_SESSION, activeSessionId)
-        outState.putString(KEY_TAB, currentTab.name)
-        outState.putInt(KEY_ONBOARDING_PAGE, onboardingPage)
+        // Live chart carry-over (same process only; the
+        // bundle never carries it).
+        retained.chartSamples = if (runner.isRunning()) {
+            try {
+                benchScreen.chartSnapshot()
+            } catch (_: Exception) {
+                null
+            }
+        } else {
+            null
+        }
+        val snapshot = UiSnapshot(
+            tab = currentTab.name,
+            activeSessionId = activeSessionId,
+            pendingJson = pendingJson,
+            pendingFilename = pendingFilename,
+            standaloneOverride = standaloneOverride,
+            benchJson = benchJson,
+            runInFlight = runner.isRunning(),
+            benchOverlay = retained.overlayVisible,
+            openSheet = openSheet,
+            openSheetArg = openSheetArg,
+            pendingRepeatPrepId = pendingRepeatPrepId,
+            onboardingPage = onboardingPage,
+            manualChecked = manualCheckedDraft,
+            draftOrigin = originDraft,
+            draftRememberGlobal = globalRememberDraft,
+            draftRememberMeta = metaRememberDraft,
+            draftModify = formatModifyDraft(),
+            draftCreate = formatCreateDraft(),
+            statusText = statusView.text?.toString(),
+            pickerActive = pickerActive
+        )
+        for ((key, value) in UiSnapshotCodec.encode(snapshot)) {
+            outState.putString(key, value)
+        }
+    }
+
+    private fun bundleToSnapshotMap(saved: Bundle?): Map<String, String> {
+        if (saved == null) return emptyMap()
+        val out = linkedMapOf<String, String>()
+        for (key in listOf(
+            UiSnapshotCodec.K_TAB, UiSnapshotCodec.K_ACTIVE_SESSION,
+            UiSnapshotCodec.K_PENDING_JSON,
+            UiSnapshotCodec.K_PENDING_FILENAME,
+            UiSnapshotCodec.K_OVERRIDE, UiSnapshotCodec.K_BENCH_JSON,
+            UiSnapshotCodec.K_RUN_IN_FLIGHT,
+            UiSnapshotCodec.K_BENCH_OVERLAY,
+            UiSnapshotCodec.K_SHEET, UiSnapshotCodec.K_SHEET_ARG,
+            UiSnapshotCodec.K_REPEAT_PREP,
+            UiSnapshotCodec.K_ONBOARDING_PAGE,
+            UiSnapshotCodec.K_MANUAL_CHECKED,
+            UiSnapshotCodec.K_DRAFT_ORIGIN,
+            UiSnapshotCodec.K_DRAFT_REMEMBER,
+            UiSnapshotCodec.K_DRAFT_REMEMBER_META,
+            UiSnapshotCodec.K_DRAFT_MODIFY,
+            UiSnapshotCodec.K_DRAFT_CREATE,
+            UiSnapshotCodec.K_STATUS, UiSnapshotCodec.K_PICKER
+        )) {
+            saved.getString(key)?.let { out[key] = it }
+        }
+        return out
+    }
+
+    private fun parseModifyDraft(raw: String?): Triple<String, String, String>? {
+        if (raw.isNullOrEmpty()) return null
+        val parts = raw.split(",", limit = 3)
+        if (parts.size != 3) return null
+        return Triple(parts[0], parts[1], parts[2])
+    }
+
+    private fun formatModifyDraft(): String? {
+        val draft = modifyDraft ?: return null
+        return "${draft.first},${draft.second},${draft.third}"
+    }
+
+    private fun parseCreateDraft(raw: String?): Pair<String, String>? {
+        if (raw.isNullOrEmpty()) return null
+        val parts = raw.split(",", limit = 2)
+        if (parts.size != 2) return null
+        return parts[0] to parts[1]
+    }
+
+    private fun formatCreateDraft(): String? {
+        val draft = createDraft ?: return null
+        return "${draft.first},${draft.second}"
+    }
+
+    /**
+     * Rebuilds working state after [onCreate] lays out the
+     * views. Runs on the UI thread; the durable model check
+     * leaves the thread only for hashing-sized work.
+     */
+    private fun restoreWorkingState(
+        snapshot: UiSnapshot,
+        configChange: Boolean
+    ) {
+        runButton.isEnabled = staged != null && !benchActive
+        cancelButton.isEnabled = benchActive
+        saveButton.isEnabled = benchJson != null
+        refreshModelLine()
+        refreshBenchConfigLine()
+        refreshBenchAuthLine()
+        renderBenchViewState()
+        snapshot.statusText?.let { statusView.text = it }
+        if (configChange) {
+            revalidateAdoptedModel()
+        } else {
+            restorePersistedModelAsync(
+                snapshot.runInFlight, snapshot.benchOverlay)
+        }
+        reattachRunner()
+        if (retained.overlayVisible) {
+            rebuildOverlay()
+        } else {
+            showMain()
+        }
+        // A stashed async delivery (a completion that landed
+        // between destroy and create) is fresher than the
+        // saved sheet and wins; otherwise the saved sheet
+        // reopens for continuity.
+        val (notice, sheet, sheetArg) = retained.drainPending()
+        if (notice != null) statusText(notice)
+        val delivered = if (sheet != null) {
+            restoreSheet(sheet, sheetArg)
+        } else {
+            false
+        }
+        if (!delivered && snapshot.openSheet != null) {
+            if (!restoreSheet(snapshot.openSheet, snapshot.openSheetArg)) {
+                statusText("Previous dialog could not be restored.")
+            }
+        }
+        // A staging completion stashed in the
+        // destroy/create window skips applyStagedModel, so
+        // its repeat-prep hop runs here instead (a live
+        // delivery consumes the flag itself).
+        if (delivered && sheet == Sheets.IMPORT_VERDICT) {
+            val prep = pendingRepeatPrepId
+            if (prep != null && staged != null) {
+                pendingRepeatPrepId = null
+                try {
+                    showRepeatPrep(prep)
+                } catch (_: Exception) {
+                }
+            }
+        }
+    }
+
+    /**
+     * The adopted holder already carries the staged model;
+     * revalidate the file cheaply (existence + size). A
+     * failure falls back to the durable store, never to a
+     * phantom "ready" line.
+     */
+    private fun revalidateAdoptedModel() {
+        if (retained.stagingThread?.isAlive == true) {
+            // Staging adopted mid-flight: its completion
+            // updates the line through the holder.
+            modelView.text = "Staging model…"
+            return
+        }
+        val model = staged
+        if (model == null) {
+            restorePersistedModelAsync(false, false)
+            return
+        }
+        val valid = try {
+            model.file.isFile && model.file.length() == model.bytes
+        } catch (_: Exception) {
+            false
+        }
+        if (valid) {
+            runButton.isEnabled = !benchActive
+            refreshModelLine()
+            refreshNextAction()
+            return
+        }
+        staged = null
+        runButton.isEnabled = false
+        restorePersistedModelAsync(false, false)
+    }
+
+    /**
+     * Fresh-process model restore: legacy cache adoption,
+     * then the durable selection, then (only when the
+     * durable bytes are gone but the persisted SAF grant
+     * survives) a quiet re-stage from the saved URI. Any
+     * failure is an accurate recovery message; "ready"
+     * appears only with validated bytes in hand.
+     */
+    private fun restorePersistedModelAsync(
+        runWasInFlight: Boolean,
+        overlayWasVisible: Boolean
+    ) {
+        if (runWasInFlight) {
+            // The run died with the process. Bound sessions
+            // were already marked by launch recovery; say
+            // so plainly instead of showing a live overlay.
+            retained.overlayVisible = false
+            statusText("Benchmark did not survive the process " +
+                "restart; no result was recorded for the " +
+                "interrupted run.")
+        } else if (overlayWasVisible && lastResult != null) {
+            // A completed result was on screen: bring the
+            // overlay back over the restored result.
+            retained.overlayVisible = true
+        }
+        modelView.text = "Checking saved model…"
+        Thread({
+            val migrated = try {
+                val sample = try {
+                    DeviceTelemetry.sample(applicationContext)
+                } catch (_: Exception) {
+                    null
+                }
+                modelStore.migrateLegacyCache(
+                    SessionManager.utcNow(),
+                    sample?.availRamBytes?.takeIf { it > 0 },
+                    measuredArtifactShas())
+            } catch (_: Exception) {
+                null
+            }
+            val restore = try {
+                modelStore.restore()
+            } catch (e: Exception) {
+                ModelStore.Restore.Unavailable(
+                    "Saved model check failed (${e.message}).", null)
+            }
+            retained.post(
+                notice = null,
+                sheet = null,
+                sheetArg = null
+            ) { activity ->
+                activity.applyModelRestore(restore, migrated != null)
+            }
+        }, "edgefit-model-restore").start()
+    }
+
+    private fun applyModelRestore(
+        restore: ModelStore.Restore,
+        migrated: Boolean
+    ) {
+        when (restore) {
+            is ModelStore.Restore.Ready -> {
+                staged = StagedModel(
+                    restore.file, restore.model.sha256,
+                    restore.model.sizeBytes,
+                    restore.model.displayName,
+                    restore.model.sourceUri)
+                runButton.isEnabled = !benchActive
+                refreshModelLine()
+                refreshBenchConfigLine()
+                updateMemReadinessLine()
+                refreshNextAction()
+                if (migrated) {
+                    statusText("Restored previously staged model " +
+                        "from the app cache.")
+                }
+            }
+            is ModelStore.Restore.Unavailable -> {
+                staged = null
+                runButton.isEnabled = false
+                refreshModelLine()
+                refreshNextAction()
+                val uri = restore.model?.sourceUri
+                if (uri != null && hasPersistedRead(uri)) {
+                    // Durable bytes gone, SAF grant alive:
+                    // re-stage quietly without bothering the
+                    // user with a second import.
+                    statusText("Saved model bytes are gone; " +
+                        "restoring from the saved location…")
+                    try {
+                        stageModel(
+                            android.net.Uri.parse(uri), quiet = true)
+                    } catch (_: Exception) {
+                        modelView.text = restore.reason
+                        statusText(restore.reason)
+                    }
+                } else {
+                    modelView.text = restore.reason
+                    statusText(restore.reason +
+                        " Select a GGUF file to continue.")
+                }
+            }
+            is ModelStore.Restore.None -> {
+                staged = null
+                runButton.isEnabled = false
+                refreshModelLine()
+                refreshNextAction()
+            }
+        }
+    }
+
+    private fun hasPersistedRead(uriString: String): Boolean {
+        return try {
+            val uri = android.net.Uri.parse(uriString)
+            contentResolver.persistedUriPermissions.any {
+                it.uri == uri && it.isReadPermission
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Reconnects this instance to the adopted runner: live
+     * progress renders here, completion lands here, and a
+     * result that finished between destroy and create is
+     * adopted instead of lost. Never starts a run.
+     */
+    private fun reattachRunner() {
+        if (runner.isRunning()) {
+            benchActive = true
+            runner.setProgressListener { update ->
+                retained.postProgress { activity ->
+                    activity.benchScreen.render(update)
+                }
+            }
+            runner.setCompletionListener { result ->
+                onRunnerResult(result)
+            }
+            return
+        }
+        val finished = runner.lastResult
+        if (benchActive && finished != null) {
+            if (lastResult == null) {
+                // Completed in the destroy/create window:
+                // adopt instead of losing the result.
+                onBenchDone(finished)
+            } else {
+                benchActive = false
+            }
+        } else if (benchActive) {
+            // Inconsistent corner (active flag, idle
+            // runner, no result): fail safe to idle.
+            benchActive = false
+            runButton.isEnabled = staged != null
+            cancelButton.isEnabled = false
+        }
+    }
+
+    /** Routes a worker-thread result to the live instance. */
+    private fun onRunnerResult(result: BenchResult) {
+        retained.post { activity ->
+            activity.onBenchDone(result)
+        }
+    }
+
+    /**
+     * Rebuilds the bench overlay after recreation. A live
+     * run re-renders its header (ticks resume through the
+     * reattached listener); a completed result re-renders
+     * from the adopted record. Anything else falls back to
+     * the tab shell.
+     */
+    private fun rebuildOverlay() {
+        val display = retained.runDisplay
+        val result = lastResult
+        if (runner.isRunning() && display != null) {
+            benchScreen.showRun(
+                display.name, display.bytes, display.sha256,
+                display.config, display.runtimeVersion,
+                display.runtimeAbi,
+                retained.chartSamples ?: emptyList())
+            benchScreen.setRunning(true)
+            showBenchScreen()
+        } else if (!runner.isRunning() && result != null) {
+            benchScreen.showResult(result)
+            benchScreen.setRunning(false)
+            showBenchScreen()
+        } else {
+            showMain()
+        }
+    }
+
+    /** Re-renders the Benchmark-tab status line for adopted state. */
+    private fun renderBenchViewState() {
+        val result = lastResult
+        benchView.text = when {
+            runner.isRunning() -> "Benchmark: running…"
+            result != null -> benchDoneText(result)
+            else -> "Benchmark: idle"
+        }
+    }
+
+    /**
+     * Result-tab text, shared by live completion and
+     * restore so both render identically.
+     */
+    private fun benchDoneText(result: BenchResult): String {
+        val measurements = result.measurements
+        val base = "Benchmark: ${result.status}\n" +
+            "Generated ${measurements.generatedTokens} tokens in " +
+            "${measurements.genMs} ms " +
+            "(${"%.1f".format(measurements.tpsGen)} tok/s)"
+        return if (result.error != null) "$base\n${result.error}"
+        else base
+    }
+
+    // ---- dialog-sheet tracking ----
+
+    private fun trackSheet(id: String, arg: String? = null) {
+        // Re-tracking the same sheet (page turns, list
+        // taps) replaces the top instead of stacking.
+        if (sheetStack.lastOrNull()?.first == id) {
+            sheetStack.removeLast()
+        }
+        sheetStack.addLast(id to arg)
+        while (sheetStack.size > 8) sheetStack.removeFirst()
+    }
+
+    private fun clearSheet(id: String) {
+        val index = sheetStack.indexOfLast { it.first == id }
+        if (index >= 0) sheetStack.removeAt(index)
+    }
+
+    /**
+     * Reopens a tracked sheet after recreation. Returns
+     * false when the sheet cannot be honored (missing
+     * record, missing result, revoked grant): the caller
+     * reports that honestly instead of opening the wrong
+     * screen.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun restoreSheet(id: String?, arg: String?): Boolean {
+        return try {
+            when (val action = SheetRestore.actionFor(id, arg)) {
+                null -> false
+                is SheetAction.Details -> {
+                    showLiveDeviceDetails(); true
+                }
+                is SheetAction.ManualConfig -> {
+                    manualCheckedDraft = action.checked
+                    showManualBenchConfig(action.checked); true
+                }
+                is SheetAction.ResultDetails -> {
+                    if (lastResult == null) false
+                    else {
+                        showResultDetails(); true
+                    }
+                }
+                is SheetAction.ResultComparison -> {
+                    val record = try {
+                        sessionManager.get(action.sessionId)
+                    } catch (_: Exception) {
+                        return false
+                    }
+                    val comparison =
+                        record.comparison as? Map<String, Any?>
+                    if (comparison == null) {
+                        showSessions(action.sessionId); true
+                    } else {
+                        showResultComparison(record, comparison); true
+                    }
+                }
+                is SheetAction.ImportVerdict ->
+                    reopenImportVerdict(action.sha256)
+                is SheetAction.ModelSources -> {
+                    showModelSources(); true
+                }
+                is SheetAction.Workload -> {
+                    openWorkloadSheet(action.flavor); true
+                }
+                is SheetAction.FailureDetails -> {
+                    if (lastResult == null) false
+                    else {
+                        showFailureDetails(); true
+                    }
+                }
+                is SheetAction.Recovery -> {
+                    showRecoveryAssistant(action.sourceId); true
+                }
+                is SheetAction.BoundRecovery -> {
+                    val record = try {
+                        sessionManager.get(action.sessionId)
+                    } catch (_: Exception) {
+                        return false
+                    }
+                    showBoundRecovery(record); true
+                }
+                is SheetAction.UnboundRecovery -> {
+                    showUnboundRecovery(); true
+                }
+                is SheetAction.Sessions -> {
+                    showSessions(action.focusId); true
+                }
+                is SheetAction.RepeatPrep -> {
+                    showRepeatPrep(action.id); true
+                }
+                is SheetAction.ModelCatalog -> {
+                    showModelCatalog(); true
+                }
+                is SheetAction.EvidenceSession -> {
+                    showEvidenceSession(action.id); true
+                }
+                is SheetAction.SeriesComparison -> {
+                    showSeriesComparison(action.id); true
+                }
+                is SheetAction.MemReadiness -> {
+                    showMemReadiness(); true
+                }
+                is SheetAction.MemDiag -> {
+                    showMemDiag(); true
+                }
+                is SheetAction.MemSamples -> {
+                    showMemSamples(); true
+                }
+                is SheetAction.Help -> {
+                    showHelp(); true
+                }
+                is SheetAction.Onboarding -> {
+                    openOnboarding(action.page); true
+                }
+                is SheetAction.Agent -> {
+                    showAgent(action.selectedId); true
+                }
+                is SheetAction.ModifyProposal -> {
+                    modifyDraftParent = action.parentId
+                    modifyAgentProposal(action.parentId); true
+                }
+                is SheetAction.MetaSettings -> {
+                    showMetaSettings(); true
+                }
+                is SheetAction.MetaAuthPredict -> {
+                    startLivePrediction(action.existingId); true
+                }
+                is SheetAction.MetaAuthFollowup -> {
+                    startLiveFollowUp(action.sessionId); true
+                }
+                is SheetAction.MetaAuthProposal -> {
+                    startAgentProposal(action.parentId); true
+                }
+                is SheetAction.LivePrediction -> {
+                    if (action.mode == "ok") {
+                        showStoredPrediction(action.ref)
+                    } else {
+                        showStoredPredictionError(action.ref)
+                    }
+                    true
+                }
+                is SheetAction.FollowupResult -> {
+                    if (action.mode == "ok") {
+                        showStoredFollowUp(action.ref)
+                    } else {
+                        showStoredFollowUpError(action.ref)
+                    }
+                    true
+                }
+                is SheetAction.GlobalConnection -> {
+                    showGlobalConnection(); true
+                }
+                is SheetAction.ContributeReview -> {
+                    openContributionRecord(action.runId); true
+                }
+                is SheetAction.SubmitOutcome -> {
+                    val outcome = SubmitOutcomeArg.decode(action.encoded)
+                        ?: return false
+                    showSubmitOutcome(outcome); true
+                }
+                is SheetAction.SharedRecord -> {
+                    val record = try {
+                        evidenceStore.load(action.runId)
+                    } catch (_: Exception) {
+                        return false
+                    }
+                    showSharedRecord(record); true
+                }
+                is SheetAction.History -> {
+                    showContributionHistory(); true
+                }
+                is SheetAction.HistoryActions -> {
+                    showHistoryActions(action.id); true
+                }
+                is SheetAction.Withdrawal -> {
+                    openWithdrawalRecord(action.id); true
+                }
+            }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Reopens the import verdict sheet: the in-memory
+     * record first (exact, incl. refusals), else a
+     * recomputed verdict over the staged bytes. False when
+     * neither can honor the saved hash.
+     */
+    private fun reopenImportVerdict(sha: String?): Boolean {
+        val record = retained.lastImport
+        if (record != null && (sha == null || record.sha == sha)) {
+            showImportVerdict(
+                record.name, record.bytes, record.sha,
+                record.verdict)
+            return true
+        }
+        val model = staged
+        if (model != null && (sha == null || model.sha256 == sha)) {
+            val verdict = try {
+                val sample = try {
+                    DeviceTelemetry.sample(applicationContext)
+                } catch (_: Exception) {
+                    null
+                }
+                GgufInspect.assess(
+                    GgufInspect.inspectFile(model.file),
+                    model.bytes,
+                    sample?.availRamBytes?.takeIf { it > 0 },
+                    measuredArtifactShas(), model.sha256)
+            } catch (_: Exception) {
+                return false
+            }
+            showImportVerdict(
+                model.name, model.bytes, model.sha256, verdict)
+            return true
+        }
+        return false
+    }
+
+    private fun showFailureDetails() {
+        val result = lastResult
+        if (result == null) {
+            statusText("No benchmark result yet.")
+            return
+        }
+        trackSheet(Sheets.FAILURE_DETAILS)
+        CardDialog.show(this, "Failure Details",
+            InsightCards.failureDetailSections(result),
+            onDismiss = { clearSheet(Sheets.FAILURE_DETAILS) })
+    }
+
+    private fun openWorkloadSheet(flavor: String) {
+        if (flavor == "result") {
+            val result = lastResult
+            if (result == null) {
+                statusText("No benchmark result yet.")
+                return
+            }
+            trackSheet(Sheets.WORKLOAD, "result")
+            BenchWorkloadView.show(
+                this, result.config,
+                "%s (%d MB)".format(
+                    result.model.displayName,
+                    result.model.sizeBytes / 1048576),
+                result.measurements.prefillTokens,
+                onDismiss = { clearSheet(Sheets.WORKLOAD) })
+        } else {
+            val model = staged
+            trackSheet(Sheets.WORKLOAD, "current")
+            BenchWorkloadView.show(
+                this, currentBenchConfig(),
+                model?.let {
+                    "%s (%d MB)".format(it.name, it.bytes / 1048576)
+                },
+                lastResult?.measurements?.prefillTokens,
+                onDismiss = { clearSheet(Sheets.WORKLOAD) })
+        }
     }
 
     private fun systemBarInsets(insets: WindowInsets): IntArray {
@@ -1609,6 +2631,67 @@ class MainActivity : Activity() {
     }
 
     /** Static identity plus a fresh live-health sample. */
+    /**
+     * EF-ANDROID-AGENT-HOME-POLISH-03: live device
+     * intro tile above Decision. Glow card with the
+     * device title, three metric cells (available
+     * RAM, free storage, model state), and an honest
+     * updated cue. Values start as placeholders; the
+     * home ticker and dashboard refresh fill them
+     * from existing telemetry only - no new sources.
+     */
+    private fun buildIntroTile(): LinearLayout {
+        val density = resources.displayMetrics.density
+        fun dp(value: Int): Int =
+            (value * density + 0.5f).toInt()
+        val tile = AeroUi.glowCard(this)
+        tile.addView(TextView(this).apply {
+            text = "LIVE DEVICE OVERVIEW"
+            textSize = 12f
+            letterSpacing = 0.12f
+            isSingleLine = true
+            setTextColor(
+                AeroUi.secondaryColor(this@MainActivity))
+        })
+        introTitleView = TextView(this).apply {
+            text = "Loading device state..."
+            textSize = 22f
+            setTextColor(
+                AeroUi.inkColor(this@MainActivity))
+        }
+        SemanticUi.bold(introTitleView)
+        tile.addView(introTitleView,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT)
+                .apply { topMargin = dp(4) })
+        val ram = AeroUi.metricTile(this, "AVAIL RAM", "--")
+        introRamValue = ram.valueView
+        val storage =
+            AeroUi.metricTile(this, "STORAGE FREE", "--")
+        introStorageValue = storage.valueView
+        val model = AeroUi.metricTile(this, "MODEL", "--")
+        introModelValue = model.valueView
+        tile.addView(AeroUi.tileRow(this, ram.root,
+            storage.root, model.root),
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT)
+                .apply { topMargin = dp(12) })
+        introUpdatedView = TextView(this).apply {
+            text = "Updated --"
+            textSize = 12f
+            setTextColor(
+                AeroUi.secondaryColor(this@MainActivity))
+        }
+        tile.addView(introUpdatedView,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT)
+                .apply { topMargin = dp(8) })
+        return tile
+    }
+
     private fun refreshHomeHealth() {
         val profile = lastProfile ?: return
         if (currentTab != NavTab.HOME) return
@@ -1619,6 +2702,21 @@ class MainActivity : Activity() {
         }
         deviceTitleView.text =
             HomeDashboard.deviceTitle(profile)
+        introTitleView.text =
+            HomeDashboard.deviceTitle(profile)
+        introRamValue.text =
+            DeviceTelemetry.formatRam(sample.availRamBytes)
+        introRamValue.contentDescription =
+            HomeDashboard.tileDescription("AVAIL RAM",
+                introRamValue.text.toString())
+        val introStamp = "Updated " +
+            SessionTimeline.formatClock(
+                System.currentTimeMillis())
+        introUpdatedView.text = if (sample.lowMemory) {
+            introStamp + " - low memory"
+        } else {
+            introStamp
+        }
         val tiles = HomeDashboard.metricTiles(profile, sample)
         for (tile in tiles) {
             deviceTileValues[tile.label]?.apply {
@@ -1645,6 +2743,7 @@ class MainActivity : Activity() {
             return
         }
         detailsOpen = true
+        trackSheet(Sheets.DETAILS)
         val view = TextView(this).apply {
             textSize = 14f
             setTextIsSelectable(true)
@@ -1666,6 +2765,7 @@ class MainActivity : Activity() {
             .setPositiveButton("Close", null)
             .setOnDismissListener {
                 detailsOpen = false
+                clearSheet(Sheets.DETAILS)
                 detailsView = null
                 detailsTicker?.stop()
                 detailsTicker = null
@@ -1748,7 +2848,9 @@ class MainActivity : Activity() {
         saveButton.isEnabled = false
         runHintView.text = BenchWorkflow.runHint(true, true)
         runner.setProgressListener { update ->
-            runOnUiThread { benchScreen.render(update) }
+            retained.postProgress { activity ->
+                activity.benchScreen.render(update)
+            }
         }
         // EF-MEM-03: bound session wins; otherwise an
         // explicit standalone override; otherwise the live
@@ -1757,7 +2859,7 @@ class MainActivity : Activity() {
         val started = runner.startWithConfig(
             model.file, model.sha256, model.name,
             effectiveOverride) { result ->
-            runOnUiThread { onBenchDone(result) }
+            onRunnerResult(result)
         }
         if (!started) {
             runner.setProgressListener(null)
@@ -1778,9 +2880,15 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
             null
         }
-        benchScreen.showRun(
+        retained.runDisplay = RunDisplayInfo(
             model.name, model.bytes, model.sha256, config,
             runtimeVersionLabel(), runtimeAbiLabel(profile))
+        retained.chartSamples = null
+        val display = retained.runDisplay!!
+        benchScreen.showRun(
+            display.name, display.bytes, display.sha256,
+            display.config, display.runtimeVersion,
+            display.runtimeAbi)
         selectTab(NavTab.BENCHMARK)
         showBenchScreen()
     }
@@ -1836,14 +2944,7 @@ class MainActivity : Activity() {
         cancelButton.isEnabled = false
         runHintView.text = BenchWorkflow.runHint(
             staged != null, false)
-        val measurements = result.measurements
-        benchView.text = "Benchmark: ${result.status}\n" +
-            "Generated ${measurements.generatedTokens} tokens in " +
-            "${measurements.genMs} ms " +
-            "(${"%.1f".format(measurements.tpsGen)} tok/s)"
-        if (result.error != null) {
-            benchView.append("\n${result.error}")
-        }
+        benchView.text = benchDoneText(result)
         benchScreen.showResult(result)
         try {
             benchJson = BenchResultJson.serialize(result)
@@ -1895,59 +2996,94 @@ class MainActivity : Activity() {
                 },
                 onFailure = { "" }
             )
-            runOnUiThread {
-                outcome.fold(
-                    onSuccess = { record ->
-                        @Suppress("UNCHECKED_CAST")
-                        val comparison =
-                            record.comparison as? Map<String, Any?>
-                        val detail = if (comparison == null) record.state
-                        else SessionView.comparisonLine(comparison)
-                        statusText(
-                            "Session ${record.sessionId}: $detail.$agentNote")
-                        refreshSessionLine()
-                        if (comparison != null) {
-                            showResultComparison(record, comparison)
-                        }
-                    },
-                    onFailure = { e ->
-                        // The bound run will never attach; record the
-                        // failure now instead of waiting for recovery.
-                        Thread({
-                            try {
-                                sessionManager.markBenchmarkFailed(
-                                    id, "attach failed: ${e.message}")
-                            } catch (_: Exception) {
-                            }
-                            runOnUiThread {
-                                statusText(
-                                    "Session attach failed: ${e.message}")
-                                refreshSessionLine()
-                            }
-                        }, "edgefit-session-fail").start()
+            // Stash data for a successor instance when no
+            // live Activity exists (rotation window).
+            @Suppress("UNCHECKED_CAST")
+            val comparisonId = outcome.fold(
+                onSuccess = { record ->
+                    if (record.comparison as? Map<String, Any?> != null) {
+                        id
+                    } else {
+                        null
                     }
-                )
+                },
+                onFailure = { null }
+            )
+            val notice = outcome.fold(
+                onSuccess = { record ->
+                    @Suppress("UNCHECKED_CAST")
+                    val comparison =
+                        record.comparison as? Map<String, Any?>
+                    val detail = if (comparison == null) record.state
+                    else SessionView.comparisonLine(comparison)
+                    "Session ${record.sessionId}: $detail.$agentNote"
+                },
+                onFailure = { e ->
+                    // The bound run will never attach; record
+                    // the failure now (already off the UI
+                    // thread) instead of waiting for recovery.
+                    try {
+                        sessionManager.markBenchmarkFailed(
+                            id, "attach failed: ${e.message}")
+                    } catch (_: Exception) {
+                    }
+                    "Session attach failed: ${e.message}"
+                }
+            )
+            retained.post(
+                notice = notice,
+                sheet = comparisonId?.let {
+                    Sheets.RESULT_COMPARISON
+                },
+                sheetArg = comparisonId
+            ) { activity ->
+                activity.applyAttachOutcome(outcome, agentNote)
             }
         }
+    }
+
+    /** Applies an attach outcome on the live instance. */
+    private fun applyAttachOutcome(
+        outcome: Result<SessionRecord>,
+        agentNote: String
+    ) {
+        outcome.fold(
+            onSuccess = { record ->
+                @Suppress("UNCHECKED_CAST")
+                val comparison =
+                    record.comparison as? Map<String, Any?>
+                val detail = if (comparison == null) record.state
+                else SessionView.comparisonLine(comparison)
+                statusText(
+                    "Session ${record.sessionId}: $detail.$agentNote")
+                refreshSessionLine()
+                if (comparison != null) {
+                    showResultComparison(record, comparison)
+                }
+            },
+            onFailure = { e ->
+                statusText("Session attach failed: ${e.message}")
+                refreshSessionLine()
+            }
+        )
     }
 
     /** UX-D02 standalone persist off the UI thread. */
     private fun persistStandaloneRun(result: BenchResult) {
         SessionBenchBridge.recordStandaloneAsync(
             sessionManager, result) { outcome ->
-            runOnUiThread {
-                outcome.fold(
-                    onSuccess = { record ->
-                        benchView.append(
-                            "\nStandalone measurement recorded " +
-                                "as ${record.sessionId}.")
-                        refreshSessionLine()
-                    },
-                    onFailure = { e ->
-                        benchView.append(
-                            "\nStandalone record failed: ${e.message}")
-                    }
-                )
+            val line = outcome.fold(
+                onSuccess = { record ->
+                    "\nStandalone measurement recorded " +
+                        "as ${record.sessionId}."
+                },
+                onFailure = { e ->
+                    "\nStandalone record failed: ${e.message}"
+                }
+            )
+            retained.post { activity ->
+                activity.benchView.append(line)
+                activity.refreshSessionLine()
             }
         }
     }
@@ -1975,15 +3111,171 @@ class MainActivity : Activity() {
         } else {
             emptyList()
         }
-        CardDialog.show(this, "Benchmark Result", sections, actions)
+        trackSheet(Sheets.RESULT_COMPARISON, record.sessionId)
+        CardDialog.show(this, "Benchmark Result", sections, actions,
+            onDismiss = { clearSheet(Sheets.RESULT_COMPARISON) })
     }
 
-    private fun stageModel(uri: Uri) {
+    /**
+     * EF-ANDROID-AERO-BYOLLM-FINAL-02 import verdict sheet:
+     * file identity, parsed GGUF format, and the honest
+     * compatibility verdict. Runnable files continue to
+     * Benchmark (the user still taps Run — nothing
+     * auto-executes). Refused files were already discarded
+     * from the temp slot; the prior staged model stands.
+     */
+    private fun showImportVerdict(
+        name: String,
+        bytes: Long,
+        sha: String,
+        verdict: GgufInspect.Verdict
+    ) {
+        val h = verdict.header
+        val file = listOf(
+            InsightCards.Row("File", name),
+            InsightCards.Row("Size",
+                "${bytes / (1024L * 1024L)} MB"),
+            InsightCards.Row("SHA-256", sha.take(12) + "…"))
+        val format = mutableListOf<InsightCards.Row>()
+        if (h == null) {
+            format.add(InsightCards.Row(
+                "Container", "unreadable"))
+        } else {
+            format.add(InsightCards.Row(
+                "Container", "GGUF v${h.version}"))
+            format.add(InsightCards.Row("Architecture",
+                h.architecture ?: "unstated"))
+            format.add(InsightCards.Row("Quantization",
+                h.fileType?.let {
+                    GgufInspect.ftypeName(it) + " ($it)"
+                } ?: "unstated"))
+            format.add(InsightCards.Row("Tokenizer",
+                if (h.hasTokenizerTokens) "embedded"
+                else "missing"))
+            h.contextLength?.let {
+                format.add(InsightCards.Row(
+                    "Native context", "$it tokens"))
+            }
+            if (h.truncated) {
+                format.add(InsightCards.Row("Header",
+                    "extends past scan window (partial)"))
+            }
+        }
+        val status = when (verdict.status) {
+            GgufInspect.Status.VERIFIED ->
+                "SUPPORTED — VERIFIED (measured here)"
+            GgufInspect.Status.SUPPORTED_UNVERIFIED ->
+                "SUPPORTED — UNVERIFIED (not yet measured)"
+            GgufInspect.Status.UNSUPPORTED -> "UNSUPPORTED"
+            GgufInspect.Status.INSUFFICIENT_RESOURCES ->
+                "INSUFFICIENT RESOURCES"
+            GgufInspect.Status.INVALID_MODEL -> "INVALID MODEL"
+        }
+        val accent = when (verdict.status) {
+            GgufInspect.Status.VERIFIED ->
+                InsightCards.Accent.MEASURED
+            GgufInspect.Status.SUPPORTED_UNVERIFIED ->
+                InsightCards.Accent.PREDICTED
+            GgufInspect.Status.UNSUPPORTED,
+            GgufInspect.Status.INVALID_MODEL ->
+                InsightCards.Accent.ERROR
+            GgufInspect.Status.INSUFFICIENT_RESOURCES ->
+                InsightCards.Accent.NONE
+        }
+        val decision = mutableListOf(
+            InsightCards.Row("Verdict", status, accent))
+        verdict.reasons.take(6).forEachIndexed { i, reason ->
+            decision.add(InsightCards.Row(
+                "Note ${i + 1}", reason))
+        }
+        if (!verdict.runnable) {
+            decision.add(InsightCards.Row("File kept?",
+                "No — rejected bytes were discarded; " +
+                    "the prior staged model is untouched."))
+        }
+        val actions = if (verdict.runnable) {
+            listOf(CardDialog.Action(
+                "Continue to Benchmark", primary = true) {
+                selectTab(NavTab.BENCHMARK)
+            })
+        } else {
+            emptyList()
+        }
+        trackSheet(Sheets.IMPORT_VERDICT, sha)
+        CardDialog.show(this, "Model Inspection",
+            listOf(
+                InsightCards.Section("Model file", file),
+                InsightCards.Section("Format", format),
+                InsightCards.Section(
+                    "Compatibility", decision)),
+            actions,
+            onDismiss = { clearSheet(Sheets.IMPORT_VERDICT) })
+    }
+
+    /**
+     * EF-ANDROID-AERO-BYOLLM-FINAL-02 model sources: static
+     * runtime requirements plus the community Llama GGUF
+     * page (explicitly third-party, never Meta-official).
+     * Fixed https constant only — no user URLs, no fetch.
+     */
+    private fun showModelSources() {
+        trackSheet(Sheets.MODEL_SOURCES)
+        CardDialog.show(this, "Find Compatible Models",
+            listOf(
+                InsightCards.Section("What runs here", listOf(
+                    InsightCards.Row("Runtime",
+                        "llama.cpp on CPU (on-device only)"),
+                    InsightCards.Row("Needs",
+                        "GGUF v3 · text-generation " +
+                            "architecture · embedded " +
+                            "tokenizer · at most 2 GiB"))),
+                InsightCards.Section(
+                    "Llama 3.2 1B Instruct", listOf(
+                        InsightCards.Row("Conversion",
+                            "Community GGUF by Unsloth " +
+                                "(not a Meta release)"),
+                        InsightCards.Row("Suggested file",
+                            LLAMA_GGUF_FILE),
+                        InsightCards.Row("License",
+                            "Meta Llama 3.2 Community " +
+                                "License governs use; the " +
+                                "conversion page states " +
+                                "its own terms")))),
+            listOf(CardDialog.Action(
+                "Open Conversion Page", primary = true) {
+                try {
+                    startActivity(Intent(Intent.ACTION_VIEW,
+                        Uri.parse(LLAMA_GGUF_URL)))
+                } catch (_: Exception) {
+                    statusText(
+                        "No browser available for the " +
+                            "model page.")
+                }
+            }),
+            onDismiss = { clearSheet(Sheets.MODEL_SOURCES) })
+    }
+
+    /**
+     * Stages a GGUF model durably (see [ModelStore]). A
+     * staging run already in flight is reattached, never
+     * doubled; completion reaches the live Activity through
+     * the retained holder. [quiet] skips the verdict sheet
+     * (launch restore); the readiness line still updates.
+     */
+    private fun stageModel(uri: Uri, quiet: Boolean = false) {
+        if (retained.stagingThread?.isAlive == true) {
+            modelView.text = "Staging model…"
+            return
+        }
         modelView.text = "Staging model…"
-        Thread({
+        val job = Thread({
             try {
                 val name = queryDisplayName(uri) ?: "model.gguf"
-                val out = File(cacheDir, "bench-model.gguf")
+                val out = File(cacheDir, ModelStore.STAGE_TMP_NAME)
+                try {
+                    out.delete()
+                } catch (_: Exception) {
+                }
                 val digest = MessageDigest.getInstance("SHA-256")
                 var bytes = 0L
                 contentResolver.openInputStream(uri)?.use { input ->
@@ -2002,31 +3294,134 @@ class MainActivity : Activity() {
                     }
                 } ?: throw IllegalStateException("cannot open model")
                 val sha = digest.digest().joinToString("") { "%02x".format(it) }
-                staged = StagedModel(out, sha, bytes, name)
-                runOnUiThread {
-                    // A new artifact invalidates any prior
-                    // standalone config override.
-                    standaloneOverride = null
-                    runButton.isEnabled = true
-                    refreshModelLine()
-                    refreshBenchConfigLine()
-                    diagNote(MemDiag.Checkpoint.MODEL_STAGED)
-                    updateMemReadinessLine()
-                    refreshNextAction()
-                    // Return to the repeat-prep screen that
-                    // requested a model, re-evaluated against
-                    // the newly staged artifact.
-                    val prep = pendingRepeatPrepId
-                    pendingRepeatPrepId = null
-                    if (prep != null) showRepeatPrep(prep)
+                // EF-ANDROID-AERO-BYOLLM-FINAL-02: inspect
+                // before staging. Refused files never touch
+                // the staged slot; the prior model survives.
+                val verdict = try {
+                    val sample = try {
+                        DeviceTelemetry.sample(
+                            applicationContext)
+                    } catch (_: Exception) {
+                        null
+                    }
+                    GgufInspect.assess(
+                        GgufInspect.inspectFile(out), bytes,
+                        sample?.availRamBytes?.takeIf {
+                            it > 0
+                        },
+                        measuredArtifactShas(), sha)
+                } catch (e: Exception) {
+                    GgufInspect.Verdict(
+                        GgufInspect.Status.INVALID_MODEL,
+                        listOf(
+                            "inspection failed " +
+                                "(${e.message})"),
+                        false, null)
+                }
+                if (!verdict.runnable) {
+                    try {
+                        out.delete()
+                    } catch (_: Exception) {
+                    }
+                    val refusedLine = "Import refused: " +
+                        verdict.status.name
+                            .lowercase()
+                            .replace('_', ' ')
+                    retained.lastImport = ImportRecord(
+                        name, bytes, sha, verdict, false)
+                    retained.post(
+                        notice = refusedLine,
+                        sheet = Sheets.IMPORT_VERDICT,
+                        sheetArg = sha
+                    ) { activity ->
+                        activity.modelView.text = refusedLine
+                        activity.showImportVerdict(
+                            name, bytes, sha, verdict)
+                    }
+                    return@Thread
+                }
+                val selected = modelStore.select(
+                    out, sha, bytes, name, uri.toString(),
+                    verdict, SessionManager.utcNow())
+                try {
+                    contentResolver
+                        .takePersistableUriPermission(
+                            uri, Intent
+                                .FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (_: Exception) {
+                }
+                retained.lastImport = ImportRecord(
+                    name, bytes, sha, verdict, true)
+                // A new artifact invalidates any prior
+                // standalone config override.
+                retained.standaloneOverride = null
+                retained.staged = StagedModel(
+                    File(File(filesDir, ModelStore.DIR_NAME),
+                        selected.fileName),
+                    selected.sha256, selected.sizeBytes,
+                    selected.displayName, selected.sourceUri)
+                if (!quiet) {
+                    retained.post(
+                        notice = null,
+                        sheet = Sheets.IMPORT_VERDICT,
+                        sheetArg = sha
+                    ) { activity ->
+                        activity.applyStagedModel(
+                            name, bytes, sha, verdict)
+                    }
+                } else {
+                    retained.post { activity ->
+                        activity.applyStagedModel(
+                            name, bytes, sha, verdict,
+                            showVerdict = false)
+                    }
                 }
             } catch (e: Exception) {
-                runOnUiThread {
-                    modelView.text = "Stage failed: ${e.message}"
-                    pendingRepeatPrepId = null
+                val failedLine = "Stage failed: ${e.message}"
+                retained.post(notice = failedLine) { activity ->
+                    // Both lines: the status line must not keep
+                    // promising a restore that just failed
+                    // (T14 device finding).
+                    activity.modelView.text = failedLine
+                    activity.statusText(failedLine)
+                    activity.pendingRepeatPrepId = null
+                }
+            } finally {
+                if (retained.stagingThread === Thread.currentThread()) {
+                    retained.stagingThread = null
                 }
             }
-        }, "edgefit-stage").start()
+        }, "edgefit-stage")
+        retained.stagingThread = job
+        job.start()
+    }
+
+    /** Applies a staged model on the live instance. */
+    private fun applyStagedModel(
+        name: String,
+        bytes: Long,
+        sha: String,
+        verdict: GgufInspect.Verdict,
+        showVerdict: Boolean = true
+    ) {
+        runButton.isEnabled = !benchActive
+        refreshModelLine()
+        refreshBenchConfigLine()
+        if (showVerdict) {
+            showImportVerdict(name, bytes, sha, verdict)
+        } else {
+            statusText("Model ready: $name " +
+                "(${bytes / 1048576} MB).")
+        }
+        diagNote(MemDiag.Checkpoint.MODEL_STAGED)
+        updateMemReadinessLine()
+        refreshNextAction()
+        // Return to the repeat-prep screen that
+        // requested a model, re-evaluated against
+        // the newly staged artifact.
+        val prep = pendingRepeatPrepId
+        pendingRepeatPrepId = null
+        if (prep != null) showRepeatPrep(prep)
     }
 
     private fun queryDisplayName(uri: Uri): String? {
@@ -2060,6 +3455,14 @@ class MainActivity : Activity() {
         val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
             addCategory(Intent.CATEGORY_OPENABLE)
             type = "*/*"
+            // Persistable read grant: the saved URI stays
+            // usable across relaunch/reboot when the user
+            // picks from a persistable provider. Without
+            // this flag takePersistableUriPermission is a
+            // silent no-op and the grant dies with the
+            // process.
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         }
         try {
             @Suppress("DEPRECATION")
@@ -2202,6 +3605,7 @@ class MainActivity : Activity() {
             }
             val connection =
                 AeroContribute.connectionLine(globalOrigin, suffix)
+            var loaded: EvidenceStore.Record? = null
             val pair = try {
                 val latest = latestEvidenceId()
                 if (latest == null) {
@@ -2209,6 +3613,7 @@ class MainActivity : Activity() {
                         AeroContribute.emptyLines()[1]
                 } else {
                     val record = evidenceStore.load(latest)
+                    loaded = record
                     AeroContribute.evidenceLine(record) to
                         (AeroContribute.previewLines(record) +
                             connection).joinToString("\n")
@@ -2219,6 +3624,13 @@ class MainActivity : Activity() {
             runOnUiThread {
                 evidenceLine.text = pair.first
                 contributePreviewView.text = pair.second
+                // EF-ANDROID-AERO-OVERHAUL-01 Priority
+                // Four: journey strip over the same
+                // loaded record (null-safe).
+                journeyBox.removeAllViews()
+                journeyBox.addView(EdgeFitCards.journeyStrip(
+                    this@MainActivity,
+                    AeroJourney.journey(loaded)))
             }
         }, "edgefit-evidence").start()
     }
@@ -2317,8 +3729,13 @@ class MainActivity : Activity() {
             statusText("Review unavailable: ${e.message}")
             return
         }
-        val connected = review.origin != null && review.tokenSuffix != null
-        GlobalView.showReview(this, review, connected) {
+        val eligible = record.summary.status == BenchContract.STATUS_COMPLETED &&
+            record.provenance == EvidenceStore.PROVENANCE_CAPTURED
+        val connected = GlobalView.canOfferUpload(
+            review.origin, review.tokenSuffix,
+            GlobalContract.CONSENT_POLICY_APPROVED, eligible)
+        trackSheet(Sheets.CONTRIBUTE_REVIEW, id)
+        GlobalView.showReview(this, review, connected, onApprove = {
             Thread({
                 val outcome = try {
                     globalClient.submit(id)
@@ -2326,42 +3743,58 @@ class MainActivity : Activity() {
                     GlobalClient.SubmitOutcome.Uncertain(
                         "unexpected client error")
                 }
-                runOnUiThread {
-                    showSubmitOutcome(outcome)
-                    refreshEvidenceLine()
+                retained.post(
+                    notice = null,
+                    sheet = SubmitOutcomeArg.encode(outcome)?.let {
+                        Sheets.SUBMIT_OUTCOME
+                    },
+                    sheetArg = SubmitOutcomeArg.encode(outcome)
+                ) { activity ->
+                    activity.showSubmitOutcome(outcome)
+                    activity.refreshEvidenceLine()
                 }
             }, "edgefit-global").start()
-        }
+        }, onDismiss = { clearSheet(Sheets.CONTRIBUTE_REVIEW) })
         if (!connected) {
             statusText(
                 if (review.origin == null) "Cloud connection not configured."
-                else "No upload token: open EdgeFit Global Connection.")
+                else if (review.tokenSuffix == null) "No upload token: open EdgeFit Global Connection."
+                else if (!eligible) "Only COMPLETED results measured on this install can be contributed."
+                else "Contributions disabled until the owner approves consent policy " + GlobalContract.CONSENT_POLICY_VERSION + "."
+            )
         }
     }
 
     private fun showSubmitOutcome(outcome: GlobalClient.SubmitOutcome) {
+        val arg = SubmitOutcomeArg.encode(outcome)
+        if (arg != null) trackSheet(Sheets.SUBMIT_OUTCOME, arg)
+        val onClose = { clearSheet(Sheets.SUBMIT_OUTCOME) }
         when (outcome) {
             is GlobalClient.SubmitOutcome.Shared -> GlobalView.showReceipt(
                 this, outcome.submissionId, outcome.eligibility,
-                outcome.duplicate)
+                outcome.duplicate, onDismiss = onClose)
             is GlobalClient.SubmitOutcome.Rejected -> GlobalView.showOutcome(
                 this, "Submission rejected",
-                "${outcome.code}: ${outcome.message}", outcome.details)
+                "${outcome.code}: ${outcome.message}", outcome.details,
+                onDismiss = onClose)
             is GlobalClient.SubmitOutcome.AuthFailed -> GlobalView.showOutcome(
                 this, "Not authorized",
                 "${outcome.code}: ${outcome.message}. " +
-                    "Check the upload token in EdgeFit Global Connection.")
+                    "Check the upload token in EdgeFit Global Connection.",
+                onDismiss = onClose)
             is GlobalClient.SubmitOutcome.Quota -> GlobalView.showOutcome(
                 this, "Daily quota exceeded",
                 "The backend refused another upload today." +
                     (outcome.retryAfterSec?.let {
                         " Retry after $it seconds."
-                    } ?: " Try again tomorrow."))
+                    } ?: " Try again tomorrow."),
+                onDismiss = onClose)
             is GlobalClient.SubmitOutcome.Uncertain -> GlobalView.showOutcome(
                 this, "Submission uncertain",
                 outcome.reason + ". Nothing was marked shared. " +
                     "Resubmitting the same bytes is safe: the " +
-                    "server dedups by content hash.")
+                    "server dedups by content hash.",
+                onDismiss = onClose)
             is GlobalClient.SubmitOutcome.Blocked -> statusText(outcome.reason)
         }
     }
@@ -2370,11 +3803,13 @@ class MainActivity : Activity() {
         val id = record.summary.runId
         val eligibility = GlobalContract.displayServerState(
             record.serverEligibility)
+        trackSheet(Sheets.SHARED_RECORD, id)
         GlobalView.showOutcome(
             this, "Shared record",
             "$id · server state: $eligibility" +
                 (record.lastStatusAtUtc?.let { " (observed $it)" } ?: "") +
-                (record.submissionId?.let { " · $it" } ?: ""))
+                (record.submissionId?.let { " · $it" } ?: ""),
+            onDismiss = { clearSheet(Sheets.SHARED_RECORD) })
         // Follow-up actions live in the history view to keep this
         // dialog read-only; refresh/revoke run from there.
     }
@@ -2388,6 +3823,15 @@ class MainActivity : Activity() {
                     } catch (_: Exception) {
                         null
                     }
+                } + try {
+                    evidenceStore.listWithdrawals()
+                } catch (_: Exception) {
+                    emptyList<EvidenceStore.Withdrawal>()
+                }.map { w ->
+                    w.runId to ("Local copy deleted - server: " +
+                        GlobalContract.displayServerState(
+                            w.serverEligibility) +
+                        " - withdrawal available")
                 }
             } catch (e: Exception) {
                 runOnUiThread {
@@ -2395,25 +3839,134 @@ class MainActivity : Activity() {
                 }
                 return@Thread
             }
-            runOnUiThread {
-                GlobalView.showHistory(this, lines) { id ->
-                    showHistoryActions(id)
-                }
+            val snapshot = lines.toList()
+            retained.post(
+                sheet = Sheets.HISTORY
+            ) { activity ->
+                activity.openHistorySheet(snapshot)
             }
         }, "edgefit-evidence").start()
+    }
+
+    private fun openHistorySheet(lines: List<Pair<String, String>>) {
+        trackSheet(Sheets.HISTORY)
+        GlobalView.showHistory(this, lines, onOpen = { id ->
+            showHistoryActions(id)
+        }, onDismiss = { clearSheet(Sheets.HISTORY) })
+    }
+
+    /** Deletes ONE local result. Never touches the cloud: a
+     * retained server contribution must be removed with
+     * Withdraw consent, and the status line says so. */
+    private fun deleteLocalResult(id: String, wasShared: Boolean) {
+        Thread({
+            val deleted = try {
+                if (wasShared) {
+                    evidenceStore.deleteRetainingWithdrawal(
+                        id, System.currentTimeMillis()) != null
+                } else {
+                    evidenceStore.delete(id)
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    statusText("Local delete failed: " + e.message)
+                }
+                return@Thread
+            }
+            runOnUiThread {
+                if (!deleted) {
+                    statusText("Local result already gone.")
+                } else if (wasShared) {
+                    statusText("Local result deleted. Withdrawal record kept: open Contribution history to withdraw.")
+                } else {
+                    statusText("Local result deleted.")
+                }
+                refreshEvidenceLine()
+            }
+        }, "edgefit-evidence").start()
+    }
+
+    /** Actions for a locally deleted shared record.
+     * Withdrawal runs against the retained submission id;
+     * the tombstone clears only on terminal REVOKED
+     * acknowledgement, never on failure. */
+    private fun openWithdrawalRecord(id: String) {
+        val w = try {
+            evidenceStore.loadWithdrawal(id)
+        } catch (e: Exception) {
+            statusText("Evidence unavailable: " + e.message)
+            return
+        }
+        trackSheet(Sheets.WITHDRAWAL, id)
+        CardDialog.show(
+            this, "Withdrawable contribution $id",
+            listOf(InsightCards.Section(
+                "Local copy deleted",
+                listOf(
+                    InsightCards.Row("Submission", w.submissionId),
+                    InsightCards.Row(
+                        "Server state",
+                        GlobalContract.displayServerState(
+                            w.serverEligibility)),
+                    InsightCards.Row(
+                        "Deleted locally",
+                        w.deletedLocalAtUtc)))),
+            listOf(CardDialog.Action("Withdraw consent") {
+                Thread({
+                    val outcome = globalClient.revokeWithdrawal(
+                        w.submissionId)
+                    runOnUiThread {
+                        when (outcome) {
+                            GlobalClient.RevokeOutcome.Revoked -> {
+                                try {
+                                    evidenceStore.deleteWithdrawal(id)
+                                } catch (_: Exception) {
+                                }
+                                statusText(
+                                    "Revocation confirmed REVOKED; " +
+                                    "withdrawal record cleared.")
+                            }
+                            is GlobalClient.RevokeOutcome.Failed ->
+                                statusText(
+                                    "Withdraw failed (" +
+                                    outcome.code + "): " +
+                                    outcome.message +
+                                    ". Record kept for retry.")
+                        }
+                        refreshEvidenceLine()
+                    }
+                }, "edgefit-global").start()
+            }),
+            onDismiss = { clearSheet(Sheets.WITHDRAWAL) })
     }
 
     private fun showHistoryActions(id: String) {
         val record = try {
             evidenceStore.load(id)
         } catch (e: Exception) {
-            statusText("Evidence unavailable: ${e.message}")
+            openWithdrawalRecord(id)
             return
         }
+
         if (record.submissionId == null) {
-            openContributionRecord(id)
+            trackSheet(Sheets.HISTORY_ACTIONS, id)
+            CardDialog.show(
+                this, "Local result $id",
+                listOf(InsightCards.Section(
+                    "Not shared",
+                    listOf(InsightCards.Row(
+                        "Run", id)))),
+                listOf(
+                    CardDialog.Action("Contribute to EdgeFit Global") {
+                        openContributionRecord(id)
+                    },
+                    CardDialog.Action("Delete local result") {
+                        deleteLocalResult(id, wasShared = false)
+                    }),
+                onDismiss = { clearSheet(Sheets.HISTORY_ACTIONS) })
             return
         }
+        trackSheet(Sheets.HISTORY_ACTIONS, id)
         CardDialog.show(
             this, "Shared record $id",
             listOf(InsightCards.Section(
@@ -2464,25 +4017,60 @@ class MainActivity : Activity() {
                             refreshEvidenceLine()
                         }
                     }, "edgefit-global").start()
-                }))
+                },
+                CardDialog.Action("Delete local result") {
+                    deleteLocalResult(id, wasShared = true)
+                }
+                ),
+            onDismiss = { clearSheet(Sheets.HISTORY_ACTIONS) })
     }
 
     @Suppress("DEPRECATION")
     private fun showGlobalConnection() {
+        trackSheet(Sheets.GLOBAL_CONNECTION)
         val originInput = EditText(this).apply {
             hint = "https://staging-host.example"
             inputType = InputType.TYPE_CLASS_TEXT or
                 InputType.TYPE_TEXT_VARIATION_URI
-            globalOrigin?.let { setText(it) }
+            setText(originDraft ?: globalOrigin.orEmpty())
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(
+                    s: CharSequence?, start: Int, count: Int, after: Int
+                ) = Unit
+                override fun onTextChanged(
+                    s: CharSequence?, start: Int, before: Int, count: Int
+                ) = Unit
+                override fun afterTextChanged(s: Editable?) {
+                    originDraft = s?.toString().orEmpty()
+                }
+            })
         }
         val tokenInput = EditText(this).apply {
             hint = "Paste owner-issued upload token"
             inputType = InputType.TYPE_CLASS_TEXT or
                 InputType.TYPE_TEXT_VARIATION_PASSWORD
+            retained.globalTokenDraft?.let { setText(it) }
+            addTextChangedListener(object : TextWatcher {
+                override fun beforeTextChanged(
+                    s: CharSequence?, start: Int, count: Int, after: Int
+                ) = Unit
+                override fun onTextChanged(
+                    s: CharSequence?, start: Int, before: Int, count: Int
+                ) = Unit
+                override fun afterTextChanged(s: Editable?) {
+                    // Memory-only: the token draft never
+                    // touches the saved-instance bundle.
+                    retained.globalTokenDraft =
+                        s?.toString().orEmpty()
+                }
+            })
         }
         val remember = android.widget.CheckBox(this).apply {
             text = "Persist token in Keystore (otherwise session-only)"
-            isChecked = false
+            isChecked = globalRememberDraft
+            setOnCheckedChangeListener { _, checked ->
+                globalRememberDraft = checked
+            }
         }
         val suffix = try {
             globalVault.suffix()
@@ -2509,6 +4097,9 @@ class MainActivity : Activity() {
         AlertDialog.Builder(this)
             .setTitle("EdgeFit Global Connection")
             .setView(layout)
+            .setOnDismissListener {
+                clearSheet(Sheets.GLOBAL_CONNECTION)
+            }
             .setPositiveButton("Save") { _, _ ->
                 val originText = originInput.text.toString()
                 if (originText.isNotBlank() &&
@@ -2533,6 +4124,9 @@ class MainActivity : Activity() {
                 } else if (originText.isNotBlank()) {
                     statusText("Origin saved.")
                 }
+                originDraft = null
+                retained.globalTokenDraft = null
+                globalRememberDraft = false
                 refreshEvidenceLine()
             }
             .setNeutralButton("Forget token") { _, _ ->
@@ -2541,6 +4135,9 @@ class MainActivity : Activity() {
                 } else {
                     statusText("No upload token was stored.")
                 }
+                originDraft = null
+                retained.globalTokenDraft = null
+                globalRememberDraft = false
                 refreshEvidenceLine()
             }
             .setNegativeButton("Cancel", null)
@@ -2569,11 +4166,15 @@ class MainActivity : Activity() {
 
     private fun showSessions(focusId: String? = null) {
         diagNote(MemDiag.Checkpoint.SESSIONS_OPENED)
+        trackSheet(Sheets.SESSIONS, focusId)
         SessionView.show(
             this,
             load = { sessionManager.listSessions() },
             activeId = { activeSessionId },
-            onCreate = { gen, prefill -> createOfflineSession(gen, prefill) },
+            onCreate = { gen, prefill ->
+                createDraft = null
+                createOfflineSession(gen, prefill)
+            },
             onBind = { id -> bindSession(id) },
             onDelete = { id -> deleteSession(id) },
             onPredict = { id -> startLivePrediction(id) },
@@ -2582,12 +4183,29 @@ class MainActivity : Activity() {
             onCompare = { id -> showSeriesComparison(id) },
             focusId = focusId,
             onOpenRepeat = { newId -> showRepeatPrep(newId) },
-            onClose = { diagNote(MemDiag.Checkpoint.SESSIONS_CLOSED) },
+            onClose = {
+                clearSheet(Sheets.SESSIONS)
+                diagNote(MemDiag.Checkpoint.SESSIONS_CLOSED)
+            },
             onRecover = { id -> showRecoveryAssistant(id) },
+            initialCreateDraft = createDraft,
+            onCreateDraft = { gen, prefill ->
+                createDraft = gen to prefill
+            },
             // Genuine capacity signal only: free app-private
             // bytes. No session-count ceiling exists anymore.
             storageNote = try {
                 "${MemDiag.formatMb(filesDir.usableSpace)} free"
+            } catch (_: Exception) {
+                null
+            },
+            quarantineNote = try {
+                val quarantined = sessionManager.quarantineCount()
+                if (quarantined > 0) {
+                    quarantined.toString() + " quarantined"
+                } else {
+                    null
+                }
             } catch (_: Exception) {
                 null
             }
@@ -2755,10 +4373,12 @@ class MainActivity : Activity() {
                 launchPicker()
             })
         }
+        trackSheet(Sheets.REPEAT_PREP, newId)
         CardDialog.show(this, "Repeat Experiment",
             InsightCards.repeatPrepSections(
                 source, created, model?.name, stagedMatches),
-            actions)
+            actions,
+            onDismiss = { clearSheet(Sheets.REPEAT_PREP) })
     }
 
     /**
@@ -2809,9 +4429,11 @@ class MainActivity : Activity() {
                     evidence = evidence,
                     sizeDiff = sizeDiff)
             }
+            trackSheet(Sheets.MODEL_CATALOG)
             ModelCatalogView.show(this, current, cards,
                 ::openVerifiedSource, ::showEvidenceSession,
-                { selectTab(NavTab.BENCHMARK) })
+                { selectTab(NavTab.BENCHMARK) },
+                onDismiss = { clearSheet(Sheets.MODEL_CATALOG) })
         } catch (e: Exception) {
             statusText("Recommended Models unavailable: ${e.message}")
         }
@@ -2821,8 +4443,10 @@ class MainActivity : Activity() {
     private fun showEvidenceSession(sessionId: String) {
         try {
             val record = sessionManager.get(sessionId)
+            trackSheet(Sheets.EVIDENCE_SESSION, sessionId)
             CardDialog.show(this, "Local Evidence",
-                InsightCards.sessionSections(record))
+                InsightCards.sessionSections(record),
+                onDismiss = { clearSheet(Sheets.EVIDENCE_SESSION) })
         } catch (e: Exception) {
             statusText("Evidence unavailable: ${e.message}")
         }
@@ -2954,6 +4578,7 @@ class MainActivity : Activity() {
                 config.nCtx, config.nThreads,
                 runtimeVersionLabel()))
         }
+        trackSheet(Sheets.MEM_READINESS)
         CardDialog.show(this, "Memory Readiness", sections,
             listOf(
                 CardDialog.Action("Recheck") { showMemReadiness() },
@@ -2963,7 +4588,8 @@ class MainActivity : Activity() {
                 CardDialog.Action("Recommended Models") {
                     showModelCatalog()
                 }
-            ))
+            ),
+            onDismiss = { clearSheet(Sheets.MEM_READINESS) })
     }
 
     /** Settings → diagnostics toggle + sample access. */
@@ -2987,6 +4613,7 @@ class MainActivity : Activity() {
                 "while enabled export an x_mem_diag block and " +
                 "are non-confirmatory for EF-SCIENCE-01 until " +
                 "an on/off overhead assessment exists."))
+        trackSheet(Sheets.MEM_DIAG)
         CardDialog.show(this, "Memory Diagnostics", sections,
             listOf(
                 CardDialog.Action(
@@ -3008,17 +4635,20 @@ class MainActivity : Activity() {
                     MemDiag.Store.clear()
                     statusText("Diagnostic samples cleared.")
                 }
-            ))
+            ),
+            onDismiss = { clearSheet(Sheets.MEM_DIAG) })
     }
 
     /** Read-only sample table (selectable for copy-out). */
     private fun showMemSamples() {
         if (!MemDiag.Store.isEnabled()) {
+            trackSheet(Sheets.MEM_SAMPLES)
             CardDialog.show(this, "Memory Samples",
                 listOf(InsightCards.Section("State",
                     listOf(InsightCards.Row("Diagnostics",
                         "Disabled — enable in Settings to collect " +
-                            "samples.")))))
+                            "samples.")))),
+                onDismiss = { clearSheet(Sheets.MEM_SAMPLES) })
             return
         }
         val samples = MemDiag.Store.snapshot()
@@ -3031,12 +4661,14 @@ class MainActivity : Activity() {
                 MemDiag.formatLine(it, base)
             }
         }
+        trackSheet(Sheets.MEM_SAMPLES)
         CardDialog.show(this, "Memory Samples (${samples.size})",
             listOf(InsightCards.Section("Checkpoints",
                 listOf(InsightCards.Row("Samples",
                     "${samples.size} held (max " +
                         "${MemDiag.Store.MAX_SAMPLES})")),
-                body)))
+                body)),
+            onDismiss = { clearSheet(Sheets.MEM_SAMPLES) })
     }
 
     // EF-MEM-03: the MEM-01 "Memory Recheck" dialog is
@@ -3101,6 +4733,7 @@ class MainActivity : Activity() {
             // Agent experiment child: recovery runs through
             // the proposal flow so the finite budget is
             // charged exactly once. No offline bypass.
+            trackSheet(Sheets.BOUND_RECOVERY, record.sessionId)
             CardDialog.show(this, "Recovery Assistant (local)",
                 recoverySummarySections(record, bench),
                 listOf(
@@ -3117,7 +4750,8 @@ class MainActivity : Activity() {
                     CardDialog.Action("Recommended Models") {
                         showModelCatalog()
                     }
-                ))
+                ),
+                onDismiss = { clearSheet(Sheets.BOUND_RECOVERY) })
             return
         }
         if (record.mode == "agent") {
@@ -3140,6 +4774,7 @@ class MainActivity : Activity() {
         actions.add(CardDialog.Action("Recommended Models") {
             showModelCatalog()
         })
+        trackSheet(Sheets.BOUND_RECOVERY, record.sessionId)
         CardDialog.show(this, "Recovery Assistant (local)",
             recoverySummarySections(record, bench) +
                 InsightCards.Section(
@@ -3149,7 +4784,8 @@ class MainActivity : Activity() {
                             "smaller context. Each choice creates " +
                             "a NEW linked session, authorizes it, " +
                             "and binds it; you still press Run."))),
-            actions)
+            actions,
+            onDismiss = { clearSheet(Sheets.BOUND_RECOVERY) })
     }
 
     /** Unbound failure (bench screen): standalone override. */
@@ -3185,6 +4821,7 @@ class MainActivity : Activity() {
             showModelCatalog()
         })
         val mem = result.xMemConditions
+        trackSheet(Sheets.UNBOUND_RECOVERY)
         CardDialog.show(this, "Recovery Assistant (local)",
             listOf(InsightCards.Section(
                 "Unbound run ${result.runId}",
@@ -3208,7 +4845,8 @@ class MainActivity : Activity() {
                     "Batch size, KV cache, and model loading " +
                     "stay fixed: only context, threads, and " +
                     "token budget are adjustable.")),
-            actions)
+            actions,
+            onDismiss = { clearSheet(Sheets.UNBOUND_RECOVERY) })
     }
 
     /**
@@ -3277,8 +4915,9 @@ class MainActivity : Activity() {
      * carried prediction, authorized + bound, Run manual.
      * Single-flight: double-taps create one session.
      */
-    @Volatile
-    private var recoveryInFlight = false
+    private var recoveryInFlight: Boolean
+        get() = retained.recoveryInFlight
+        set(value) { retained.recoveryInFlight = value }
 
     @Suppress("UNCHECKED_CAST")
     private fun recoverBoundSession(
@@ -3326,19 +4965,23 @@ class MainActivity : Activity() {
                         as? String)
                 sessionManager.authorizeBenchmark(
                     created.sessionId, "recovery authorized")
-                runOnUiThread {
-                    recoveryInFlight = false
-                    activeSessionId = created.sessionId
-                    refreshSessionLine()
-                    selectTab(NavTab.BENCHMARK)
-                    statusText("Recovery ${created.sessionId} " +
-                        "authorized and bound — press Run.")
+                // Holder-owned: visible to a successor
+                // instance even across the window.
+                retained.recoveryInFlight = false
+                retained.activeSessionId = created.sessionId
+                val boundNotice = "Recovery ${created.sessionId} " +
+                    "authorized and bound — press Run."
+                retained.post(notice = boundNotice) { activity ->
+                    activity.refreshSessionLine()
+                    activity.selectTab(NavTab.BENCHMARK)
+                    activity.statusText(boundNotice)
                 }
             } catch (e: Exception) {
-                runOnUiThread {
-                    recoveryInFlight = false
-                    statusText(
-                        "Recovery failed: ${e.message}")
+                retained.recoveryInFlight = false
+                val failedNotice =
+                    "Recovery failed: ${e.message}"
+                retained.post(notice = failedNotice) { activity ->
+                    activity.statusText(failedNotice)
                 }
             }
         }).start()
@@ -3360,7 +5003,7 @@ class MainActivity : Activity() {
         }
         val modalOpen = agentDialogOpen || pickerActive ||
             benchScreen.visibility == View.VISIBLE ||
-            requestTracker.hasInflight()
+            requestTracker.hasInflight() || openSheet != null
         if (!Onboarding.shouldShow(completions,
                 onboardingDismissedThisLaunch, benchActive,
                 modalOpen)
@@ -3375,10 +5018,15 @@ class MainActivity : Activity() {
     private fun openOnboarding(startPage: Int) {
         if (onboardingOpen) return
         onboardingOpen = true
+        trackSheet(Sheets.ONBOARDING, startPage.toString())
         OnboardingView.show(this, startPage,
-            onPage = { onboardingPage = it },
+            onPage = {
+                onboardingPage = it
+                trackSheet(Sheets.ONBOARDING, it.toString())
+            },
             onDone = { start ->
                 onboardingOpen = false
+                clearSheet(Sheets.ONBOARDING)
                 // Both Skip and Start dismiss for this
                 // launch (UX-D01); the next cold start
                 // re-evaluates from durable records.
@@ -3410,10 +5058,12 @@ class MainActivity : Activity() {
                         "unavailable"
                     })))
         )
+        trackSheet(Sheets.HELP)
         CardDialog.show(this, "Help", sections,
             listOf(CardDialog.Action("Show introduction") {
                 openOnboarding(0)
-            }))
+            }),
+            onDismiss = { clearSheet(Sheets.HELP) })
     }
 
     private fun showSeriesComparison(id: String) {
@@ -3421,8 +5071,10 @@ class MainActivity : Activity() {
             val record = sessionManager.get(id)
             val series = sessionManager.findSeriesRuns(id)
             val result = SessionComparison.compareSeries(record, series)
+            trackSheet(Sheets.SERIES_COMPARISON, id)
             CardDialog.show(this, "Repeat series",
-                InsightCards.seriesSections(result))
+                InsightCards.seriesSections(result),
+                onDismiss = { clearSheet(Sheets.SERIES_COMPARISON) })
         } catch (e: Exception) {
             statusText("Compare failed: ${e.message}")
         }
@@ -3473,6 +5125,7 @@ class MainActivity : Activity() {
     // ---- live Meta (EF-BYOK-01) ----
 
     private fun showMetaSettings() {
+        trackSheet(Sheets.META_SETTINGS)
         MetaView.showKeyDialog(
             this,
             status = {
@@ -3481,14 +5134,23 @@ class MainActivity : Activity() {
             },
             onSave = { key, remember -> saveMetaKey(key, remember) },
             onForget = {
+                retained.metaKeyDraft = null
+                metaRememberDraft = false
                 if (metaVault.forget()) "Key forgotten everywhere."
                 else "No key was stored."
             },
-            onPredict = { startLivePrediction(null) }
+            onPredict = { startLivePrediction(null) },
+            initialKey = retained.metaKeyDraft,
+            onKeyChanged = { retained.metaKeyDraft = it },
+            initialRemember = metaRememberDraft,
+            onRememberChanged = { metaRememberDraft = it },
+            onDismiss = { clearSheet(Sheets.META_SETTINGS) }
         )
     }
 
     private fun saveMetaKey(key: String, remember: Boolean): String {
+        retained.metaKeyDraft = null
+        metaRememberDraft = false
         return try {
             metaVault.setSessionKey(key)
             if (remember) metaVault.persistSessionKey()
@@ -3563,6 +5225,7 @@ class MainActivity : Activity() {
         } catch (_: Exception) {
             null
         }
+        trackSheet(Sheets.META_AUTH_PREDICT, existingId)
         MetaView.showAuthorizeDialog(
             this,
             MetaView.authorizeText(
@@ -3572,17 +5235,19 @@ class MainActivity : Activity() {
                         memSample?.availRamBytes?.takeIf { it >= 0 },
                         memSample?.totalRamBytes?.takeIf { it > 0 },
                         memSample?.lowMemory)),
-            "Predict"
-        ) {
-            launchTracked(
-                "predict:${existingId ?: "new"}",
-                "Meta Prediction",
-                "Requesting performance prediction from Meta Muse.",
-                "edgefit-meta-predict"
-            ) { progress ->
-                runLivePrediction(existingId, progress)
-            }
-        }
+            "Predict",
+            onConfirm = {
+                launchTracked(
+                    "predict:${existingId ?: "new"}",
+                    "Meta Prediction",
+                    "Requesting performance prediction from Meta Muse.",
+                    "edgefit-meta-predict"
+                ) { progress ->
+                    runLivePrediction(existingId, progress)
+                }
+            },
+            onDismiss = { clearSheet(Sheets.META_AUTH_PREDICT) }
+        )
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -3598,36 +5263,68 @@ class MainActivity : Activity() {
                 sessionManager.requestPrediction(id)
             }
             val spec = livePredictionSpec(id)
-            val record = metaClient.requestPrediction(spec)
+            metaClient.requestPrediction(spec)
             progress("Response received; validating and saving prediction…")
             sessionManager.authorizeBenchmark(id, "live prediction recorded")
-            activeSessionId = id
-            runOnUiThread {
-                refreshSessionLine()
-                statusText("Live prediction recorded for $id; " +
-                    "bound to the next run.")
-                val prediction =
-                    record.prediction as? Map<String, Any?> ?: emptyMap()
-                val sections = InsightCards.predictionSections(
-                    prediction, record.modelDisplay, record.config) +
-                    InsightCards.Section("Next", listOf(
-                        InsightCards.Row("Status",
-                            "Recorded, authorized and bound. Run the " +
-                                "benchmark to measure against it.")))
-                CardDialog.show(this, "Live Meta Prediction", sections,
-                    listOf(CardDialog.Action("Open Benchmark") {
-                        selectTab(NavTab.BENCHMARK)
-                    }))
+            retained.activeSessionId = id
+            val notice = "Live prediction recorded for $id; " +
+                "bound to the next run."
+            retained.post(
+                notice = notice,
+                sheet = Sheets.LIVE_PREDICTION,
+                sheetArg = "ok:$id"
+            ) { activity ->
+                activity.showStoredPrediction(id)
             }
         } catch (e: Exception) {
-            runOnUiThread {
-                refreshSessionLine()
-                statusText("Live prediction failed: ${e.message}")
-                MetaView.showResultDialog(this, "Live Meta Prediction",
-                    "No prediction recorded (nothing was persisted):\n" +
-                        "${e.message}")
+            val message = e.message ?: "unknown"
+            retained.post(
+                notice = "Live prediction failed: $message",
+                sheet = Sheets.LIVE_PREDICTION,
+                sheetArg = "err:$message"
+            ) { activity ->
+                activity.showStoredPredictionError(message)
             }
         }
+    }
+
+    /** Shows a recorded prediction from the durable session. */
+    @Suppress("UNCHECKED_CAST")
+    private fun showStoredPrediction(sessionId: String) {
+        val record = try {
+            sessionManager.get(sessionId)
+        } catch (e: Exception) {
+            statusText("Prediction unavailable: ${e.message}")
+            return
+        }
+        refreshSessionLine()
+        statusText("Live prediction recorded for $sessionId; " +
+            "bound to the next run.")
+        val prediction =
+            record.prediction as? Map<String, Any?> ?: emptyMap()
+        val sections = InsightCards.predictionSections(
+            prediction, record.modelDisplay, record.config) +
+            InsightCards.Section("Next", listOf(
+                InsightCards.Row("Status",
+                    "Recorded, authorized and bound. Run the " +
+                        "benchmark to measure against it.")))
+        trackSheet(Sheets.LIVE_PREDICTION, "ok:$sessionId")
+        CardDialog.show(this, "Live Meta Prediction", sections,
+            listOf(CardDialog.Action("Open Benchmark") {
+                selectTab(NavTab.BENCHMARK)
+            }),
+            onDismiss = { clearSheet(Sheets.LIVE_PREDICTION) })
+    }
+
+    /** Shows a recorded prediction failure verbatim. */
+    private fun showStoredPredictionError(message: String) {
+        refreshSessionLine()
+        statusText("Live prediction failed: $message")
+        trackSheet(Sheets.LIVE_PREDICTION,
+            "err:${message.take(500)}")
+        MetaView.showResultDialog(this, "Live Meta Prediction",
+            "No prediction recorded (nothing was persisted):\n$message",
+            onDismiss = { clearSheet(Sheets.LIVE_PREDICTION) })
     }
 
     /** Creates the byok session shell; prediction comes only from Meta. */
@@ -3705,21 +5402,24 @@ class MainActivity : Activity() {
             // EF-FOLLOWUP-02 D4: bounded priors, when any exist.
             "up to 4 prior same-config runs + host deltas"
         )
+        trackSheet(Sheets.META_AUTH_FOLLOWUP, sessionId)
         MetaView.showAuthorizeDialog(
             this,
             MetaView.authorizeText(
                 "Follow-up assessment for $sessionId", fields, keyNote()),
-            "Request"
-        ) {
-            launchTracked(
-                "followup:$sessionId",
-                "Meta Follow-Up",
-                "Requesting follow-up assessment from Meta Muse.",
-                "edgefit-meta-followup"
-            ) { progress ->
-                runLiveFollowUp(sessionId, progress)
-            }
-        }
+            "Request",
+            onConfirm = {
+                launchTracked(
+                    "followup:$sessionId",
+                    "Meta Follow-Up",
+                    "Requesting follow-up assessment from Meta Muse.",
+                    "edgefit-meta-followup"
+                ) { progress ->
+                    runLiveFollowUp(sessionId, progress)
+                }
+            },
+            onDismiss = { clearSheet(Sheets.META_AUTH_FOLLOWUP) }
+        )
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -3732,62 +5432,93 @@ class MainActivity : Activity() {
             if (before.state == SessionState.COMPARISON_READY) {
                 sessionManager.requestFollowup(sessionId)
             }
-            val record = metaClient.requestFollowUp(sessionId)
+            metaClient.requestFollowUp(sessionId)
             progress("Response received; saving assessment…")
-            runOnUiThread {
-                refreshSessionLine()
-                statusText("Follow-up recorded for $sessionId.")
-                val comparison =
-                    record.comparison as? Map<String, Any?> ?: emptyMap()
-                val followup =
-                    record.followup as? Map<String, Any?> ?: emptyMap()
-                val sections = listOf(InsightCards.Section(
-                    "Prediction vs measured",
-                    InsightCards.comparisonRows(comparison))) +
-                    InsightCards.followUpSections(followup)
-                // EF-UX-02: the recorded recommendation names
-                // its eligible next steps instead of stranding
-                // the user on a read-only summary.
-                val next = mutableListOf<CardDialog.Action>()
-                val parentId = record.parentSessionId
-                if (parentId != null) {
-                    next.add(CardDialog.Action("Open Agent") {
-                        showAgent(parentId)
-                    })
-                } else {
-                    if (SessionView.canRepeatStandalone(record)) {
-                        next.add(CardDialog.Action(
-                            "Repeat Benchmark") {
-                            val outcome = repeatStandaloneSession(
-                                record.sessionId)
-                            val newId = outcome.newSessionId
-                            if (newId != null) showRepeatPrep(newId)
-                            else statusText(outcome.message)
-                        })
-                    }
-                    if (SessionView.canCompare(record)) {
-                        next.add(CardDialog.Action("Compare Runs") {
-                            showSeriesComparison(record.sessionId)
-                        })
-                    }
-                }
-                CardDialog.show(this, "Meta Follow-Up", sections, next)
+            retained.post(
+                notice = "Follow-up recorded for $sessionId.",
+                sheet = Sheets.FOLLOWUP_RESULT,
+                sheetArg = "ok:$sessionId"
+            ) { activity ->
+                activity.showStoredFollowUp(sessionId)
             }
         } catch (e: Exception) {
-            runOnUiThread {
-                refreshSessionLine()
-                statusText("Follow-up failed: ${e.message}")
-                MetaView.showResultDialog(this, "Meta Follow-Up",
-                    "No assessment recorded (nothing was persisted):\n" +
-                        "${e.message}")
+            val message = e.message ?: "unknown"
+            retained.post(
+                notice = "Follow-up failed: $message",
+                sheet = Sheets.FOLLOWUP_RESULT,
+                sheetArg = "err:$message"
+            ) { activity ->
+                activity.showStoredFollowUpError(message)
             }
         }
+    }
+
+    /** Shows a recorded follow-up from the durable session. */
+    @Suppress("UNCHECKED_CAST")
+    private fun showStoredFollowUp(sessionId: String) {
+        val record = try {
+            sessionManager.get(sessionId)
+        } catch (e: Exception) {
+            statusText("Follow-up unavailable: ${e.message}")
+            return
+        }
+        refreshSessionLine()
+        statusText("Follow-up recorded for $sessionId.")
+        val comparison =
+            record.comparison as? Map<String, Any?> ?: emptyMap()
+        val followup =
+            record.followup as? Map<String, Any?> ?: emptyMap()
+        val sections = listOf(InsightCards.Section(
+            "Prediction vs measured",
+            InsightCards.comparisonRows(comparison))) +
+            InsightCards.followUpSections(followup)
+        // EF-UX-02: the recorded recommendation names
+        // its eligible next steps instead of stranding
+        // the user on a read-only summary.
+        val next = mutableListOf<CardDialog.Action>()
+        val parentId = record.parentSessionId
+        if (parentId != null) {
+            next.add(CardDialog.Action("Open Agent") {
+                showAgent(parentId)
+            })
+        } else {
+            if (SessionView.canRepeatStandalone(record)) {
+                next.add(CardDialog.Action(
+                    "Repeat Benchmark") {
+                    val outcome = repeatStandaloneSession(
+                        record.sessionId)
+                    val newId = outcome.newSessionId
+                    if (newId != null) showRepeatPrep(newId)
+                    else statusText(outcome.message)
+                })
+            }
+            if (SessionView.canCompare(record)) {
+                next.add(CardDialog.Action("Compare Runs") {
+                    showSeriesComparison(record.sessionId)
+                })
+            }
+        }
+        trackSheet(Sheets.FOLLOWUP_RESULT, "ok:$sessionId")
+        CardDialog.show(this, "Meta Follow-Up", sections, next,
+            onDismiss = { clearSheet(Sheets.FOLLOWUP_RESULT) })
+    }
+
+    /** Shows a recorded follow-up failure verbatim. */
+    private fun showStoredFollowUpError(message: String) {
+        refreshSessionLine()
+        statusText("Follow-up failed: $message")
+        trackSheet(Sheets.FOLLOWUP_RESULT,
+            "err:${message.take(500)}")
+        MetaView.showResultDialog(this, "Meta Follow-Up",
+            "No assessment recorded (nothing was persisted):\n$message",
+            onDismiss = { clearSheet(Sheets.FOLLOWUP_RESULT) })
     }
 
     // ---- optimization agent (EF-AGENT-01) ----
 
     private fun showAgent(selectedId: String?) {
         agentDialogOpen = true
+        trackSheet(Sheets.AGENT, selectedId)
         AgentView.show(
             this,
             initialId = selectedId,
@@ -3800,8 +5531,14 @@ class MainActivity : Activity() {
             onApprove = { id -> approveAndRunExperiment(id) },
             onReject = { id -> rejectAgentProposal(id) },
             onFinish = { id -> finishAgentSession(id) },
-            onClose = { agentDialogOpen = false },
-            onModify = { id -> modifyAgentProposal(id) }
+            onClose = {
+                agentDialogOpen = false
+                clearSheet(Sheets.AGENT)
+            },
+            onModify = { id -> modifyAgentProposal(id) },
+            onRunExperiment = { parentId, childId ->
+                runAgentExperiment(parentId, childId)
+            }
         )
     }
 
@@ -3915,8 +5652,8 @@ class MainActivity : Activity() {
                 baseConfig = currentBenchConfig()
             )
             "Agent ${parent.sessionId} created with experiment 1 shell. " +
-                "Run experiment 1 via Sessions (Predict), then request " +
-                "a proposal here."
+                "Predict and run experiment 1 from this screen, then " +
+                "request a proposal."
         } catch (e: Exception) {
             "Agent creation failed: ${e.message}"
         }
@@ -3950,21 +5687,24 @@ class MainActivity : Activity() {
         } else {
             emptyList()
         }
+        trackSheet(Sheets.META_AUTH_PROPOSAL, parentId)
         MetaView.showAuthorizeDialog(
             this,
             MetaView.authorizeText(
                 "Optimization proposal for $parentId", fields, keyNote()),
-            "Request"
-        ) {
-            launchTracked(
-                "proposal:$parentId",
-                "Agent Proposal",
-                "Requesting optimization proposal from Meta Muse.",
-                "edgefit-agent-proposal"
-            ) { progress ->
-                runAgentProposal(parentId, progress)
-            }
-        }
+            "Request",
+            onConfirm = {
+                launchTracked(
+                    "proposal:$parentId",
+                    "Agent Proposal",
+                    "Requesting optimization proposal from Meta Muse.",
+                    "edgefit-agent-proposal"
+                ) { progress ->
+                    runAgentProposal(parentId, progress)
+                }
+            },
+            onDismiss = { clearSheet(Sheets.META_AUTH_PROPOSAL) }
+        )
     }
 
     @Suppress("UNCHECKED_CAST")
@@ -4030,16 +5770,21 @@ class MainActivity : Activity() {
             val stored = agentManager.storeProposal(
                 parentId, proposal, pack.packHash,
                 agentManager.nextSeq(parentId))
-            runOnUiThread {
-                val declined = (stored.agent as? Map<String, Any?>)
-                    ?.get("terminal_reason") ==
-                    AgentManager.END_NO_FURTHER_TESTING
-                statusText(if (declined) {
-                    "Agent declined further testing; session closed."
-                } else {
-                    "Proposal pending review for $parentId."
-                })
-                showAgent(parentId)
+            val declined = (stored.agent as? Map<String, Any?>)
+                ?.get("terminal_reason") ==
+                AgentManager.END_NO_FURTHER_TESTING
+            val notice = if (declined) {
+                "Agent declined further testing; session closed."
+            } else {
+                "Proposal pending review for $parentId."
+            }
+            retained.post(
+                notice = notice,
+                sheet = Sheets.AGENT,
+                sheetArg = parentId
+            ) { activity ->
+                activity.statusText(notice)
+                activity.showAgent(parentId)
             }
         } catch (e: Exception) {
             val struck = e is MetaSessionClient.ClientError &&
@@ -4056,9 +5801,14 @@ class MainActivity : Activity() {
             } else {
                 ""
             }
-            runOnUiThread {
-                statusText("Proposal failed: ${e.message}.$note")
-                showAgent(parentId)
+            val failedNotice = "Proposal failed: ${e.message}.$note"
+            retained.post(
+                notice = failedNotice,
+                sheet = Sheets.AGENT,
+                sheetArg = parentId
+            ) { activity ->
+                activity.statusText(failedNotice)
+                activity.showAgent(parentId)
             }
         }
     }
@@ -4229,17 +5979,31 @@ class MainActivity : Activity() {
                 sessionManager.authorizeBenchmark(
                     child.sessionId, "agent experiment $seq approved")
                 agentManager.approveProposal(parentId, child.sessionId)
-                activeSessionId = child.sessionId
-                runOnUiThread {
-                    refreshSessionLine()
-                    statusText("Experiment $seq approved; starting run.")
-                    startBench()
+                // Holder-owned: the binding survives the
+                // rotation window even when the run cannot
+                // start until the successor exists.
+                retained.activeSessionId = child.sessionId
+                retained.post(
+                    notice = "Experiment $seq approved and " +
+                        "bound — press Run to start.",
+                    sheet = Sheets.AGENT,
+                    sheetArg = parentId
+                ) { activity ->
+                    activity.refreshSessionLine()
+                    activity.statusText(
+                        "Experiment $seq approved; starting run.")
+                    activity.startBench()
                 }
             } catch (e: Exception) {
-                runOnUiThread {
-                    refreshSessionLine()
-                    statusText("Approval failed: ${e.message}")
-                    showAgent(parentId)
+                val failedNotice = "Approval failed: ${e.message}"
+                retained.post(
+                    notice = failedNotice,
+                    sheet = Sheets.AGENT,
+                    sheetArg = parentId
+                ) { activity ->
+                    activity.refreshSessionLine()
+                    activity.statusText(failedNotice)
+                    activity.showAgent(parentId)
                 }
             }
         }, "edgefit-agent-approve").start()
@@ -4252,6 +6016,41 @@ class MainActivity : Activity() {
      * values are kept but flagged stale. No Meta call, no
      * budget charge — a local revision of a pending review.
      */
+    /**
+     * EF-AGENT-REPAIR-01: per-experiment bootstrap from the Agent
+     * screen. Prediction-less children take the existing live
+     * prediction path (Meta authorization, authorize, bind);
+     * predicted children bind directly. Never auto-runs.
+     */
+    private fun runAgentExperiment(parentId: String, childId: String) {
+        val child = try {
+            sessionManager.get(childId)
+        } catch (e: Exception) {
+            statusText("Experiment unavailable: ${e.message}")
+            return
+        }
+        if (child.parentSessionId != parentId) {
+            statusText("Experiment does not belong to this agent session.")
+            return
+        }
+        if (child.benchmark != null) {
+            statusText("Experiment already ran; request a proposal for the next step.")
+            showAgent(parentId)
+            return
+        }
+        if (child.prediction == null) {
+            startLivePrediction(childId)
+            return
+        }
+        val message = bindSession(childId)
+        statusText(message)
+        if (activeSessionId == childId) {
+            selectTab(NavTab.BENCHMARK)
+        } else {
+            showAgent(parentId)
+        }
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun modifyAgentProposal(parentId: String) {
         val parent = try {
@@ -4273,30 +6072,57 @@ class MainActivity : Activity() {
             showAgent(parentId)
             return
         }
-        fun numberField(hint: String, value: Any?): EditText =
+        val draft = if (modifyDraftParent == parentId) modifyDraft else null
+        fun numberField(
+            hint: String,
+            value: Any?,
+            draftValue: String?
+        ): EditText =
             EditText(this).apply {
                 this.hint = hint
-                setText(value?.toString().orEmpty())
+                setText(draftValue ?: value?.toString().orEmpty())
                 inputType = InputType.TYPE_CLASS_NUMBER
             }
         val ctxField = numberField("Context tokens (n_ctx)",
-            proposed["n_ctx"])
+            proposed["n_ctx"], draft?.first)
         val threadsField = numberField("Threads (n_threads)",
-            proposed["n_threads"])
+            proposed["n_threads"], draft?.second)
         val predictField = numberField("Generated tokens (n_predict)",
-            proposed["n_predict"])
+            proposed["n_predict"], draft?.third)
+        val draftWatcher = object : TextWatcher {
+            override fun beforeTextChanged(
+                s: CharSequence?, start: Int, count: Int, after: Int
+            ) = Unit
+            override fun onTextChanged(
+                s: CharSequence?, start: Int, before: Int, count: Int
+            ) = Unit
+            override fun afterTextChanged(s: Editable?) {
+                modifyDraftParent = parentId
+                modifyDraft = Triple(
+                    ctxField.text.toString(),
+                    threadsField.text.toString(),
+                    predictField.text.toString())
+            }
+        }
+        ctxField.addTextChangedListener(draftWatcher)
+        threadsField.addTextChangedListener(draftWatcher)
+        predictField.addTextChangedListener(draftWatcher)
         val form = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             addView(ctxField)
             addView(threadsField)
             addView(predictField)
         }
+        trackSheet(Sheets.MODIFY_PROPOSAL, parentId)
         AlertDialog.Builder(this)
             .setTitle("Modify proposed config")
             .setMessage("Host-validated bounds apply. Muse's expected " +
                 "values predate your change and are flagged stale; " +
                 "approval then runs your config.")
             .setView(form)
+            .setOnDismissListener {
+                clearSheet(Sheets.MODIFY_PROPOSAL)
+            }
             .setPositiveButton("Save") { _, _ ->
                 val nCtx = ctxField.text.toString().toIntOrNull()
                 val nThreads = threadsField.text.toString().toIntOrNull()
@@ -4306,6 +6132,8 @@ class MainActivity : Activity() {
                     showAgent(parentId)
                     return@setPositiveButton
                 }
+                modifyDraft = null
+                modifyDraftParent = null
                 try {
                     agentManager.updatePendingConfig(parentId, nCtx,
                         nThreads, nPredict, deviceMaxThreads())
@@ -4361,17 +6189,154 @@ class MainActivity : Activity() {
         val file: File,
         val sha256: String,
         val bytes: Long,
-        val name: String
+        val name: String,
+        val uri: String? = null
     )
+
+    /** Bench-overlay run header (re-rendered after rotation). */
+    private data class RunDisplayInfo(
+        val name: String,
+        val bytes: Long,
+        val sha256: String,
+        val config: BenchConfigData,
+        val runtimeVersion: String,
+        val runtimeAbi: String
+    )
+
+    /**
+     * Latest import verdict, staged or refused. Lets the
+     * verdict sheet reopen after rotation; memory-only.
+     */
+    private data class ImportRecord(
+        val name: String,
+        val bytes: Long,
+        val sha: String,
+        val verdict: GgufInspect.Verdict,
+        val staged: Boolean
+    )
+
+    /**
+     * Working state that survives configuration changes
+     * (EF-ANDROID-LIFECYCLE-PERSISTENCE-P0-01). Nested, NOT
+     * inner: no implicit reference to any Activity instance,
+     * so a destroyed Activity is never pinned. Deliberately
+     * NOT a ViewModel: this app ships zero runtime
+     * dependencies, and `onRetainNonConfigurationInstance`
+     * is the dependency-free equivalent.
+     *
+     * [current] is the live Activity or null between
+     * instances. Background completions reach the UI only
+     * through [post], which delivers to the live instance
+     * or stashes notice+sheet data for the successor —
+     * dialogs never show on a destroyed Activity.
+     */
+    private class RetainedState(val runner: BenchRunner) {
+        @Volatile var current: MainActivity? = null
+        var activeSessionId: String? = null
+        var staged: StagedModel? = null
+        var standaloneOverride: BenchConfigData? = null
+        var benchJson: String? = null
+        var lastResult: BenchResult? = null
+        var benchActive: Boolean = false
+        var runDisplay: RunDisplayInfo? = null
+        var overlayVisible: Boolean = false
+        @Volatile
+        var recoveryInFlight: Boolean = false
+        var chartSamples: List<BenchTpsSamples.Sample>? = null
+        val requestTracker = RequestTracker()
+        @Volatile var stagingThread: Thread? = null
+        var lastImport: ImportRecord? = null
+        /** Memory-only secret drafts; never touch the bundle. */
+        var metaKeyDraft: String? = null
+        var globalTokenDraft: String? = null
+        /** Stashed delivery for the successor instance. */
+        var pendingNotice: String? = null
+        var pendingSheet: String? = null
+        var pendingSheetArg: String? = null
+        var onboardingDismissed: Boolean = false
+
+        /**
+         * Runs [fn] on the live Activity's UI thread. When
+         * no live instance exists (between destroy and
+         * create), stashes [notice]/[sheet] for the
+         * successor instead of touching a dead Activity.
+         * The liveness re-check runs inside the posted
+         * Runnable, so lifecycle callbacks (same thread)
+         * cannot interleave a destroy between check and
+         * delivery.
+         */
+        fun post(
+            notice: String? = null,
+            sheet: String? = null,
+            sheetArg: String? = null,
+            fn: (MainActivity) -> Unit
+        ) {
+            val target = current
+            if (target == null || target.isDestroyed ||
+                target.isFinishing
+            ) {
+                stash(notice, sheet, sheetArg)
+                return
+            }
+            target.runOnUiThread {
+                val live = current
+                if (live == null || live.isDestroyed ||
+                    live.isFinishing || live !== target
+                ) {
+                    stash(notice, sheet, sheetArg)
+                } else {
+                    fn(live)
+                }
+            }
+        }
+
+        /** Live progress tick: dropped without a live target. */
+        fun postProgress(fn: (MainActivity) -> Unit) {
+            val target = current
+            if (target == null || target.isDestroyed ||
+                target.isFinishing
+            ) {
+                return
+            }
+            target.runOnUiThread {
+                val live = current
+                if (live != null && !live.isDestroyed &&
+                    !live.isFinishing && live === target
+                ) {
+                    fn(live)
+                }
+            }
+        }
+
+        private fun stash(
+            notice: String?,
+            sheet: String?,
+            sheetArg: String?
+        ) {
+            if (notice != null) pendingNotice = notice
+            if (sheet != null) {
+                pendingSheet = sheet
+                pendingSheetArg = sheetArg
+            }
+        }
+
+        fun drainPending(): Triple<String?, String?, String?> {
+            val drained = Triple(
+                pendingNotice, pendingSheet, pendingSheetArg)
+            pendingNotice = null
+            pendingSheet = null
+            pendingSheetArg = null
+            return drained
+        }
+    }
 
     companion object {
         private const val REQUEST_CREATE_DOCUMENT = 1
         private const val REQUEST_OPEN_DOCUMENT = 2
         private const val REQUEST_IMPORT_BENCH = 3
-        private const val KEY_PENDING_JSON = "pending_json"
-        private const val KEY_PENDING_FILENAME = "pending_filename"
-        private const val KEY_ACTIVE_SESSION = "active_session"
-    private const val KEY_TAB = "nav_tab"
-    private const val KEY_ONBOARDING_PAGE = "onboarding_page"
+        private const val LLAMA_GGUF_URL =
+            "https://huggingface.co/unsloth/Llama-3.2-1B-Instruct-GGUF"
+        private const val LLAMA_GGUF_FILE =
+            "Llama-3.2-1B-Instruct-Q4_K_M.gguf"
     }
 }

@@ -49,11 +49,25 @@ object GlobalView {
         }
     }
 
+    /**
+     * EF-ANDROID-CONSENT-ACTIVATION-01: pure gate for the
+     * "Approve and upload" action (host-testable). The activity
+     * passes the live connection facts; all four must hold.
+     */
+    fun canOfferUpload(
+        origin: String?,
+        tokenSuffix: String?,
+        approved: Boolean,
+        eligible: Boolean
+    ): Boolean =
+        origin != null && tokenSuffix != null && approved && eligible
+
     fun showReview(
         activity: Activity,
         review: GlobalClient.Review,
         connected: Boolean,
-        onApprove: () -> Unit
+        onApprove: () -> Unit,
+        onDismiss: (() -> Unit)? = null
     ) {
         val origin = review.origin
         val sections = listOf(
@@ -121,13 +135,15 @@ object GlobalView {
                 "Approve and upload", primary = true, onTap = onApprove))
         }
         CardDialog.show(
-            activity, "Contribute to EdgeFit Global", sections, actions)
+            activity, "Contribute to EdgeFit Global", sections, actions,
+            onDismiss = onDismiss)
     }
 
     fun showHistory(
         activity: Activity,
         lines: List<Pair<String, String>>,
-        onOpen: (String) -> Unit
+        onOpen: (String) -> Unit,
+        onDismiss: (() -> Unit)? = null
     ) {
         val rows = if (lines.isEmpty()) {
             listOf(InsightCards.Row(
@@ -143,14 +159,16 @@ object GlobalView {
         }
         CardDialog.show(
             activity, "Contribution history",
-            listOf(InsightCards.Section("Local evidence", rows)), actions)
+            listOf(InsightCards.Section("Local evidence", rows)), actions,
+            onDismiss = onDismiss)
     }
 
     fun showReceipt(
         activity: Activity,
         submissionId: String,
         eligibility: String,
-        duplicate: Boolean
+        duplicate: Boolean,
+        onDismiss: (() -> Unit)? = null
     ) {
         CardDialog.show(
             activity, "Submission receipt",
@@ -170,14 +188,16 @@ object GlobalView {
                             "Received by the backend. This is NOT " +
                                 "publication; qualification is separate."
                         })
-                ))))
+                ))),
+            onDismiss = onDismiss)
     }
 
     fun showOutcome(
         activity: Activity,
         title: String,
         message: String,
-        details: List<String> = emptyList()
+        details: List<String> = emptyList(),
+        onDismiss: (() -> Unit)? = null
     ) {
         val rows = mutableListOf(InsightCards.Row("Result", message))
         details.take(8).forEachIndexed { i, detail ->
@@ -185,6 +205,7 @@ object GlobalView {
         }
         CardDialog.show(
             activity, title,
-            listOf(InsightCards.Section("EdgeFit Global", rows)))
+            listOf(InsightCards.Section("EdgeFit Global", rows)),
+            onDismiss = onDismiss)
     }
 }

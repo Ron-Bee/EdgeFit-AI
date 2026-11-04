@@ -49,7 +49,8 @@ object AeroSettings {
         val globalTokenPersisted: Boolean,
         val versionName: String,
         val packageName: String,
-        val workloadId: String
+        val workloadId: String,
+        val installLine: String? = null
     )
 
     data class Row(
@@ -173,6 +174,10 @@ object AeroSettings {
             Row("Version",
                 "EdgeFit AI ${ctx.versionName} " +
                     "(${ctx.packageName})", null),
+            Row("Installation",
+                ctx.installLine
+                    ?: "Install marker unavailable.",
+                null),
             Row("Workload",
                 "${ctx.workloadId} · Runtime ABI: arm64-v8a",
                 null),

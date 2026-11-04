@@ -55,6 +55,16 @@ class BenchRunner(private val context: Context) {
     @Volatile private var livePssKb: Int = -1
     @Volatile private var wallStartMs: Long = 0L
     @Volatile private var progressListener: ((BenchLiveUpdate) -> Unit)? = null
+    /**
+     * Swap-able completion sink (lifecycle persistence):
+     * rotation replaces the Activity behind the runner, so
+     * the worker delivers to whoever is current instead of
+     * the instance that started the run.
+     */
+    @Volatile private var completion: ((BenchResult) -> Unit)? = null
+    /** Latest terminal result; lets a recreated Activity adopt it. */
+    @Volatile var lastResult: BenchResult? = null
+        private set
     private val lock = Any()
 
     /**
@@ -65,6 +75,19 @@ class BenchRunner(private val context: Context) {
     fun setProgressListener(listener: ((BenchLiveUpdate) -> Unit)?) {
         progressListener = listener
     }
+
+    /**
+     * Replaces the completion sink (see [completion]). The
+     * activity calls this after rotation so the live
+     * instance — never a destroyed one — handles the
+     * result. Null drops delivery; [lastResult] still
+     * records the outcome for late adoption.
+     */
+    fun setCompletionListener(listener: ((BenchResult) -> Unit)?) {
+        completion = listener
+    }
+
+    fun isRunning(): Boolean = phase == BenchPhases.RUNNING
 
     fun start(
         modelFile: File,
@@ -102,13 +125,18 @@ class BenchRunner(private val context: Context) {
         mailbox = box
         val prog = LlamaBridge.newProgressMailbox()
         progressBox = prog
+        completion = listener
         worker = Thread({
             val result = runBenchmark(
                 modelFile, modelSha256, displayName, box, prog, config)
             synchronized(lock) { phase = result.status }
             execState = result.status
+            lastResult = result
             emitLive()
-            listener(result)
+            try {
+                completion?.invoke(result)
+            } catch (_: Exception) {
+            }
         }, "edgefit-bench")
         worker!!.start()
         return true
@@ -135,6 +163,8 @@ class BenchRunner(private val context: Context) {
         if (!BenchPhases.can(phase, BenchPhases.IDLE)) return false
         phase = BenchPhases.IDLE
         execState = BenchExecutionState.IDLE
+        lastResult = null
+        completion = null
         true
     }
 
@@ -305,10 +335,13 @@ class BenchRunner(private val context: Context) {
                     livePssKb = processPssKb()
                 }
                 emitLive()
-                if (elapsed >= config.timeoutMs) {
-                    timedOut.set(true)
+                // EF-BENCH-STALL-01: after a timeout the watchdog keeps
+                // emitting live updates until the worker finishes, so the
+                // elapsed clock and state stay live while native unwinds
+                // (native now aborts promptly on cancel; this covers any
+                // unforeseen stall without freezing the UI).
+                if (elapsed >= config.timeoutMs && !timedOut.getAndSet(true)) {
                     cancel()
-                    return@Thread
                 }
             }
         }, "edgefit-bench-watchdog")

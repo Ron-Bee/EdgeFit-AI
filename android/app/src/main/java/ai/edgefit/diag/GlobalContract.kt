@@ -25,14 +25,30 @@ package ai.edgefit.diag
  *   doc's install_id is superseded: identity comes from the token).
  * - consent = {policy_version 1..32 chars, accepted_at ISO-8601,
  *   scopes non-empty subset of ["aggregates"]}; "runs" disabled.
- * - Retry-After: backend does NOT currently emit it (doc anticipates
- *   it); the client honors it if present and stays correct if absent.
+ * - Retry-After: honored when present (429 quota / 503 busy emit
+ *   it); stays correct if absent. v1.1 rate_limited rides the same
+ *   header discipline (bridge forward rule, behavior-safe).
  * - No self-registration endpoint exists: tokens are owner-issued.
  */
 object GlobalContract {
     const val APP_CONTRACT_VERSION = 1
     const val CONSENT_POLICY_VERSION = "ef-consent-01"
     val CONSENT_SCOPES = listOf("aggregates")
+
+    /**
+     * Upload enablement (EF-ANDROID-CONSENT-ACTIVATION-01).
+     * Collection A APPROVED by the owner on 2026-11-01 for
+     * policy ef-consent-01, SHA-256
+     * B83E78FBF78AD0FBE4E77CFBBCF37709519A4305A45D86FFCCFF6C72E78CDB21
+     * (backend implement/ef-global-01-2026-10-30, approval
+     * commit 6e09295, docs/ef-consent-01-approval.md).
+     * Per-batch uploads stamping this policy are enabled.
+     * Publication B remains NOT approved (server-side
+     * allowlist; this client sends no publication fields).
+     * Withdrawal (revoke) and status refresh were never
+     * gated by this flag.
+     */
+    const val CONSENT_POLICY_APPROVED = true
 
     const val PATH_SUBMISSIONS = "/v1/submissions"
 

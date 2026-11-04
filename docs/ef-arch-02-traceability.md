@@ -392,3 +392,94 @@ G. EF-DEMO-01 (qualified-functionality recording only; claims
   V, W, X, Y, Z, AA.
 - BLOCKED on phone/live: D physical, G live, J live,
   K termination paths, T data.
+
+## EF-GOV-03 reconciliation notes (PROPOSED corrections, rows above unedited)
+
+Rows whose evidence postdates their text: D (S22 UI
+crawls now recorded), G (EF-META-06 live PASS with
+completeness caveat), H/I (EF-SESSION-01 implemented,
+host + scoped physical), J (live BYOK follow-ups
+recorded), L (EF-BYOK-01 implemented, host + one
+live session), M (EF-SESSION-01, same as H),
+N/O (EF-CLOUD-01A implemented + host 38/38, still
+undeployed), Y/Z (UX-01A/BC/R2/E/D + UX-02
+implemented + host; physical review pending).
+Owner approval requested to restate these rows.
+
+## AB. Global contribution client (EF-GLOBAL-CONTRIBUTE-01)
+
+- Requirement/doc: APP-CLOUD-CONTRACT v1; handoff doc.
+- Implementation: review/consent/submit/status/revoke
+  client + EvidenceStore import; Aero contribution UI.
+- Qualified evidence: HOST QUALIFIED (58 new JVM
+  tests, 634/634 branch suite; fake transport only).
+- Missing: any live-backend observation; staging URL;
+  token issuance; physical + staging integration.
+- Acceptance test: real upload/receipt/revoke against
+  staging with content-hash dedup check.
+- Dependency: EF-CLOUD-01 deployment.
+
+## AC. Cloud evidence foundation (EF-CLOUD-01A)
+
+- Requirement/doc: EF-CLOUD-01 + EF-STATS-01 annex.
+- Implementation: `cloud/` API/validation/qualification/
+  retrieval/stats over D1-compatible SQLite.
+- Qualified evidence: HOST QUALIFIED (38/38 isolated).
+- Missing: deployment choice, D1 binding, token ops,
+  consent policy publication, quorum activation.
+- Acceptance test: staged SUBMITTED→PUBLISHED +
+  revoke/tombstone + thin-cohort exclusion.
+- Dependency: owner deployment gates (7, all closed).
+
+## AD. Aero UI system (EF-UX-AERO-01)
+
+- Requirement/doc: FR-UX-01 (presentation step).
+- Implementation: tokens, shell, dock, destinations,
+  icon set (committed); 3 dialog files migrated
+  (uncommitted, BLOCKED: build + device gates).
+- Qualified evidence: HOST (634/634 branch);
+  owner aero-qual screenshots exist, formal review
+  pending.
+- Missing: dialog-migration compile + JVM + physical
+  review; screenshot refresh; demo recording.
+- Acceptance test: physical §18 walk on qualified
+  build + claim trace.
+- Dependency: device access; SAFE-INSTALL-01 gating.
+
+## AE. Installation safety (EF-SAFE-INSTALL-01, MANDATORY)
+
+- Requirement/doc: FR-SAFE-01; master arch §19.
+- Implementation: PROPOSED (preflight tool, banner,
+  launcher labels). Nov 1 incident recorded.
+- Qualified evidence: none yet.
+- Missing: implementation + acceptance tests (a)–(f).
+- Acceptance test: FR-SAFE-01 gate matrix.
+- Dependency: none; gates all future device installs.
+
+## AF. Competition study execution (EF-COMP-01B, artifact-sourced)
+
+- Requirement/doc: Stage B protocol (pre-registered).
+- Implementation: 6 manual runs (A-B-B-A-A-B) +
+  M0/M1 live calls executed 10-31 by owner;
+  artifacts under `eval/comp-01b/` (runs, ledger,
+  decisions, responses, score). Entry pending
+  owner confirmation of execution record.
+- Qualified evidence: artifacts only (A median
+  16.52, B median 10.49 tok/s, n=3; M0/M1 correct
+  abstentions; exploratory labeling).
+- Missing: owner-confirmed execution entry;
+  AgentReview demo acceptance (prepared, not run).
+- Acceptance test: scoring + regret semantics per
+  frozen protocol (done, host).
+- Dependency: owner execution confirmation.
+
+## AE amendment (preflight slice implemented 11-01)
+
+- `Confirm-EFSafeInstall01.ps1` + `Test-EFSafeInstall01.ps1`
+  (17/17): IMPLEMENTED + HOST PASS. Read-only; no
+  install/uninstall/clear code path.
+- AE Missing now: physical read-only dry-run, backup
+  creation, fresh-install banner + launcher labels,
+  C1/C2 decision.
+- Not promoted beyond HOST. Procedure:
+  `docs/ef-safe-install-01.md`.

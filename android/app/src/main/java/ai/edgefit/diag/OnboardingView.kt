@@ -18,9 +18,9 @@ import android.widget.TextView
  * never triggers network, key, download, benchmark, or
  * paid work. Content comes from [Onboarding.pages] (pure,
  * unit-tested); this object only renders and navigates.
- * EF-UX-AERO-01 Step 5 restyles the sheet with the Aero
- * light tokens (mist background, ink copy, azure brand
- * mark, azure primary action) while keeping the page
+ * EF-ANDROID-AERO-BYOLLM-FINAL-02 renders the sheet on the dark
+ * Aero dialog surface (azure brand mark, azure primary action,
+ * ghost Back/Skip) while keeping the page
  * model, Skip, Back, and retirement semantics untouched.
  * Main thread only.
  */
@@ -44,9 +44,9 @@ object OnboardingView {
         var done = false
         val density = activity.resources.displayMetrics.density
         fun dp(value: Int): Int = (value * density + 0.5f).toInt()
-        val ink = activity.getColor(R.color.aero_ink)
+        val ink = activity.getColor(R.color.aero_text_primary)
         val secondary = activity.getColor(
-            R.color.aero_light_secondary)
+            R.color.aero_text_secondary)
         val azure = activity.getColor(R.color.aero_azure)
         val brandRow = LinearLayout(activity).apply {
             orientation = LinearLayout.HORIZONTAL
@@ -71,7 +71,7 @@ object OnboardingView {
         })
         val divider = View(activity).apply {
             setBackgroundColor(activity.getColor(
-                R.color.aero_light_border))
+                R.color.aero_divider))
         }
         val title = TextView(activity).apply {
             textSize = 20f
@@ -88,11 +88,12 @@ object OnboardingView {
         val primary = Button(activity).apply {
             AeroUi.stylePrimary(activity, this)
         }
-        // Back/Skip keep the system light-button look:
-        // the Aero secondary/ghost styles are tuned for
-        // dark surfaces and would wash out here.
+        // Back/Skip use the ghost style: the sheet is dark
+        // (dialog window provides the card background).
         val back = Button(activity).apply { text = "Back" }
+        AeroUi.styleGhost(activity, back)
         val skip = Button(activity).apply { text = "Skip" }
+        AeroUi.styleGhost(activity, skip)
         fun finish(start: Boolean) {
             if (done) return
             done = true
@@ -137,8 +138,6 @@ object OnboardingView {
         }
         val content = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(activity.getColor(
-                R.color.aero_light_page))
             val pad = dp(16)
             setPadding(pad, pad, pad, pad)
             addView(brandRow)

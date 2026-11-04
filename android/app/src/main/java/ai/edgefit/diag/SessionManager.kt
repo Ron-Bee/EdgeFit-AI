@@ -791,6 +791,15 @@ class SessionManager(
     @Synchronized
     fun get(id: String): SessionRecord = store.load(id)
 
+    /**
+     * EF-ANDROID-RECOVERY-INSTALL-01: quarantined (corrupt or
+     * unsupported) records stay preserved on disk but leave the
+     * visible list; the Sessions screen surfaces this count so a
+     * non-empty quarantine is explicit, never silent.
+     */
+    @Synchronized
+    fun quarantineCount(): Int = store.quarantineIds().size
+
     @Synchronized
     fun listSessions(): List<SessionRecord> =
         store.listIds().mapNotNull {

@@ -23,7 +23,9 @@ class GlobalClient(
     private val transport: GlobalTransport,
     private val vault: GlobalTokenVault,
     private val getOrigin: () -> String?,
-    private val nowMs: () -> Long
+    private val nowMs: () -> Long,
+    private val uploadsApproved: () -> Boolean =
+        { GlobalContract.CONSENT_POLICY_APPROVED }
 ) {
     class GlobalError(val code: String, message: String) : Exception(message)
 
@@ -121,10 +123,30 @@ class GlobalClient(
      * Records the consent event, then sends exactly one request.
      */
     fun submit(runId: String): SubmitOutcome {
+        if (!uploadsApproved()) {
+            return SubmitOutcome.Blocked(
+                "Contributions are disabled: consent policy " +
+                    GlobalContract.CONSENT_POLICY_VERSION +
+                    " is not yet owner-approved")
+        }
         val record = try {
             store.load(runId)
         } catch (e: Exception) {
             return SubmitOutcome.Blocked("no local evidence: $runId")
+        }
+        // EF-ANDROID-CONSENT-ACTIVATION-01: Collection A covers
+        // genuine completed measurements from this install only.
+        // Anything else stays local; the review screen still
+        // displays it read-only with its true status/source.
+        if (record.summary.status != BenchContract.STATUS_COMPLETED) {
+            return SubmitOutcome.Blocked(
+                "only COMPLETED results can be contributed " +
+                    "(status ${record.summary.status})")
+        }
+        if (record.provenance != EvidenceStore.PROVENANCE_CAPTURED) {
+            return SubmitOutcome.Blocked(
+                "imported results cannot be contributed as " +
+                    "this install's measurements")
         }
         val origin = getOrigin()
         if (origin == null || GlobalContract.normalizeOrigin(origin) == null) {
@@ -385,6 +407,25 @@ class GlobalClient(
         if (submissionId == null) {
             return RevokeOutcome.Failed("NOT_SHARED", "nothing to withdraw")
         }
+        val outcome = revokeRemote(submissionId)
+        if (outcome is RevokeOutcome.Revoked) {
+            store.updateContribution(
+                runId, serverEligibility = GlobalContract.REVOKED,
+                statusAtUtc = BenchResultParse.formatIsoUtc(nowMs()))
+        }
+        return outcome
+    }
+
+    /**
+     * Withdraws by submission id for locally deleted records
+     * with a retained withdrawal record. No local evidence
+     * state to update; the caller clears the tombstone on
+     * terminal REVOKED acknowledgement.
+     */
+    fun revokeWithdrawal(submissionId: String): RevokeOutcome =
+        revokeRemote(submissionId)
+
+    private fun revokeRemote(submissionId: String): RevokeOutcome {
         val origin = getOrigin()
         val url = if (origin == null) null
         else GlobalContract.submissionUrl(origin, submissionId)
@@ -429,9 +470,6 @@ class GlobalClient(
                 return RevokeOutcome.Failed(
                     "MISMATCH", "server did not confirm revocation")
             }
-            store.updateContribution(
-                runId, serverEligibility = GlobalContract.REVOKED,
-                statusAtUtc = BenchResultParse.formatIsoUtc(nowMs()))
             return RevokeOutcome.Revoked
         } finally {
             synchronized(this) { inFlight = false }

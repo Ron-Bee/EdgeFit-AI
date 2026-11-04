@@ -2,8 +2,11 @@ package ai.edgefit.diag
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.text.method.PasswordTransformationMethod
+import android.view.ContextThemeWrapper
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
@@ -15,7 +18,8 @@ import android.widget.TextView
  * BYOK interface: key custody, per-action authorization, and
  * prediction/follow-up display. Secrets never appear in any text
  * builder output — at most a last-4 suffix renders. Main thread only;
- * text builders are pure and unit-tested.
+ * text builders are pure and unit-tested. Presented in the Aero
+ * dialog theme; key handling and authorization semantics unchanged.
  */
 object MetaView {
 
@@ -123,29 +127,68 @@ object MetaView {
         status: () -> String,
         onSave: (String, Boolean) -> String,
         onForget: () -> String,
-        onPredict: () -> Unit
+        onPredict: () -> Unit,
+        // Lifecycle persistence: an in-memory key draft (never
+        // persisted) plus dismiss tracking. Optional;
+        // existing callers unaffected.
+        initialKey: String? = null,
+        onKeyChanged: ((String) -> Unit)? = null,
+        initialRemember: Boolean = false,
+        onRememberChanged: ((Boolean) -> Unit)? = null,
+        onDismiss: (() -> Unit)? = null
     ) {
+        val themed = ContextThemeWrapper(
+            activity, R.style.Theme_EdgeFit_Aero_Dialog)
         var dialog: AlertDialog? = null
         val density = activity.resources.displayMetrics.density
         fun dp(value: Int): Int = (value * density + 0.5f).toInt()
-        val statusView = TextView(activity).apply {
+        val ink = AeroUi.inkColor(themed)
+        val secondary = AeroUi.secondaryColor(themed)
+        val statusView = TextView(themed).apply {
             text = status()
             textSize = 14f
+            setTextColor(ink)
         }
-        val notice = TextView(activity).apply { textSize = 14f }
-        val keyInput = EditText(activity).apply {
+        val notice = TextView(themed).apply {
+            textSize = 14f
+            setTextColor(ink)
+        }
+        val keyInput = EditText(themed).apply {
             hint = "Paste Meta API key"
             inputType = InputType.TYPE_CLASS_TEXT or
                 InputType.TYPE_TEXT_VARIATION_PASSWORD
             transformationMethod = PasswordTransformationMethod.getInstance()
             isSingleLine = true
+            setTextColor(ink)
+            setHintTextColor(secondary)
+            if (!initialKey.isNullOrEmpty()) setText(initialKey)
+            if (onKeyChanged != null) {
+                addTextChangedListener(object : TextWatcher {
+                    override fun beforeTextChanged(
+                        s: CharSequence?, start: Int, count: Int, after: Int
+                    ) = Unit
+                    override fun onTextChanged(
+                        s: CharSequence?, start: Int, before: Int, count: Int
+                    ) = Unit
+                    override fun afterTextChanged(s: Editable?) {
+                        onKeyChanged(s?.toString().orEmpty())
+                    }
+                })
+            }
         }
-        val remember = CheckBox(activity).apply {
+        val remember = CheckBox(themed).apply {
             text = "Remember securely on this device (Keystore-encrypted)"
+            setTextColor(ink)
+            isChecked = initialRemember
+            if (onRememberChanged != null) {
+                setOnCheckedChangeListener { _, checked ->
+                    onRememberChanged(checked)
+                }
+            }
         }
-        val save = Button(activity).apply {
+        val save = Button(themed).apply {
             text = "Save Key"
-            SemanticUi.stylePrimary(activity, this)
+            AeroUi.stylePrimary(themed, this)
             setOnClickListener {
                 val key = keyInput.text.toString()
                 keyInput.setText("")
@@ -154,52 +197,58 @@ object MetaView {
                 statusView.text = status()
             }
         }
-        val forget = Button(activity).apply {
+        val forget = Button(themed).apply {
+            AeroUi.styleSecondary(themed, this)
             text = "Forget Key"
-            SemanticUi.styleDestructive(activity, this)
+            setTextColor(themed.getColor(R.color.aero_error))
             setOnClickListener {
                 notice.text = onForget()
                 statusView.text = status()
             }
         }
-        val predict = Button(activity).apply {
+        val predict = Button(themed).apply {
             text = "Predict with Meta"
-            SemanticUi.stylePrimary(activity, this)
+            AeroUi.stylePrimary(themed, this)
             setOnClickListener {
                 dialog?.dismiss()
                 onPredict()
             }
         }
-        val content = LinearLayout(activity).apply {
+        val content = LinearLayout(themed).apply {
             orientation = LinearLayout.VERTICAL
             val pad = dp(16)
             setPadding(pad, pad, pad, pad)
             addView(statusView)
-            addView(TextView(activity).apply {
+            addView(TextView(themed).apply {
                 text = "Session-only by default: the key lives in memory " +
                     "and dies with the app. Saving is explicit and " +
                     "encrypted. The key is sent to Meta only to " +
                     "authenticate requests you confirm below — never to " +
                     "EdgeFit, never in exports or logs."
                 textSize = 13f
+                setTextColor(secondary)
             })
             addView(keyInput)
             addView(remember)
             addView(save)
             addView(forget)
             addView(notice)
-            addView(TextView(activity).apply {
+            addView(TextView(themed).apply {
                 text = "Prediction uses the staged model and current " +
                     "benchmark config. Stage a model first."
                 textSize = 13f
+                setTextColor(secondary)
             })
             addView(predict)
         }
-        dialog = AlertDialog.Builder(activity)
+        dialog = AlertDialog.Builder(themed)
             .setTitle("Meta API Settings")
-            .setView(ScrollView(activity).apply { addView(content) })
+            .setView(ScrollView(themed).apply { addView(content) })
             .setPositiveButton("Close", null)
             .show()
+        if (onDismiss != null) {
+            dialog?.setOnDismissListener { onDismiss() }
+        }
     }
 
     /** Per-action authorization gate. Confirm leaves via [onConfirm]. */
@@ -207,34 +256,52 @@ object MetaView {
         activity: Activity,
         text: String,
         confirmLabel: String,
-        onConfirm: () -> Unit
+        onConfirm: () -> Unit,
+        onDismiss: (() -> Unit)? = null
     ) {
-        val body = TextView(activity).apply {
+        val themed = ContextThemeWrapper(
+            activity, R.style.Theme_EdgeFit_Aero_Dialog)
+        val body = TextView(themed).apply {
             this.text = text
             textSize = 14f
+            setTextColor(AeroUi.inkColor(themed))
             val pad = (16 * resources.displayMetrics.density + 0.5f).toInt()
             setPadding(pad, pad, pad, pad)
         }
-        AlertDialog.Builder(activity)
+        val authDialog = AlertDialog.Builder(themed)
             .setTitle("Authorize Meta Request")
-            .setView(ScrollView(activity).apply { addView(body) })
+            .setView(ScrollView(themed).apply { addView(body) })
             .setNegativeButton("Cancel", null)
             .setPositiveButton(confirmLabel) { _, _ -> onConfirm() }
             .show()
+        if (onDismiss != null) {
+            authDialog.setOnDismissListener { onDismiss() }
+        }
     }
 
-    fun showResultDialog(activity: Activity, title: String, text: String) {
-        val body = TextView(activity).apply {
+    fun showResultDialog(
+        activity: Activity,
+        title: String,
+        text: String,
+        onDismiss: (() -> Unit)? = null
+    ) {
+        val themed = ContextThemeWrapper(
+            activity, R.style.Theme_EdgeFit_Aero_Dialog)
+        val body = TextView(themed).apply {
             this.text = text
             textSize = 14f
+            setTextColor(AeroUi.inkColor(themed))
             setTextIsSelectable(true)
             val pad = (16 * resources.displayMetrics.density + 0.5f).toInt()
             setPadding(pad, pad, pad, pad)
         }
-        AlertDialog.Builder(activity)
+        val resultDialog = AlertDialog.Builder(themed)
             .setTitle(title)
-            .setView(ScrollView(activity).apply { addView(body) })
+            .setView(ScrollView(themed).apply { addView(body) })
             .setPositiveButton("Close", null)
             .show()
+        if (onDismiss != null) {
+            resultDialog.setOnDismissListener { onDismiss() }
+        }
     }
 }

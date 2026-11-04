@@ -53,6 +53,10 @@
     <color name="aero_error">#FF8A80</color>
     <color name="aero_error_container">#4A1512</color>
     <color name="aero_success">#3ECF8E</color>
+    <!-- EF-ANDROID-AERO-OVERHAUL-01: amber for warning / incomplete
+         evidence (directive visual language); label text still carries
+         the meaning, never color alone. -->
+    <color name="aero_warning">#F2B544</color>
 
     <!-- Light sheets (dialogs/exports on mist) -->
     <color name="aero_light_page">#F3F7FE</color>

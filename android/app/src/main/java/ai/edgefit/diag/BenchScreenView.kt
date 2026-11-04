@@ -45,10 +45,15 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
     private val backButton: Button
     private var resultRowRef: LinearLayout? = null
     private var recoveryRowRef: LinearLayout? = null
+    // EF-ANDROID-AERO-BYOLLM-FINAL-02: centralized Aero tokens
+    // (were hardcoded grays).
+    private val TEXT = context.getColor(R.color.aero_text_primary)
+    private val SECONDARY = context.getColor(R.color.aero_text_secondary)
+    private val ACCENT = context.getColor(R.color.aero_sky)
 
     init {
         orientation = VERTICAL
-        setBackgroundColor(0xFF101216.toInt())
+        setBackgroundColor(context.getColor(R.color.aero_page))
         val density = resources.displayMetrics.density
         fun dp(value: Int): Int = (value * density + 0.5f).toInt()
         fun label(sizeSp: Float, color: Int): TextView =
@@ -75,6 +80,7 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
         }
         resultView = label(14f, TEXT).apply { visibility = GONE }
         cancelButton = Button(context).apply {
+            AeroUi.styleSecondary(context, this)
             text = "Cancel"
             minimumHeight = dp(48)
             setOnClickListener { onCancel?.invoke() }
@@ -84,16 +90,19 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
             visibility = GONE
         }
         saveButton = Button(context).apply {
+            AeroUi.stylePrimary(context, this)
             text = "Save"
             minimumHeight = dp(48)
             setOnClickListener { onSave?.invoke() }
         }
         workloadButton = Button(context).apply {
+            AeroUi.styleSecondary(context, this)
             text = "Workload"
             minimumHeight = dp(48)
             setOnClickListener { onWorkload?.invoke() }
         }
         backButton = Button(context).apply {
+            AeroUi.styleSecondary(context, this)
             text = "Back"
             minimumHeight = dp(48)
             setOnClickListener { onBack?.invoke() }
@@ -113,16 +122,19 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
             visibility = GONE
         }
         val recheckButton = Button(context).apply {
+            AeroUi.styleSecondary(context, this)
             text = "Recover"
             minimumHeight = dp(48)
             setOnClickListener { onRecover?.invoke() }
         }
         val smallerButton = Button(context).apply {
+            AeroUi.styleSecondary(context, this)
             text = "Models"
             minimumHeight = dp(48)
             setOnClickListener { onModels?.invoke() }
         }
         val detailsButton = Button(context).apply {
+            AeroUi.styleSecondary(context, this)
             text = "Details"
             minimumHeight = dp(48)
             setOnClickListener { onFailureDetails?.invoke() }
@@ -175,9 +187,13 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
         sha256: String,
         config: BenchConfigData,
         runtimeVersion: String,
-        runtimeAbi: String
+        runtimeAbi: String,
+        // Rotation carry-over: the live chart continues
+        // instead of restarting. Empty on a fresh run.
+        initialSamples: List<BenchTpsSamples.Sample> = emptyList()
     ) {
         samples.clear()
+        samples.restore(initialSamples)
         lastState = BenchExecutionState.IDLE
         targetTokens = config.nPredict
         resultView.visibility = GONE
@@ -260,7 +276,7 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
         if (result.status == BenchContract.STATUS_FAILED ||
             result.status == BenchContract.STATUS_TIMEOUT) {
             stageView.setTextColor(resources.getColor(
-                R.color.edgefit_error_on_dark, context.theme))
+                R.color.aero_error, context.theme))
         }
         tokensView.text = "%d / %d".format(
             measurements.generatedTokens, result.config.nPredict)
@@ -334,7 +350,7 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
             // Red failure line on the dark result view;
             // the "Error:" label carries the meaning.
             val red = resources.getColor(
-                R.color.edgefit_error_on_dark, context.theme)
+                R.color.aero_error, context.theme)
             val start = full.indexOf("Error:")
             val spanned = android.text.SpannableString(full)
             spanned.setSpan(
@@ -352,20 +368,23 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
         cancelButton.isEnabled = running
     }
 
+    /** Live chart samples for rotation carry-over. */
+    fun chartSnapshot(): List<BenchTpsSamples.Sample> = samples.snapshot()
+
     /** Minimal tokens-vs-time plot from sampler data only. */
     private class TpsChartView(context: Context) : View(context) {
         private val axis = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = SECONDARY
+            color = context.getColor(R.color.aero_text_secondary)
             strokeWidth = 2f
             textSize = 28f
         }
         private val line = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = ACCENT
+            color = context.getColor(R.color.aero_sky)
             strokeWidth = 5f
             style = Paint.Style.STROKE
         }
         private val dot = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = ACCENT
+            color = context.getColor(R.color.aero_sky)
             style = Paint.Style.FILL
         }
         private var points: List<BenchTpsSamples.Sample> = emptyList()
@@ -424,9 +443,4 @@ class BenchScreenView(context: Context) : LinearLayout(context) {
         }
     }
 
-    companion object {
-        private const val TEXT = 0xFFEDEFF2.toInt()
-        private const val SECONDARY = 0xFFA7B0BC.toInt()
-        private const val ACCENT = 0xFF82B4FF.toInt()
-    }
 }

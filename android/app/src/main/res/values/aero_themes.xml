@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- EdgeFit Aero design tokens: themes (EF-UX-AERO-01 Step 1).
-     Defined here, NOT yet applied in the manifest — applying the theme
-     to the app is a later Aero step. Additive only; the current light
-     UI is unchanged. -->
+     EF-ANDROID-AERO-BYOLLM-FINAL-02: Theme.EdgeFit.Aero is now the
+     manifest application theme: all AlertDialogs inherit the dark
+     Aero dialog theme; explicit light content was migrated alongside. -->
 <resources>
     <style name="Theme.EdgeFit.Aero" parent="@android:style/Theme.Material.NoActionBar">
         <item name="android:windowBackground">@color/aero_page</item>

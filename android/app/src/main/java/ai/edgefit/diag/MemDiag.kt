@@ -249,6 +249,56 @@ object MemDiag {
                 )
             }
         )
+
+    /** Parses one `x_mem_diag` sample (see [exportToMap]). */
+    fun sampleFromMap(map: Map<String, Any?>): Sample? {
+        return try {
+            val checkpoint = Checkpoint.fromSerial(
+                map["checkpoint"] as? String ?: return null)
+                ?: return null
+            Sample(
+                checkpoint = checkpoint,
+                elapsedRealtimeMs =
+                    (map["elapsed_realtime_ms"] as? Number)
+                        ?.toLong() ?: return null,
+                availBytes = (map["avail_bytes"] as? Number)
+                    ?.toLong() ?: return null,
+                lowMemory = map["low_memory"] as? Boolean
+                    ?: return null,
+                thresholdBytes =
+                    (map["threshold_bytes"] as? Number)?.toLong(),
+                pssKb = (map["pss_kb"] as? Number)?.toInt(),
+                privateDirtyKb =
+                    (map["private_dirty_kb"] as? Number)?.toInt(),
+                nativeHeapBytes =
+                    (map["native_heap_bytes"] as? Number)?.toLong(),
+                javaHeapBytes =
+                    (map["java_heap_bytes"] as? Number)?.toLong()
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    /** Parses a `x_mem_diag` block (see [exportToMap]). */
+    fun exportFromMap(map: Map<String, Any?>): RunExport? {
+        return try {
+            @Suppress("UNCHECKED_CAST")
+            val raw = map["samples"] as? List<*> ?: return null
+            val samples = raw.map { item ->
+                sampleFromMap(item as? Map<String, Any?> ?: return null)
+                    ?: return null
+            }
+            RunExport(
+                samples = samples,
+                buildVariant = map["build_variant"] as? String
+                    ?: return null,
+                nativeOpt = map["native_opt"] as? String ?: return null
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
 }
 
 /**
