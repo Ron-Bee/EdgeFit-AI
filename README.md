@@ -4,8 +4,8 @@
 
 <div align="right">
   <strong>JUDGE QUICK ACCESS</strong><br>
-  <strong>Download Android APK:</strong> <em>Pending signed public release</em> · <a href="docs/release-readiness.md">Release gate</a><br>
-  <strong>Official 2:55 hackathon demo:</strong> <em>In production</em> · <a href="docs/demo.md">Demo guide</a><br>
+  <strong>Download Android APK:</strong> <a href="https://github.com/Ron-Bee/EdgeFit-AI/releases/tag/v0.2.1-preview.1">v0.2.1-preview.1 pre-release</a> · <a href="https://github.com/Ron-Bee/EdgeFit-AI/releases/download/v0.2.1-preview.1/EdgeFit-AI-Android-v0.2.1-preview.1-arm64.apk">Direct APK</a> · <a href="https://github.com/Ron-Bee/EdgeFit-AI/releases/download/v0.2.1-preview.1/SHA256SUMS.txt">SHA-256</a> · <a href="docs/release-readiness.md">Release gate</a><br>
+  <strong>Official 2:55 hackathon demo:</strong> <a href="https://youtu.be/KyUwmhIL6SM">Watch on YouTube</a> · <a href="docs/demo.md">Demo guide</a><br>
   <strong>Extended 10:09 unedited demo:</strong> <a href="https://youtu.be/8IhWPMv60Gw">Watch on YouTube</a><br>
   <strong>Project website:</strong> <a href="https://edgefit-ai.pages.dev/">EdgeFit AI</a><br>
   <strong>Global Evidence dashboard:</strong> <a href="https://edgefit-ai.pages.dev/dashboard.html">Explore dashboard</a><br>
@@ -16,9 +16,17 @@
 
 Built for the **2026 Meta Global AI Developer Hackathon**.
 
+## Watch the 2:55 Demo
+
+[![Watch the EdgeFit AI Demo](https://img.youtube.com/vi/KyUwmhIL6SM/hqdefault.jpg)](https://youtu.be/KyUwmhIL6SM)
+
+**[Watch the 2:55 Demo](https://youtu.be/KyUwmhIL6SM)** — the official hackathon demonstration: hardware-aware model evaluation, real on-device inference, Meta-assisted reasoning, and evidence verification. The [extended 10:09 unedited Android recording](https://youtu.be/8IhWPMv60Gw) shows an earlier build in full. **[Download Android APK](https://github.com/Ron-Bee/EdgeFit-AI/releases/tag/v0.2.1-preview.1)** (v0.2.1-preview.1 pre-release, [direct APK](https://github.com/Ron-Bee/EdgeFit-AI/releases/download/v0.2.1-preview.1/EdgeFit-AI-Android-v0.2.1-preview.1-arm64.apk), [SHA-256](https://github.com/Ron-Bee/EdgeFit-AI/releases/download/v0.2.1-preview.1/SHA256SUMS.txt)) · **[Definitive Walkthrough v1.1](docs/walkthrough/v1.1/README.md)** ([PDF](docs/walkthrough/v1.1/EdgeFit_AI_Definitive_Walkthrough_v1.1.pdf)).
+
+> **Release update (2026-11-04):** The official 2:55 hackathon demo is published ([YouTube](https://youtu.be/KyUwmhIL6SM)), and Android pre-release v0.2.1-preview.1 is published with a verified SHA-256 (`BC32EC0F…C61E6`). Signed-release physical-install testing is not yet verified. The extended 10:09 recording remains available as the unedited technical capture.
+
 > **Status snapshot (2026-11-01):** on-device benchmark + prediction sessions are implemented and physically demonstrated on a Galaxy S22 Ultra; the **Global Evidence backend is deployed and the public dashboard is live** (honestly empty — zero genuine publications yet). No demo-video link is published yet. No signed public APK exists yet. See [Limitations](#p-limitations-known-issues-and-roadmap).
 
-**Quick access:** The walkthrough PDF is published (see Judge Quick Access above). The APK download will become active only after a verified release artifact exists. The direct website and dashboard links above are available for inspection; public aggregate data is not yet qualified.
+**Quick access:** The walkthrough PDF is published (see Judge Quick Access above). The APK download links to the published v0.2.1-preview.1 pre-release (signed-release physical-install test not yet verified). The direct website and dashboard links above are available for inspection; public aggregate data is not yet qualified.
 
 > **Status update (2026-11-03):** Definitive Walkthrough v1.0 published — the illustrated technical guide (40 genuine screenshots, 16 technical diagrams) as a searchable 65-page PDF plus the editable Word master: [docs/walkthrough/v1.0/](docs/walkthrough/v1.0/README.md). No demo-video link is published yet. No signed public APK exists yet.
 >

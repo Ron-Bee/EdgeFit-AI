@@ -4,11 +4,11 @@
 
 **Extended, unedited Android demonstration (10:09, November 3, 2026):** [Watch on YouTube](https://youtu.be/8IhWPMv60Gw). This is an earlier-build continuous technical capture, not the official hackathon short submission.
 
-**Official 2:55 hackathon submission demo:** In production; its final URL is pending.
+**Official 2:55 hackathon submission demo:** [Watch on YouTube](https://youtu.be/KyUwmhIL6SM).
 
 ## Demonstration flow (live version; official submission video is max THREE minutes)
 
-The official hackathon submission video must be THREE minutes maximum (URL pending). This script is the longer live walkthrough version for the Galaxy S22 Ultra with the
+The official hackathon submission video must be THREE minutes maximum ([published 2:55 video](https://youtu.be/KyUwmhIL6SM)). This script is the longer live walkthrough version for the Galaxy S22 Ultra with the
 workstation alongside. Steps 1–2 and 5 are fully offline; steps 3–4
 need a Meta API key only if run live (otherwise narrate over the
 recorded session evidence).
