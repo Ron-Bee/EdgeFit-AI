@@ -92,6 +92,18 @@ android {
                     cppFlags '-O3 -g'
                 }
             }
+            // Sign here (not in afterEvaluate): AGP finalizes the DSL
+            // before project afterEvaluate callbacks run.
+            def ksProps = new Properties()
+            def ksPropsFile = new File(
+                System.getProperty('user.home') +
+                '/.gradle/gradle.properties')
+            if (ksPropsFile.exists()) {
+                ksPropsFile.withInputStream { ksProps.load(it) }
+            }
+            if (ksProps.getProperty('releaseKeystoreFile') != null) {
+                signingConfig signingConfigs.preview
+            }
         }
         // Optimized benchmark variant: debuggable install with -O3 native
         // code (llama.cpp, ggml, JNI). Portable arm64 only, no -march.
@@ -108,14 +120,6 @@ android {
                     cppFlags '-O3 -g'
                 }
             }
-        }
-    }
-    afterEvaluate {
-        // Owner key present -> sign; otherwise leave unsigned for
-        // gate inspection (never silently debug-signed).
-        if (signingConfigs.preview.storeFile != null) {
-            buildTypes.publicPreview.signingConfig =
-                signingConfigs.preview
         }
     }
     applicationVariants.configureEach {
