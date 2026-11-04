@@ -329,7 +329,7 @@ Live Meta round trips are owner-executed only, require `MODEL_API_KEY`, and neve
 
 ## Q. Hackathon information and original-work scope
 
-Built for the **2026 Meta Global AI Developer Hackathon** (deadline Nov 4, 2026). Original work: Android harness + Aero UI, session/agent/consent architecture, cloud foundation + deployed Global backend, dashboard website, study design + frozen corpus, and all documentation. Pinned third-party code: llama.cpp v0.7.0 (reviewed, ownership-tested). Meta Muse Spark (`muse-spark-1.3`) used via API for predictions, follow-ups, and agent proposals; Muse Code assisted test-harness and scaffolding development. No license file is published yet; until one is added, no reuse rights are granted. (Owner action: approve and add `LICENSE`.)
+Built for the **2026 Meta Global AI Developer Hackathon** (deadline Nov 4, 2026). Original work: Android harness + Aero UI, session/agent/consent architecture, cloud foundation + deployed Global backend, dashboard website, study design + frozen corpus, and all documentation. Pinned third-party code: llama.cpp v0.7.0 (reviewed, ownership-tested). Meta Muse Spark (`muse-spark-1.3`) used via API for predictions, follow-ups, and agent proposals; Muse Code assisted test-harness and scaffolding development. Original project materials are rights-reserved under [LICENSE](LICENSE); third-party notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ### AI-Assisted Development at Scale
 
@@ -346,3 +346,7 @@ These account-level figures are not isolated exclusively to EdgeFit AI. Muse ass
 **Official 2:55 hackathon demo:** [Watch on YouTube](https://youtu.be/KyUwmhIL6SM). See the [demo guide](docs/demo.md).
 
 Verified links: this repository, the [live dashboard](https://edgefit-ai.pages.dev/dashboard.html), the [walkthrough PDF](docs/walkthrough/v1.1/EdgeFit_AI_Definitive_Walkthrough_v1.1.pdf), and the public read API above. The extended YouTube demo, official 2:55 video, and pre-release APK are linked above; public aggregate data is not yet qualified.
+
+## Licensing and third-party notices
+
+Original EdgeFit AI project materials are rights-reserved; public access to this repository is not permission to reuse them. See [LICENSE](LICENSE). Third-party software remains under its respective licenses, including MIT-licensed llama.cpp/ggml, Apache-2.0 Kotlin runtime components and LLVM OpenMP, Unicode data, and the EPL-1.0 JUnit test dependency. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Attaching the full third-party license texts to the signed APK GitHub release is a pending owner step.
