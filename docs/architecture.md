@@ -43,10 +43,10 @@ flowchart TB
 | Bounded agent loop (EF-AGENT-01) | Host + one scoped live loop | [edgefit-agentic-workflow.md](edgefit-agentic-workflow.md) |
 | Workstation SQLite + importers | Qualified (additive migrations 2, 3) | [ef-data-02-import.md](ef-data-02-import.md), [ef-data-03-bench.md](ef-data-03-bench.md) |
 | Validated retrieval + dispatch | Offline + live qualified | [muse-integration.md](muse-integration.md) |
-| Cloud backend | **Deployed** (3 Workers + D1), 297/297 PASS @ `cba27c3`, zero genuine rows | [README global section](../README.md#i-global-evidence-system-deployed-staging-contributions-received-no-qualified-public-cohorts-published) |
-| Global contribution client | Host-qualified; backend live, first genuine upload not run | [ef-global-contribute-app-handoff.md](ef-global-contribute-app-handoff.md) |
-| Public dashboard | **Live, honestly empty** ([dashboard](https://edgefit-ai.pages.dev/dashboard.html)) | Handoff `cba27c3` §H |
-| Signed public release | Not started | [edgefit-release-and-distribution.md](edgefit-release-and-distribution.md) |
+| Cloud backend | **Deployed** (3 Workers + D1), 297/297 PASS @ `cba27c3`, 36 accepted staging contributions, 0 published, gate closed (API 2026-11-04) | [README global section](../README.md#i-global-evidence-system-deployed-staging-contributions-received-no-qualified-public-cohorts-published) |
+| Global contribution client | Host-qualified; backend live, genuine uploads accepted (3 installs, ef-consent-01) | [ef-global-contribute-app-handoff.md](ef-global-contribute-app-handoff.md) |
+| Public dashboard | **Live** (staging counts visible; zero public cohorts) ([dashboard](https://edgefit-ai.pages.dev/dashboard.html)) | Handoff `cba27c3` §H |
+| Signed public release | v0.2.1-preview.1 published; signed-release physical-install test not yet verified | [edgefit-release-and-distribution.md](edgefit-release-and-distribution.md) |
 
 ## Key design rules
 
