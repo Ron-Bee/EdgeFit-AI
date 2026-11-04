@@ -104,20 +104,6 @@ The [official hackathon overview](https://cerebralvalley.ai/e/meta-ai-developer-
 
 All screenshots are genuine device captures. Model-compatibility estimates are unverified until measured; public Global aggregates should not be claimed until qualified contributions exist.
 
-#### Complete capture index
-
-| Home dashboard: device card, live telemetry, staged model, last measurement | ![Home dashboard](assets/screenshots/home-dashboard.png) |
-| Device Details (live): specs plus live battery, thermal, memory | ![Device details](assets/screenshots/device-details.png) |
-| Benchmark setup: model, configuration, evidence-sharing steps | ![Benchmark setup](assets/screenshots/benchmark-setup.png) |
-| Benchmark tab: config line, memory readiness, Run Benchmark | ![Benchmark execution](assets/screenshots/benchmark-execution.png) |
-| Completed run: 64/64 tokens, measured 15.3 tok/s with chart | ![Benchmark result](assets/screenshots/benchmark-result.png) |
-| Sessions ledger: durable prediction → benchmark records | ![Sessions](assets/screenshots/sessions.png) |
-| Agent tab: bounded optimization with explicit approvals | ![Agent](assets/screenshots/agent-view.png) |
-| Meta API settings: session-only key custody, explicit authorization | ![Meta BYOK](assets/screenshots/meta-byok.png) |
-| Recommended models: measured values vs unverified estimates | ![Model recommendations](assets/screenshots/model-recommendations.png) |
-| Contribute review: run provenance with consent scope | ![Global contribute](assets/screenshots/global-contribute.png) |
-| Settings: workload, export, diagnostics, Global connection, build | ![Settings](assets/screenshots/settings.png) |
-
 ## D. Model recommendations
 
 A major EdgeFit feature: the offline GGUF catalog recommends candidate models for *your measured hardware* — weighing compatibility (ABI, runtime), model size against device RAM/storage constraints, and estimated performance with explicit uncertainty. Every card carries provenance (catalog version, source) and states what is known vs guessed.
