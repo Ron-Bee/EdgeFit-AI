@@ -18,7 +18,8 @@ Built for the 2026 Meta Global AI Developer Hackathon.
 <a href="https://edgefit-ai.pages.dev/">Project Website</a> ·
 <a href="https://edgefit-ai.pages.dev/dashboard">Global Evidence Dashboard</a> ·
 <a href="https://youtu.be/8IhWPMv60Gw">Extended 10:09 Demo</a> ·
-<a href="https://github.com/Ron-Bee/EdgeFit-AI/releases/download/v0.2.1-preview.1/SHA256SUMS.txt">APK Checksum</a>
+<a href="https://github.com/Ron-Bee/EdgeFit-AI/releases/download/v0.2.1-preview.1/SHA256SUMS.txt">APK Checksum</a> ·
+<a href="https://tally.so/r/Ge68P2"><b>Request Contributor Access</b></a>
 </p>
 
 
@@ -232,7 +233,7 @@ Help build a real-world evidence network for on-device AI: run benchmarks on you
 
 What contributors need: a physical arm64-v8a device, the [pre-release APK](#j-download--install--requirements), a self-provided GGUF model, and — after approval — one credential per installation, pasted into Settings > EdgeFit Global Connection. You choose which sessions to submit, review each payload, and tap **Approve and upload**; nothing uploads automatically or in the background, and model files and Meta API keys are never collected.
 
-> **Request status (2026-11-04):** the public request channel is pending owner setup — no live request endpoint exists yet. Full procedure, contribution terms, consent rules, and the draft request template: [Contributor onboarding guide](docs/global-contributor-onboarding.md).
+> **Contributor access requests are now accepted** through the [EdgeFit Global registration form](https://tally.so/r/Ge68P2). Requests are manually reviewed. Approval and credential issuance are not automatic. Full procedure, contribution terms, and consent rules: [Contributor onboarding guide](docs/global-contributor-onboarding.md).
 
 Accepted submissions are not automatically published: evidence must still clear validation, qualification, the exact-cohort quorum (≥5 eligible runs from ≥3 installs), and Publication Approval B (OFF). Consent contact details never enter the dataset or dashboard.
 

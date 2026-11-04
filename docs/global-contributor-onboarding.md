@@ -4,14 +4,13 @@ Help build a real-world evidence network for on-device AI. Run benchmarks
 on your own Android device and voluntarily contribute verified performance
 measurements.
 
-## Request status (read first)
+## Request Contributor Access
 
-> **2026-11-04: the public request channel is pending owner setup.**
-> This guide documents the complete, genuine procedure so an outside user
-> can see exactly how contributor access works. The request endpoint below
-> is a **draft** until the owner approves a contact destination — no access
-> requests are being accepted yet, and nothing here issues a credential.
-> Approval is manual and never automatic.
+Contributor access requests are now accepted through the EdgeFit Global
+registration form. Requests are manually reviewed. Approval and
+credential issuance are not automatic.
+
+**[Request Contributor Access](https://tally.so/r/Ge68P2)**
 
 ## What contributors are helping build
 
@@ -22,16 +21,15 @@ pooled across different hardware. Each accepted contribution moves through
 validation, qualification, an exact-cohort quorum (**≥5 eligible runs from
 ≥3 distinct installs**), and Publication Approval B (currently **OFF**).
 The [live dashboard](https://edgefit-ai.pages.dev/dashboard) shows the
-current state: staging contributions received, zero public cohorts
-published — the empty state is the correct output until a cohort clears
-every gate.
+current state: genuine staging contributions accepted, but no qualified
+public cohorts published while the gate is closed.
 
 ## Who can request access
 
 Any adult with a compatible physical Android device who agrees to the
-contribution terms below. Participation is voluntary: you benchmark
-locally, you choose which sessions to submit, and you review each
-contribution before explicitly authorizing its upload. No benchmarks
+contribution terms in this guide. Participation is voluntary: you
+benchmark locally, you choose which sessions to submit, and you review
+each contribution before explicitly authorizing its upload. No benchmarks
 upload automatically, in the background, or without your tap on
 **Approve and upload**.
 
@@ -52,20 +50,17 @@ You do **not** need a Meta API key to contribute benchmark evidence
 (Meta features are optional, owner-keyed, and separate), and you must
 never send one with your request.
 
-## How to request a credential
+## The registration form
 
-**Request Contributor Access** — *draft endpoint, pending owner
-approval of a contact destination.*
-
-When the channel opens, a request contains:
+The [EdgeFit Global registration form](https://tally.so/r/Ge68P2)
+collects:
 
 REQUIRED:
 
 - Contact email (used only to review and respond to your request).
 - Android device manufacturer/model.
 - Android version.
-- Request for one device installation.
-- Agreement to the contribution terms in this guide.
+- Agreement to be contacted about your request.
 
 OPTIONAL:
 
@@ -73,66 +68,48 @@ OPTIONAL:
 - GitHub username.
 - Notes or questions.
 
-Never required: real name, home address, device serial number, IMEI,
-an existing bearer [REDACTED] a Meta API key, a Google password, or benchmark
-files. Do not send credentials of any kind with your request.
+The form never asks for: real name, home address, device serial number,
+IMEI, an existing bearer [REDACTED] a Meta API key, a Google password, or
+benchmark files. It does not approve contributors, generate credentials,
+or upload evidence — it only submits your request for manual review.
 
-### Draft email request (do not send yet)
-
-```text
-To: [OWNER-APPROVED ADDRESS — TO BE PUBLISHED; NO REQUESTS ACCEPTED YET]
-Subject: EdgeFit Global — Contributor Access Request
-
-Hello EdgeFit AI team,
-
-I would like to request access to contribute
-benchmark evidence to EdgeFit Global.
-
-Android device model:
-Android version:
-GitHub username (optional):
-
-I understand that:
-- Access requires approval.
-- A unique per-install credential is required.
-- Benchmark contributions require my consent.
-- Accepted submissions are not guaranteed
-  public publication.
-
-Thank you.
-```
-
-Contact information submitted with a request is used only to review and
-respond to that request, and only with your explicit permission for that
-limited use. It never enters the benchmark dataset or the public
-dashboard. Approval is manual; requests may be approved or denied, and a
+Contact information submitted through the form is used solely to review
+and respond to your access request, and only with your explicit
+permission for that limited use. Form contact data is not benchmark
+evidence, is never publicly visible, and never enters the benchmark
+dataset or the public dashboard. Requests may be approved or denied; a
 submitted request is not a credential.
+
+## From request to first contribution
+
+1. Download the compatible EdgeFit AI Android APK from the
+   [pre-release](https://github.com/Ron-Bee/EdgeFit-AI/releases/tag/v0.2.1-preview.1).
+2. Supply your own supported GGUF model file.
+3. Run local benchmark measurements on your device.
+4. Request contributor access via the
+   [registration form](https://tally.so/r/Ge68P2).
+5. Wait for manual owner review and approval.
+6. Receive a unique installation credential through an approved
+   private channel. It cannot be recovered if lost — only rotated.
+7. Enter the credential in the app under Settings >
+   **EdgeFit Global Connection** (session-only by default; optional
+   Keystore-backed persistence; only a last-4 suffix is ever shown).
+8. Select the completed sessions you want to contribute.
+9. Review the exact contribution payload on-device.
+10. Tap **Approve and upload** — the only action that sends data.
+    The backend authenticates your install, validates the envelope,
+    and returns a submission receipt.
 
 ## How issuance works (existing governed process)
 
 Contribution credentials are minted exclusively by a human operator
 through the repository's existing enrollment procedure. There is no
 self-registration endpoint, no public token generator, and no automatic
-issuance — this guide changes none of that.
-
-1. The owner reviews your contributor request.
-2. The owner approves or denies enrollment.
-3. For approvals, the owner mints one credential with the existing
-   operator issuance tool: a fresh random installation id, a 256-bit
-   credential stored server-side as a hash only, the issuance recorded
-   under an approval reference with physical-device attestation.
-4. The credential is delivered to you once, confidentially. It cannot
-   be recovered if lost — only rotated.
-5. You paste it into the app under Settings >
-   **EdgeFit Global Connection** (session-only by default; optional
-   Keystore-backed persistence; only a last-4 suffix is ever shown).
-6. You run benchmarks locally and choose which sessions to contribute.
-7. You review the exact contribution payload on-device.
-8. You tap **Approve and upload** — the only action that sends data.
-9. The backend authenticates your install, validates the envelope, and
-   returns a submission receipt.
-10. Accepted evidence proceeds through qualification toward (not onto)
-    the public dashboard, per the gates below.
+issuance — this guide changes none of that. Each approval mints one
+credential (fresh random installation id, 256-bit credential stored
+server-side as a hash only, issuance recorded under an approval
+reference with physical-device attestation) and delivers it once,
+confidentially.
 
 Credentials never appear in GitHub issues, form responses, URLs,
 READMEs, dashboards, logs, screenshots, or analytics.
@@ -165,7 +142,7 @@ id, contacts, location, model files, or API keys are collected.
   counted as salted hashes, never exposed.
 
 Accepted submissions are not automatically published as global results.
-With Approval B OFF, the dashboard's zero-publication state is correct.
+With Approval B OFF, no public cohorts are published.
 
 ## Safeguards that stay in force
 
