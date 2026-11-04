@@ -226,6 +226,16 @@ The live project site and Global Evidence dashboard are linked in **Start Here**
 
 Never fabricate populated dashboards, device fleet results, or signed-download links to fill visual gaps.
 
+## Contribute to EdgeFit Global
+
+Help build a real-world evidence network for on-device AI: run benchmarks on your own Android device and voluntarily contribute verified performance measurements. Any adult with a compatible physical device may request access; participation is voluntary, requests are reviewed before approval, and a unique per-install credential is required.
+
+What contributors need: a physical arm64-v8a device, the [pre-release APK](#j-download--install--requirements), a self-provided GGUF model, and — after approval — one credential per installation, pasted into Settings > EdgeFit Global Connection. You choose which sessions to submit, review each payload, and tap **Approve and upload**; nothing uploads automatically or in the background, and model files and Meta API keys are never collected.
+
+> **Request status (2026-11-04):** the public request channel is pending owner setup — no live request endpoint exists yet. Full procedure, contribution terms, consent rules, and the draft request template: [Contributor onboarding guide](docs/global-contributor-onboarding.md).
+
+Accepted submissions are not automatically published: evidence must still clear validation, qualification, the exact-cohort quorum (≥5 eligible runs from ≥3 installs), and Publication Approval B (OFF). Consent contact details never enter the dataset or dashboard.
+
 ## J. Download / install / requirements
 
 **Android pre-release v0.2.1-preview.1 is published** ([release](https://github.com/Ron-Bee/EdgeFit-AI/releases/tag/v0.2.1-preview.1), [direct APK](https://github.com/Ron-Bee/EdgeFit-AI/releases/download/v0.2.1-preview.1/EdgeFit-AI-Android-v0.2.1-preview.1-arm64.apk), [SHA-256](https://github.com/Ron-Bee/EdgeFit-AI/releases/download/v0.2.1-preview.1/SHA256SUMS.txt)); signed-release physical-install testing is not yet verified. Earlier builds were debuggable owner-testing images and are explicitly not release candidates — do not distribute them. Gate tracker: [docs/release-readiness.md](docs/release-readiness.md).
