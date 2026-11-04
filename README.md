@@ -5,7 +5,8 @@
 <div align="right">
   <strong>JUDGE QUICK ACCESS</strong><br>
   <strong>Download Android APK:</strong> <em>Pending signed public release</em> · <a href="docs/release-readiness.md">Release gate</a><br>
-  <strong>Watch demo:</strong> <em>Pending final video</em> · <a href="docs/demo.md">Demo guide</a><br>
+  <strong>Official 2:55 hackathon demo:</strong> <em>In production</em> · <a href="docs/demo.md">Demo guide</a><br>
+  <strong>Extended 10:09 unedited demo:</strong> <a href="https://youtu.be/8IhWPMv60Gw">Watch on YouTube</a><br>
   <strong>Project website:</strong> <a href="https://edgefit-ai.pages.dev/">EdgeFit AI</a><br>
   <strong>Global Evidence dashboard:</strong> <a href="https://edgefit-ai.pages.dev/dashboard.html">Explore dashboard</a><br>
   <strong>Full walkthrough PDF:</strong> <a href="docs/walkthrough/v1.1/EdgeFit_AI_Definitive_Walkthrough_v1.1.pdf">Definitive Walkthrough v1.1 (PDF)</a> · <a href="docs/walkthrough/v1.1/README.md">Guide</a> · <a href="docs/walkthrough/v1.0/README.md">v1.0 archive</a><br>
@@ -21,7 +22,9 @@ Built for the **2026 Meta Global AI Developer Hackathon**.
 
 > **Status update (2026-11-03):** Definitive Walkthrough v1.0 published — the illustrated technical guide (40 genuine screenshots, 16 technical diagrams) as a searchable 65-page PDF plus the editable Word master: [docs/walkthrough/v1.0/](docs/walkthrough/v1.0/README.md). No demo-video link is published yet. No signed public APK exists yet.
 >
-> **Status update (2026-11-03):** Definitive Walkthrough v1.1 published — the polished editorial revision (58 placed figures across 62 numbered positions, corrected ledger and captions, two new agent-session screenshots): [docs/walkthrough/v1.1/](docs/walkthrough/v1.1/README.md). v1.0 remains available as the historical archive. No demo-video link is published yet. No signed public APK exists yet.
+> **Status update (2026-11-03):** Definitive Walkthrough v1.1 published — the polished editorial revision (58 placed figures across 62 numbered positions, corrected ledger and captions, two new agent-session screenshots): [docs/walkthrough/v1.1/](docs/walkthrough/v1.1/README.md). v1.0 remains available as the historical archive. At publication time, no demo video or signed public APK was available.
+>
+> **Video update (2026-11-03):** The [extended 10:09 unedited Android technical demonstration](https://youtu.be/8IhWPMv60Gw) is published. The separately edited official 2:55 hackathon demo remains in production. The extended recording shows an earlier Android UI and is not a substitute for the official short submission video.
 
 
 ## A. Why Android? Hardware fragmentation is the problem
@@ -310,6 +313,8 @@ Built for the **2026 Meta Global AI Developer Hackathon** (deadline Nov 4, 2026)
 
 ## R. Video and verified submission links
 
-**Demo video coming soon.** No video link is published yet; this section will be updated with the verified URL. A demonstration script is ready in [docs/demo.md](docs/demo.md).
+**Extended, unedited technical demo (10:09):** [Watch the November 3 Android screen recording on YouTube](https://youtu.be/8IhWPMv60Gw). This continuous recording shows BYOLLM/GGUF inspection, native benchmarking, Meta Muse prediction and agent workflows, and consent-controlled Global Evidence contribution. It captures an earlier UI before subsequent Android lifecycle fixes; submitted evidence is not the same as a qualified or published global cohort.
 
-Verified links: this repository, the [live dashboard](https://edgefit-ai.pages.dev/dashboard.html), the [walkthrough PDF](docs/walkthrough/v1.1/EdgeFit_AI_Definitive_Walkthrough_v1.1.pdf), and the public read API above. No download or video URL is claimed anywhere in this README beyond what exists — pending items are labeled PENDING with no href.
+**Official 2:55 hackathon demo:** In production; the final submission URL remains pending. See the [demo guide](docs/demo.md).
+
+Verified links: this repository, the [live dashboard](https://edgefit-ai.pages.dev/dashboard.html), the [walkthrough PDF](docs/walkthrough/v1.1/EdgeFit_AI_Definitive_Walkthrough_v1.1.pdf), and the public read API above. The extended YouTube demo is linked above; the signed public APK and official 2:55 video remain pending and are not represented as available.
