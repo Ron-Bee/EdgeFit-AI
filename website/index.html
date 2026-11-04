@@ -37,12 +37,13 @@ Benchmark locally. Compare results with real evidence.</p>
 real on-device llama.cpp inference, never simulated numbers.</p>
 <div class="cta-row">
 <a class="btn btn-primary" href="download.html">Download for Android</a>
+<a class="btn btn-ghost" href="https://youtu.be/KyUwmhIL6SM" target="_blank" rel="noopener noreferrer">Watch the Demo</a>
 <a class="btn btn-ghost" href="dashboard.html">Explore Global Evidence</a>
 <a class="btn btn-ghost" href="https://ronbeesoftware.com/edgefit/walkthrough/">Read the Walkthrough</a>
 <a class="btn btn-ghost" href="https://github.com/Ron-Bee/EdgeFit-AI">View GitHub</a>
 </div>
-<p class="caption" style="text-align:left">Official 2:55 hackathon demo
-<span class="status-tag pending">in production</span> · <a href="https://youtu.be/8IhWPMv60Gw" target="_blank" rel="noopener noreferrer">Watch the extended 10:09 unedited Android demo</a>
+<p class="caption" style="text-align:left"><a href="https://youtu.be/KyUwmhIL6SM" target="_blank" rel="noopener noreferrer">Official 2:55 hackathon demo</a>
+<span class="status-tag ok">published</span> · <a href="https://youtu.be/8IhWPMv60Gw" target="_blank" rel="noopener noreferrer">Watch the extended 10:09 unedited Android demo</a>
 <span class="status-tag ok">published</span> · <a href="https://ronbeesoftware.com/edgefit/walkthrough/">Full technical walkthrough v1.1</a> <span class="status-tag ok">published</span> · <a href="https://github.com/Ron-Bee/EdgeFit-AI/tree/main/docs/walkthrough/v1.0">v1.0 archive</a></p>
 </div>
 <div>
@@ -52,6 +53,15 @@ real on-device llama.cpp inference, never simulated numbers.</p>
 <p class="caption">Captured on-device <span class="status-tag ok">real screenshot</span> — status bar and time are from the original capture.</p>
 </div>
 </div>
+
+<h2>See EdgeFit AI in Action</h2>
+<p>Watch a 2-minute-55-second demonstration of hardware-aware model evaluation, real on-device inference, Meta-assisted reasoning, and evidence verification.</p>
+<div class="video-frame">
+<button type="button" class="video-thumb" data-embed="https://www.youtube.com/embed/KyUwmhIL6SM" aria-label="Play the official 2:55 EdgeFit AI demo video">
+<img src="https://img.youtube.com/vi/KyUwmhIL6SM/hqdefault.jpg" width="480" height="360" loading="lazy" decoding="async" alt="Thumbnail of the official EdgeFit AI hackathon demo video">
+</button>
+</div>
+<p class="caption">Player loads only when you press play. <a href="https://youtu.be/KyUwmhIL6SM" target="_blank" rel="noopener noreferrer">Watch on YouTube</a> · <a href="https://youtu.be/8IhWPMv60Gw" target="_blank" rel="noopener noreferrer">Extended 10:09 unedited demo</a> · <a href="https://github.com/Ron-Bee/EdgeFit-AI/releases/tag/v0.2.1-preview.1" target="_blank" rel="noopener noreferrer">Android APK pre-release</a></p>
 
 <hr class="rule">
 
@@ -198,5 +208,21 @@ results as its own.</p>
 <a href="https://github.com/Ron-Bee/EdgeFit-AI">Source on GitHub</a></p>
 </footer>
 <script src="demo.js" defer></script>
+<script>
+(function () {
+  "use strict";
+  document.querySelectorAll(".video-thumb").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var frame = document.createElement("iframe");
+      frame.src = btn.getAttribute("data-embed") + "?rel=0";
+      frame.title = "Official EdgeFit AI 2:55 hackathon demo";
+      frame.setAttribute("allow", "accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture");
+      frame.setAttribute("allowfullscreen", "");
+      frame.setAttribute("loading", "lazy");
+      btn.replaceWith(frame);
+    }, { once: true });
+  });
+})();
+</script>
 </body>
 </html>

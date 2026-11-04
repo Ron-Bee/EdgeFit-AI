@@ -430,6 +430,54 @@ button.btn { font: inherit; cursor: pointer; }
   margin-top: 0.6rem;
 }
 
+/* ---- click-to-load video ---- */
+.video-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  max-width: 56rem;
+  margin: 1rem auto;
+  background: #000;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+.video-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+.video-thumb {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: #000;
+  cursor: pointer;
+}
+.video-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.video-thumb::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-left: 2.2rem solid #fff;
+  border-top: 1.4rem solid transparent;
+  border-bottom: 1.4rem solid transparent;
+  filter: drop-shadow(0 0 12px rgba(0, 0, 0, 0.7));
+}
+.video-thumb:hover::after { border-left-color: var(--accent); }
+.video-thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
 /* ---- responsive ---- */
 @media (max-width: 48rem) {
   .hero { grid-template-columns: 1fr; }
