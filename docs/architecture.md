@@ -43,7 +43,7 @@ flowchart TB
 | Bounded agent loop (EF-AGENT-01) | Host + one scoped live loop | [edgefit-agentic-workflow.md](edgefit-agentic-workflow.md) |
 | Workstation SQLite + importers | Qualified (additive migrations 2, 3) | [ef-data-02-import.md](ef-data-02-import.md), [ef-data-03-bench.md](ef-data-03-bench.md) |
 | Validated retrieval + dispatch | Offline + live qualified | [muse-integration.md](muse-integration.md) |
-| Cloud backend | **Deployed** (3 Workers + D1), 297/297 PASS @ `cba27c3`, zero genuine rows | [README global section](../README.md#i-global-evidence-system-deployed-honestly-empty) |
+| Cloud backend | **Deployed** (3 Workers + D1), 297/297 PASS @ `cba27c3`, zero genuine rows | [README global section](../README.md#i-global-evidence-system-deployed-staging-contributions-received-no-qualified-public-cohorts-published) |
 | Global contribution client | Host-qualified; backend live, first genuine upload not run | [ef-global-contribute-app-handoff.md](ef-global-contribute-app-handoff.md) |
 | Public dashboard | **Live, honestly empty** ([dashboard](https://edgefit-ai.pages.dev/dashboard.html)) | Handoff `cba27c3` §H |
 | Signed public release | Not started | [edgefit-release-and-distribution.md](edgefit-release-and-distribution.md) |

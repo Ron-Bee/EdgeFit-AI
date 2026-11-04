@@ -30,17 +30,9 @@ Built for the 2026 Meta Global AI Developer Hackathon.
 
 **[Watch the 2:55 Demo](https://youtu.be/KyUwmhIL6SM)** — the official hackathon demonstration: hardware-aware model evaluation, real on-device inference, Meta-assisted reasoning, and evidence verification. The [extended 10:09 unedited recording](https://youtu.be/8IhWPMv60Gw) shows an earlier build in full. [Demo guide](docs/demo.md).
 
-> **Release update (2026-11-04):** The official 2:55 hackathon demo is published ([YouTube](https://youtu.be/KyUwmhIL6SM)), and Android pre-release v0.2.1-preview.1 is published with a verified SHA-256 (`BC32EC0F…C61E6`). Signed-release physical-install testing is not yet verified. The extended 10:09 recording remains available as the unedited technical capture.
-
-> **Status snapshot (2026-11-01):** on-device benchmark + prediction sessions are implemented and physically demonstrated on a Galaxy S22 Ultra; the **Global Evidence backend is deployed and the public dashboard is live** (honestly empty — zero genuine publications yet). No demo-video link is published yet. No signed public APK exists yet. See [Limitations](#p-limitations-known-issues-and-roadmap).
-
-**Quick access:** The walkthrough PDF is published (see Start Here above). The APK download links to the published v0.2.1-preview.1 pre-release (signed-release physical-install test not yet verified). The direct website and dashboard links above are available for inspection; public aggregate data is not yet qualified.
-
-> **Status update (2026-11-03):** Definitive Walkthrough v1.0 published — the illustrated technical guide (40 genuine screenshots, 16 technical diagrams) as a searchable 65-page PDF plus the editable Word master: [docs/walkthrough/v1.0/](docs/walkthrough/v1.0/README.md). No demo-video link is published yet. No signed public APK exists yet.
+> **Current release status (2026-11-04):** the official 2:55 hackathon demo is published ([YouTube](https://youtu.be/KyUwmhIL6SM)); the extended 10:09 unedited technical recording remains available ([YouTube](https://youtu.be/8IhWPMv60Gw)); Android pre-release v0.2.1-preview.1 is public with verified SHA-256 (`BC32EC0F…C61E6`) while signed-release physical-install testing is not yet verified; the Definitive Walkthrough v1.1 is current ([guide](docs/walkthrough/v1.1/README.md), v1.0 archived); the website and Global Evidence dashboard are live; Global publication stays gated — staging contributions received, zero public cohorts published.
 >
-> **Status update (2026-11-03):** Definitive Walkthrough v1.1 published — the polished editorial revision (58 placed figures across 62 numbered positions, corrected ledger and captions, two new agent-session screenshots): [docs/walkthrough/v1.1/](docs/walkthrough/v1.1/README.md). v1.0 remains available as the historical archive. At publication time, no demo video or signed public APK was available.
->
-> **Video update (2026-11-03):** The [extended 10:09 unedited Android technical demonstration](https://youtu.be/8IhWPMv60Gw) is published. The separately edited official 2:55 hackathon demo remains in production. The extended recording shows an earlier Android UI and is not a substitute for the official short submission video.
+> **Release history:** 11-01 — on-device benchmark + prediction sessions physically demonstrated on a Galaxy S22 Ultra; backend deployed, dashboard live. 11-03 — Walkthrough v1.0 (65-page PDF + Word master) and v1.1 (58 placed figures) published; extended 10:09 demo published. 11-04 — official 2:55 demo and Android pre-release published (see above).
 
 
 ## A. Why Android? Hardware fragmentation is the problem
@@ -100,7 +92,7 @@ The [official hackathon overview](https://cerebralvalley.ai/e/meta-ai-developer-
 | **Meta AI use** | [Muse Spark's prediction, follow-up and bounded proposals](#f-meta-ai-capabilities), [integration details](docs/muse-integration.md) |
 | **Technical ambition / depth** | [Architecture](#l-architecture-diagram-and-technical-stack), [native harness and tests](#h-test-harness-and-engineering-achievements), [measured evidence](#g-scientific-methodology-and-measured-findings) |
 | **Working implementation / demo** | [Physical screenshots](#c-product-screenshot-gallery), [reproduction guide](#n-reproduction-instructions), [demo instructions](docs/demo.md), [qualification limitations](#p-limitations-known-issues-and-roadmap) |
-| **Transparent scale claims** | [Global Evidence status](#i-global-evidence-system-deployed-honestly-empty), [provenance](docs/evidence-methodology.md); no invented multi-device publications |
+| **Transparent scale claims** | [Global Evidence status](#i-global-evidence-system-deployed-staging-contributions-received-no-qualified-public-cohorts-published), [provenance](docs/evidence-methodology.md); no invented multi-device publications |
 
 All screenshots are genuine device captures. Model-compatibility estimates are unverified until measured; public Global aggregates should not be claimed until qualified contributions exist.
 
@@ -201,7 +193,7 @@ Full claim→artifact map: [docs/evidence-showcase.md](docs/evidence-showcase.md
 
 Re-run everything offline: [Local development](#o-local-development-and-reproducible-tests).
 
-## I. Global Evidence System (deployed, honestly empty)
+## I. Global Evidence System (deployed; staging contributions received; no qualified public cohorts published)
 
 The Global backend is **deployed on Cloudflare Free** (three Workers + one D1 database) and the public dashboard is **live**:
 
@@ -215,9 +207,9 @@ The Global backend is **deployed on Cloudflare Free** (three Workers + one D1 da
 
 **Methodology:** a cohort matches exactly on device class, model SHA-256, quantization, runtime, workload + prompt identity, context, threads, tokens, sampler, optimization, and build provenance. Publication needs **≥5 eligible runs from ≥3 distinct installs in the same exact cohort** — SM-S908U and SM-S906U are different cohorts, never pooled. Installs ≠ attested devices. Synthetic/legacy rows are permanently ineligible.
 
-**Current status (2026-11-01): zero genuine publications.** 19 legacy/synthetic test rows, 0 `device_contribution` rows, empty allowlist, consent `ef-consent-01` PROPOSED not approved, first genuine upload (P0) not run. The dashboard's empty charts and `artifacts:[]` API responses are the *correct* output — nothing estimated, nothing filled in.
+**Earlier status (2026-11-01, superseded — zero genuine publications then).** 19 legacy/synthetic test rows, 0 `device_contribution` rows, empty allowlist, consent `ef-consent-01` PROPOSED not approved, first genuine upload (P0) not run. The dashboard's empty charts and `artifacts:[]` API responses are the *correct* output — nothing estimated, nothing filled in.
 
-**Current status (2026-11-04):** 34 accepted staging contributions from 3 installs under ef-consent-01 (SM-S908U 14, SM-S906U 10, Pixel XL 10); 0 published — publication gate closed, exact-cohort quorum unmet (closest cohort: 11 runs / 1 install; quorum needs 5 / 3). Live counts: [dashboard](https://edgefit-ai.pages.dev/dashboard).
+**Current status (2026-11-04, API 16:14 UTC):** 36 accepted staging contributions from 3 installs under ef-consent-01 (SM-S908U 15, SM-S906U 11, Pixel XL 10); 0 published — publication gate closed, exact-cohort quorum unmet (closest cohort: 11 runs / 1 install; quorum needs 5 / 3). Live counts: [dashboard](https://edgefit-ai.pages.dev/dashboard).
 
 **Independently verified by this workstream (2026-11-01):** dashboard 200 with honest empty copy; `/v1/models` → `artifacts:[]`; ingest `GET /v1/models` → 404 (narrow routing intact); backend suite 297/297 re-run from the pinned-commit archive; rate-limit (120) and scheduler ceiling (10) confirmed in source. D1 census and 401 behavior attributed to Muse B's dated handoff (`cba27c3`).
 
@@ -319,10 +311,10 @@ Live Meta round trips are owner-executed only, require `MODEL_API_KEY`, and neve
 - Physical evidence spans **three contributing installs** (Galaxy S22 Ultra, S22+, Pixel XL) with small per-config samples (1–3 runs per config): all comparisons are **exploratory**, not confirmatory.
 - Device-profile collection is **not** inference benchmarking; only COMPLETED bench runs count as measurements.
 - The one live BYOK session, one agent loop, and six-run study are scoped demonstrations — see [qualification-status](docs/qualification-status.md).
-- Global backend + dashboard are **deployed** (verified 2026-11-04): 34 accepted staging contributions from 3 installs, zero published cohorts â€” publication gate closed, exact-cohort quorum unmet (closest cohort: 11 runs / 1 install; live counts on the [dashboard](https://edgefit-ai.pages.dev/dashboard)).
+- Global backend + dashboard are **deployed** (verified 2026-11-04 16:14 UTC): 36 accepted staging contributions from 3 installs, zero published cohorts â€” publication gate closed, exact-cohort quorum unmet (closest cohort: 11 runs / 1 install; live counts on the [dashboard](https://edgefit-ai.pages.dev/dashboard)).
 - Signed Android pre-release v0.2.1-preview.1 is published ([release](https://github.com/Ron-Bee/EdgeFit-AI/releases/tag/v0.2.1-preview.1)); physical-install test not yet verified; no Play listing ([note](docs/play-distribution-note.md)).
 - On Nov 1 the study phone's benchmark package was removed by an unattributed actor and a fresh base build installed (later INSTALL-07 recovery reported PASS on the S22); workstation evidence is intact; governed by mandatory safe-install preflight ([ef-safe-install-01](docs/ef-safe-install-01.md)).
-- Roadmap: public-preview APK → first genuine uploads + quorum → Play publication. Proposed-only: none remaining in the showcase — the explorer is deployed.
+- Roadmap: exact-cohort quorum + first public cohorts → Play publication. Proposed-only: none remaining in the showcase — the explorer is deployed.
 
 ## Q. Hackathon information and original-work scope
 
