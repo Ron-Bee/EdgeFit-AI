@@ -320,6 +320,14 @@ Live Meta round trips are owner-executed only, require `MODEL_API_KEY`, and neve
 
 Built for the **2026 Meta Global AI Developer Hackathon** (deadline Nov 4, 2026). Original work: Android harness + Aero UI, session/agent/consent architecture, cloud foundation + deployed Global backend, dashboard website, study design + frozen corpus, and all documentation. Pinned third-party code: llama.cpp v0.7.0 (reviewed, ownership-tested). Meta Muse Spark (`muse-spark-1.3`) used via API for predictions, follow-ups, and agent proposals; Muse Code assisted test-harness and scaffolding development. No license file is published yet; until one is added, no reuse rights are granted. (Owner action: approve and add `LICENSE`.)
 
+### AI-Assisted Development at Scale
+
+EdgeFit AI was developed for the 2026 Meta Global AI Developer Hackathon using an intensive AI-assisted engineering workflow with Meta Muse Spark.
+
+The October 29–November 4 development-account usage export records **20,620 model requests, 2.56 billion cached input tokens, 164.7 million uncached input tokens, and 13.6 million output tokens**.
+
+These account-level figures are not isolated exclusively to EdgeFit AI. Muse assisted with implementation, testing, debugging, documentation, and release preparation. Project claims remain grounded in code, tests, and real-device evidence.
+
 ## R. Video and verified submission links
 
 **Extended, unedited technical demo (10:09):** [Watch the November 3 Android screen recording on YouTube](https://youtu.be/8IhWPMv60Gw). This continuous recording shows BYOLLM/GGUF inspection, native benchmarking, Meta Muse prediction and agent workflows, and consent-controlled Global Evidence contribution. It captures an earlier UI before subsequent Android lifecycle fixes; submitted evidence is not the same as a qualified or published global cohort.
