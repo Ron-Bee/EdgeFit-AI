@@ -1,10 +1,10 @@
 # Demo
 
-## Demo video
+## Demo videos
 
-**Demo video coming soon.** No video URL is published yet. When the
-recording is ready, the owner will add the verified link here and in
-the README.
+**Extended, unedited Android demonstration (10:09, November 3, 2026):** [Watch on YouTube](https://youtu.be/8IhWPMv60Gw). This is an earlier-build continuous technical capture, not the official hackathon short submission.
+
+**Official 2:55 hackathon submission demo:** In production; its final URL is pending.
 
 ## Demonstration flow (live version; official submission video is max THREE minutes)
 
