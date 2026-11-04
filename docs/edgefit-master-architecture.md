@@ -371,3 +371,35 @@ pre-submission sequence (agent qualification → UX design →
 UX build → report milestone → device crawl → distribution
 gates → demo) is recorded in the traceability roadmap, with
 cloud, stats, web, and multi-model work retained long-term.
+
+## 19. Installation identity and evidence preservation (EF-SAFE-INSTALL-01, MANDATORY)
+
+Distinct `applicationId` values are distinct applications
+with mutually invisible app-private storage: installing
+one identity never preserves, migrates, or touches
+another's sessions, evidence, or credentials. No
+destructive or identity-changing APK operation on a
+data-bearing installation proceeds without the ten
+FR-SAFE-01 gates (device, user, applicationId +
+variant, signing, installed identity, pre-install
+inventory, verified backup, explicit owner
+authorization, post-install checks, fail-closed).
+`adb install -r` alone never proves data safety.
+
+November 1 S22 Ultra incident (recorded without
+attribution): the historical benchmark package was
+removed (Android logs confirmed deletePackageX
+activity; initiating actor not established) and a
+fresh base-package install followed; original
+app-private sessions were not recovered while
+independent workstation benchmark evidence survives
+per the forensic inventory. Attribution work stopped
+per owner directive; three physical tests are
+scheduled for repetition under this rule.
+
+Open variant-identity conflict (owner decision
+required, see `ef-gov-03-reconciliation.md` C1/C2):
+the PROPOSED public-preview identity equals the
+debug identity, and all qualified on-device evidence
+was gathered under `.bench`. No accepted section
+above is altered by this addition.

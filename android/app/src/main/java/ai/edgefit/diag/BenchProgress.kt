@@ -268,6 +268,14 @@ class BenchTpsSamples(private val capacity: Int = 2048) {
 
     fun snapshot(): List<Sample> = deque.toList()
 
+    /**
+     * Restores samples (rotation carry-over). Ordering and
+     * capacity rules still apply per sample.
+     */
+    fun restore(samples: List<Sample>) {
+        for (sample in samples) add(sample.elapsedMs, sample.generated)
+    }
+
     val size: Int get() = deque.size
 
     fun clear() {

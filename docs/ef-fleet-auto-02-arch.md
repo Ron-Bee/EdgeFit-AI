@@ -78,3 +78,18 @@ Fleet branch ref created: `fleet/auto-02-harness-2026-10-31` (no checkout).
 3. New study freeze per device cohort (required; S22 freeze not reused).
 4. Backup retention/encryption for `EdgeFit-Evidence` (contains raw runs).
 5. Whether fleet harness source may enter public Git (no evidence/keys).
+
+## 6. EF-SAFE-INSTALL-01 applicability (mandatory)
+
+Every fleet-device install, update, reinstall, or
+identity-affecting operation on this program falls
+under FR-SAFE-01: device + user confirmation, APK
+applicationId/variant + signing checks against the
+approved manifest, pre-install session/evidence
+inventory, verified backup, explicit owner
+authorization for destructive steps, post-install
+preservation checks, fail-closed. The Nov 1 S22
+Ultra incident (benchmark identity removed, fresh
+base identity installed, app-private sessions
+unrecovered) is the reason this gate exists. No
+fleet batch proceeds without it.

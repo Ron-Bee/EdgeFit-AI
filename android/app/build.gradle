@@ -34,7 +34,18 @@ android {
 
     buildTypes {
         debug {
-            buildConfigField "String", "NATIVE_OPT", '"toolchain default (unoptimized)"'
+            // EF-BENCH-STALL-03: debug builds use the same -O3 native flags
+            // as the benchmark variant. The unoptimized (-O0) native lib
+            // made prefill 20-100x slower (941ms -> 45s+), presenting as a
+            // stall after the .bench package was removed on Nov 1.
+            // Debuggable install preserved.
+            buildConfigField "String", "NATIVE_OPT", '"-O3 -g"'
+            externalNativeBuild {
+                cmake {
+                    cFlags '-O3 -g'
+                    cppFlags '-O3 -g'
+                }
+            }
         }
         release {
             minifyEnabled false

@@ -3,7 +3,9 @@ package ai.edgefit.diag
 import android.app.Activity
 import android.app.AlertDialog
 import android.graphics.drawable.GradientDrawable
+import android.text.Editable
 import android.text.InputType
+import android.text.TextWatcher
 import android.view.View
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
@@ -218,17 +220,22 @@ object SessionView {
         onClose: (() -> Unit)? = null,
         onRecover: ((String) -> Unit)? = null,
         storageNote: String? = null,
-        quarantineNote: String? = null
+        quarantineNote: String? = null,
+        // Lifecycle persistence: creation-panel drafts
+        // (non-sensitive predicted rates). Optional;
+        // existing callers unaffected.
+        initialCreateDraft: Pair<String, String>? = null,
+        onCreateDraft: ((String, String) -> Unit)? = null
     ) {
         var dialog: AlertDialog? = null
         val density = activity.resources.displayMetrics.density
         fun dp(value: Int): Int = (value * density + 0.5f).toInt()
         val ink = activity.resources.getColor(
-            R.color.edgefit_text, activity.theme)
+            R.color.aero_text_primary, activity.theme)
         val secondary = activity.resources.getColor(
-            R.color.edgefit_text_secondary, activity.theme)
+            R.color.aero_text_secondary, activity.theme)
         val blue = activity.resources.getColor(
-            R.color.edgefit_primary, activity.theme)
+            R.color.aero_sky, activity.theme)
         var filter = SessionListUi.SessionFilter.ALL
         val expanded = mutableSetOf<String>()
         if (focusId != null) expanded.add(focusId)
@@ -339,11 +346,11 @@ object SessionView {
                             cornerRadius = dp(8).toFloat()
                             setStroke(dp(2), blue)
                             setColor(activity.resources.getColor(
-                                R.color.edgefit_background,
+                                R.color.aero_card,
                                 activity.theme))
                         }
                     } else {
-                        activity.getDrawable(R.drawable.card_bg)
+                        activity.getDrawable(R.drawable.aero_card_bg)
                     }
                     setPadding(dp(12), dp(8), dp(12), dp(8))
                 }
@@ -512,6 +519,7 @@ object SessionView {
                                 isEnabled = act.enabled
                                 isSingleLine = true
                             }
+                            AeroUi.styleSecondary(activity, button)
                             if (act.primary) {
                                 SemanticUi.stylePrimary(
                                     activity, button)
@@ -541,6 +549,7 @@ object SessionView {
             val remaining = shown.size - visible.size
             if (remaining > 0) {
                 list.addView(Button(activity).apply {
+                    AeroUi.styleGhost(activity, this)
                     text = "Show more ($remaining remaining)"
                     setOnClickListener {
                         shownLimit += PAGE_SIZE
@@ -609,11 +618,30 @@ object SessionView {
                 hint = "Predicted gen tok/s (e.g. 15.0)"
                 inputType = InputType.TYPE_CLASS_NUMBER or
                     InputType.TYPE_NUMBER_FLAG_DECIMAL
+                initialCreateDraft?.first?.let { setText(it) }
             }
             val prefillInput = EditText(activity).apply {
                 hint = "Predicted prefill tok/s (e.g. 20.0)"
                 inputType = InputType.TYPE_CLASS_NUMBER or
                     InputType.TYPE_NUMBER_FLAG_DECIMAL
+                initialCreateDraft?.second?.let { setText(it) }
+            }
+            if (onCreateDraft != null) {
+                val watcher = object : TextWatcher {
+                    override fun beforeTextChanged(
+                        s: CharSequence?, start: Int, count: Int, after: Int
+                    ) = Unit
+                    override fun onTextChanged(
+                        s: CharSequence?, start: Int, before: Int, count: Int
+                    ) = Unit
+                    override fun afterTextChanged(s: Editable?) {
+                        onCreateDraft(
+                            genInput.text.toString(),
+                            prefillInput.text.toString())
+                    }
+                }
+                genInput.addTextChangedListener(watcher)
+                prefillInput.addTextChangedListener(watcher)
             }
             val panel = LinearLayout(activity).apply {
                 orientation = LinearLayout.VERTICAL
@@ -673,6 +701,7 @@ object SessionView {
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT))
         actionArea.addView(Button(activity).apply {
+            AeroUi.styleSecondary(activity, this)
             text = "Close"
             setOnClickListener { dialog?.dismiss() }
         }, LinearLayout.LayoutParams(

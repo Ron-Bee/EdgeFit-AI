@@ -2,6 +2,7 @@ package ai.edgefit.diag
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.view.ContextThemeWrapper
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -13,7 +14,9 @@ import android.widget.TextView
  * assessed + recommended card per entry, and three
  * working actions (Details, View Source, View Local
  * Evidence) plus Return to Model Selection. Nothing
- * downloads, runs, or phones home here.
+ * downloads, runs, or phones home here. Presented in
+ * the Aero dialog theme; measured values keep their
+ * distinct accent from estimates.
  */
 object ModelCatalogView {
 
@@ -31,50 +34,46 @@ object ModelCatalogView {
         cards: List<Card>,
         onViewSource: (String) -> Unit,
         onViewEvidence: (String) -> Unit,
-        onReturnToStaging: () -> Unit
+        onReturnToStaging: () -> Unit,
+        onDismiss: (() -> Unit)? = null
     ) {
+        val themed = ContextThemeWrapper(
+            activity, R.style.Theme_EdgeFit_Aero_Dialog)
         var dialog: AlertDialog? = null
         val density = activity.resources.displayMetrics.density
         fun dp(value: Int): Int = (value * density + 0.5f).toInt()
-        val list = LinearLayout(activity).apply {
+        val ink = AeroUi.inkColor(themed)
+        val list = LinearLayout(themed).apply {
             orientation = LinearLayout.VERTICAL
         }
         // Current-model overview, always first.
-        list.addView(TextView(activity).apply {
-            text = "Current model"
-            textSize = 16f
-        })
+        list.addView(AeroUi.sectionHeader(themed, "Current model"))
         for (section in InsightCards.currentModelSections(current)) {
-            list.addView(TextView(activity).apply {
+            list.addView(TextView(themed).apply {
                 textSize = 13f
+                setTextColor(ink)
                 setTextIsSelectable(true)
                 text = section.rows.joinToString("\n") {
                     "${it.label}: ${it.value}"
                 }
             })
         }
-        list.addView(TextView(activity).apply {
-            text = "Recommended candidates"
-            textSize = 16f
-            setPadding(0, dp(8), 0, 0)
-        })
+        list.addView(AeroUi.sectionHeader(themed, "Recommended candidates"))
         if (cards.isEmpty()) {
-            list.addView(TextView(activity).apply {
+            list.addView(TextView(themed).apply {
                 text = "No justified recommendation for this device."
                 textSize = 14f
+                setTextColor(ink)
             })
         }
         val baseline = ModelContext.baselineName(current)
         for (card in cards) {
-            val frame = LinearLayout(activity).apply {
-                orientation = LinearLayout.VERTICAL
-                background = activity.getDrawable(R.drawable.card_bg)
-                setPadding(dp(12), dp(8), dp(12), dp(8))
-            }
+            val frame = AeroUi.card(themed)
             val statusLine =
                 InsightCards.suitabilityLabel(card.assessment.status)
-            val row = TextView(activity).apply {
+            val row = TextView(themed).apply {
                 textSize = 13f
+                setTextColor(ink)
                 setTextIsSelectable(true)
                 setPadding(0, dp(4), 0, dp(2))
             }
@@ -83,17 +82,18 @@ object ModelCatalogView {
                 InsightCards.modelCardLine(card.entry,
                     card.assessment, card.recommendation),
                 statusLine,
-                SemanticUi.accentColor(activity,
+                CardDialog.aeroAccentColor(themed,
                     InsightCards.suitabilityAccent(
                         card.assessment.status)))
             frame.addView(row)
-            val buttons = LinearLayout(activity).apply {
+            val buttons = LinearLayout(themed).apply {
                 orientation = LinearLayout.HORIZONTAL
             }
             fun addButton(label: String, action: () -> Unit) {
-                val button = Button(activity).apply {
+                val button = Button(themed).apply {
                     text = label
                     isSingleLine = true
+                    AeroUi.styleSecondary(themed, this)
                     setOnClickListener { action() }
                 }
                 buttons.addView(button, LinearLayout.LayoutParams(0,
@@ -125,11 +125,11 @@ object ModelCatalogView {
             params.setMargins(0, 0, 0, dp(8))
             list.addView(frame, params)
         }
-        val content = LinearLayout(activity).apply {
+        val content = LinearLayout(themed).apply {
             orientation = LinearLayout.VERTICAL
             val pad = dp(16)
             setPadding(pad, pad, pad, pad)
-            addView(TextView(activity).apply {
+            addView(TextView(themed).apply {
                 text = "Curated candidates worth investigating. " +
                     "Sizes are listed upper bounds; hashes are " +
                     "unverified; nothing here has been measured " +
@@ -138,20 +138,25 @@ object ModelCatalogView {
                     "context — not a same-artifact repeat. " +
                     "Previous measurements stay preserved."
                 textSize = 13f
+                setTextColor(ink)
             })
             addView(list)
-            addView(Button(activity).apply {
+            addView(Button(themed).apply {
                 text = "Return to Model Selection"
+                AeroUi.stylePrimary(themed, this)
                 setOnClickListener {
                     dialog?.dismiss()
                     onReturnToStaging()
                 }
             })
         }
-        dialog = AlertDialog.Builder(activity)
+        dialog = AlertDialog.Builder(themed)
             .setTitle("Recommended Models")
-            .setView(ScrollView(activity).apply { addView(content) })
+            .setView(ScrollView(themed).apply { addView(content) })
             .setPositiveButton("Close", null)
             .show()
+        if (onDismiss != null) {
+            dialog?.setOnDismissListener { onDismiss() }
+        }
     }
 }

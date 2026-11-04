@@ -241,4 +241,33 @@ class AgentViewTest {
                 "status" to BenchContract.STATUS_FAILED))
         assertNull(AgentView.runActionFor(failed))
     }
+
+    @Test
+    fun statusChipKindMapsAgentStates() {
+        assertEquals(EdgeFitCards.ChipKind.ACTIVE,
+            AgentView.statusChipKind(AgentManager.STATUS_ACTIVE))
+        assertEquals(EdgeFitCards.ChipKind.NEUTRAL,
+            AgentView.statusChipKind("finished (user_finish)"))
+        assertEquals(EdgeFitCards.ChipKind.WARNING,
+            AgentView.statusChipKind("?"))
+    }
+
+    @Test
+    fun statusChipTextStaysShort() {
+        assertEquals("ACTIVE", AgentView.statusChipText(
+            AgentManager.STATUS_ACTIVE))
+        assertEquals("FINISHED", AgentView.statusChipText(
+            "finished (max_budgets_exhausted)"))
+        assertEquals("?", AgentView.statusChipText("?"))
+    }
+
+    @Test
+    fun sessionSubLineKeepsStatusAndBudget() {
+        val sub = AgentView.sessionSubLine(parent())
+        assertTrue(sub.contains("active"))
+        assertTrue(sub.contains("0/5"))
+        val done = AgentView.sessionSubLine(
+            parent(finished = true))
+        assertTrue(done.contains("finished (user_finish)"))
+    }
 }

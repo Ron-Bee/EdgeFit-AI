@@ -19,6 +19,16 @@
 #include <malloc.h>
 #endif
 
+// EF-BENCH-STALL-02: stage/timing markers for logcat diagnosis.
+// Counts, codes and timings only — never prompt text, tokens or paths.
+#if defined(__ANDROID__)
+#include <android/log.h>
+#define BENCH_LOGI(...) \
+    __android_log_print(ANDROID_LOG_INFO, "EdgeFitBench", __VA_ARGS__)
+#else
+#define BENCH_LOGI(...) ((void)0)
+#endif
+
 #include "llama.h"
 
 namespace {
@@ -155,6 +165,8 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
     static std::once_flag backend_once;
     std::call_once(backend_once, []() { llama_backend_init(); });
     const long long t_start = now_ms();
+    BENCH_LOGI("run start: ctx=%d threads=%d predict=%d",
+               n_ctx, n_threads, n_predict);
     pwrite(progress, PROG_MAGIC, 0x45444231);
     pwrite(progress, PROG_VERSION, 1);
     pwrite(progress, PROG_STAGE, PSTAGE_LOADING);
@@ -166,10 +178,12 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
     mparams.n_gpu_layers = 0;  // CPU backend only
     llama_model * model = llama_model_load_from_file(model_path, mparams);
     if (!model) {
+        BENCH_LOGI("model load FAILED");
         pwrite(progress, PROG_STAGE, PSTAGE_NATIVE_ERROR);
         pwrite(progress, PROG_ERROR, PERR_MODEL_LOAD);
         return error_json("model load failed");
     }
+    BENCH_LOGI("model loaded in %lld ms", now_ms() - t_start);
 
     llama_context_params cparams = llama_context_default_params();
     cparams.n_ctx = static_cast<uint32_t>(n_ctx);
@@ -183,11 +197,13 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
     cparams.abort_callback_data = cancel;
     llama_context * ctx = llama_init_from_model(model, cparams);
     if (!ctx) {
+        BENCH_LOGI("context init FAILED");
         llama_model_free(model);
         pwrite(progress, PROG_STAGE, PSTAGE_NATIVE_ERROR);
         pwrite(progress, PROG_ERROR, PERR_CONTEXT_INIT);
         return error_json("context init failed");
     }
+    BENCH_LOGI("context ready; load phase %lld ms", now_ms() - t_start);
     pwrite(progress, PROG_LOAD_MS, static_cast<int32_t>(now_ms() - t_start));
     pwrite(progress, PROG_STAGE, PSTAGE_PREFILL);
     // NOTE: authoritative load timing stays derived Kotlin-side
@@ -200,6 +216,7 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
 
     std::vector<llama_token> prompt_tokens;
     if (tokenize_all(vocab, prompt, prompt_tokens) < 0 || prompt_tokens.empty()) {
+        BENCH_LOGI("prompt tokenize FAILED");
         llama_sampler_free(sampler);
         llama_free(ctx);
         llama_model_free(model);
@@ -207,7 +224,10 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
         pwrite(progress, PROG_ERROR, PERR_TOKENIZE);
         return error_json("prompt tokenize failed");
     }
+    BENCH_LOGI("prompt tokenized: %zu tokens", prompt_tokens.size());
     if (static_cast<int>(prompt_tokens.size()) + n_predict > n_ctx) {
+        BENCH_LOGI("context overflow: prompt %zu + cap %d > ctx %d",
+                   prompt_tokens.size(), n_predict, n_ctx);
         llama_sampler_free(sampler);
         llama_free(ctx);
         llama_model_free(model);
@@ -216,6 +236,7 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
         return error_json("prompt plus cap exceeds context");
     }
     if (cancel->load()) {
+        BENCH_LOGI("cancel observed before prefill");
         llama_sampler_free(sampler);
         llama_free(ctx);
         llama_model_free(model);
@@ -229,8 +250,10 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
     const long long t_pref0 = now_ms();
     llama_batch batch = llama_batch_get_one(prompt_tokens.data(),
                                             static_cast<int32_t>(prompt_tokens.size()));
+    BENCH_LOGI("prefill start: %zu tokens", prompt_tokens.size());
     const int dec_ret = llama_decode(ctx, batch);
     const long long prefill_ms = now_ms() - t_pref0;
+    BENCH_LOGI("prefill decode returned: ret=%d ms=%lld", dec_ret, prefill_ms);
     if (dec_ret != 0) {
         llama_sampler_free(sampler);
         llama_free(ctx);
@@ -239,9 +262,11 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
             // Abort callback fired: user cancel or watchdog
             // timeout interrupted prefill. Honest cancelled
             // outcome, not an error.
+            BENCH_LOGI("prefill aborted (cancel set)");
             pwrite(progress, PROG_STAGE, PSTAGE_NATIVE_DONE);
             return cancelled_json(0, 0, 0, 0);
         }
+        BENCH_LOGI("prefill decode FAILED ret=%d", dec_ret);
         pwrite(progress, PROG_STAGE, PSTAGE_NATIVE_ERROR);
         pwrite(progress, PROG_ERROR, PERR_PREFILL_DECODE);
         return error_json("prefill decode failed");
@@ -250,11 +275,14 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
            static_cast<int32_t>(prompt_tokens.size()));
     pwrite(progress, PROG_PREFILL_MS, static_cast<int32_t>(prefill_ms));
     pwrite(progress, PROG_STAGE, PSTAGE_GENERATING);
+    BENCH_LOGI("prefill complete: %zu tokens in %lld ms",
+               prompt_tokens.size(), prefill_ms);
 
     const long long t_gen0 = now_ms();
     int generated = 0;
     bool eos_stop = false;
     bool cancelled = false;
+    BENCH_LOGI("generate start: target=%d", n_predict);
     for (int i = 0; i < n_predict; i++) {
         if (cancel->load()) {
             cancelled = true;
@@ -266,6 +294,9 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
             break;
         }
         generated++;
+        if ((generated & 15) == 0) {
+            BENCH_LOGI("generate progress: %d/%d", generated, n_predict);
+        }
         llama_batch step = llama_batch_get_one(const_cast<llama_token *>(&id), 1);
         const int step_ret = llama_decode(ctx, step);
         // Non-owning view: do not free (see note at prefill above).
@@ -277,6 +308,8 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
             if (cancel->load(std::memory_order_relaxed) != 0) {
                 // Mid-generation abort: genuine partial counts,
                 // cancelled outcome, never success.
+                BENCH_LOGI("generation aborted at %d tokens (cancel set)",
+                           generated);
                 pwrite(progress, PROG_GENERATED, generated);
                 pwrite(progress, PROG_GEN_MS,
                        static_cast<int32_t>(gen_ms_now));
@@ -284,6 +317,8 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
                 return cancelled_json(generated, prefill_ms, gen_ms_now,
                                       prompt_tokens.size());
             }
+            BENCH_LOGI("generation decode FAILED at token %d ret=%d",
+                       generated, step_ret);
             pwrite(progress, PROG_STAGE, PSTAGE_NATIVE_ERROR);
             pwrite(progress, PROG_ERROR, PERR_GEN_DECODE);
             return error_json("generation decode failed");
@@ -297,6 +332,8 @@ std::string run_benchmark(const char * model_path, const char * prompt, int n_ct
         }
     }
     const long long gen_ms = now_ms() - t_gen0;
+    BENCH_LOGI("generate done: generated=%d eos=%d cancelled=%d ms=%lld",
+               generated, eos_stop ? 1 : 0, cancelled ? 1 : 0, gen_ms);
     pwrite(progress, PROG_GENERATED, generated);
     pwrite(progress, PROG_GEN_MS, static_cast<int32_t>(gen_ms));
     pwrite(progress, PROG_STAGE, PSTAGE_NATIVE_DONE);
@@ -353,8 +390,12 @@ JNIEXPORT jstring JNICALL Java_ai_edgefit_diag_LlamaBridge_nativeRun(
             progress = static_cast<int32_t *>(addr);
         }
     }
+    BENCH_LOGI("nativeRun: ctx=%d threads=%d predict=%d cancel=%s progress=%s",
+               n_ctx, n_threads, n_predict, cancel ? "ok" : "NULL",
+               progress ? "ok" : "unavailable");
     std::string out;
     if (!model_path || !prompt || !cancel) {
+        BENCH_LOGI("nativeRun null JNI argument");
         out = error_json("null JNI argument");
     } else {
         out = run_benchmark(model_path, prompt, n_ctx, n_threads, n_predict,

@@ -6,4 +6,7 @@
     <exclude domain="file" path="sessions-quarantine/" />
     <exclude domain="file" path="meta_key.bin" />
     <exclude domain="file" path="global_upload_token.bin" />
+    <!-- Retained GGUF bytes are device-bound and large (up to 2 GiB);
+         a restore without them degrades to an honest reselect prompt. -->
+    <exclude domain="file" path="models/" />
 </full-backup-content>

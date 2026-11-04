@@ -1500,3 +1500,111 @@ Do not claim a physical benchmark or a Meta-model accuracy gain until measured.
 - EF-COMP-01B-GATE-1A: DOCS PASS. PHONE
   UI ACCEPTANCE BLOCKED on ROUTE install +
   GGUF staging (owner actions).
+
+## EF-COMP-01B study execution (owner-executed 10-31; artifact-sourced entry, owner confirmation pending)
+
+- Six manual runs executed A-B-B-A-A-B on the S22
+  Ultra per the frozen protocol (ROUTE APK
+  `2813339C…5B46DE`): candidate A median 16.5204
+  tok/s (range 15.2818–16.6623, n=3), candidate B
+  median 10.4884 tok/s (range 6.8223–13.3807, n=3).
+  Artifacts: `eval/comp-01b/runs/` (6 bench JSONs,
+  ledger, 2 EXTRA session records) + decisions,
+  responses, score (all SHA-consistent).
+- M0/M1 live calls executed (latencies 17598/13437
+  ms): both arms ABSTAINED with stated evidentiary
+  reasons (M0: no measurements; M1: zero B runs);
+  fabricated-citation rate 0.0; no regret computed
+  (abstention is not failed selection).
+- Exploratory only (n≤3, single device). AgentReview
+  demo acceptance prepared, NOT executed.
+- EF-COMP-01B: EXECUTED (artifacts); FORMAL ENTRY
+  PENDING owner confirmation.
+
+## EF-UX-AERO-01 + EF-GLOBAL-CONTRIBUTE-01 (host record; handoff-sourced)
+
+- Aero design system + app shell + destinations +
+  icon set implemented on
+  `feature/ef-global-contribute-01-2026-10-30`
+  (committed cfba850): 58 new JVM tests, branch
+  suite 634/634 PASS (fake transports), dev APK
+  builds. Owner aero-qual screenshots captured
+  10-31; formal physical review pending.
+- Global contribution client (review/consent/submit/
+  status/revoke + evidence import) HOST QUALIFIED
+  ONLY: no live backend observed; no real upload,
+  receipt, revocation, or Keystore behavior
+  verified. Staging integration NOT RUN.
+- Three-file Aero dialog migration (CardDialog,
+  MetaView, ModelCatalogView) prepared 11-01:
+  dialog-scoped theming, presentation only.
+  BLOCKED: Android compile + JVM suite + physical
+  review unrunnable in the preparing session.
+
+## EF-SESSION-LOSS-01/02 (Nov 1 S22 Ultra incident record; attribution STOPPED per owner)
+
+- 01:00:36 — `ai.edgefit.diag.bench` removed
+  (Android `am_kill … due to deletePackageX`;
+  initiating actor NOT established; automation,
+  scripts, agents, the app, and `install -r`
+  affirmatively excluded as causes).
+- 01:00:47 — base `ai.edgefit.diag` v0.2.0/2
+  installed fresh (APK SHA-256
+  `8A6A125C…908D3B`, 17,329,128 bytes);
+  firstInstall == lastUpdate; empty stores.
+- Original app-private sessions/evidence under
+  `.bench` NOT recovered (package absent incl.
+  `-u`). Independent workstation evidence
+  survives: committed study artifacts, Oct-30
+  backup corpus + MANIFEST, Oct 26–27 exports,
+  `data/edgefit.db` + backups.
+- Corrective governance: EF-SAFE-INSTALL-01
+  (FR-SAFE-01, MANDATORY). Three physical tests
+  scheduled for repetition under the rule.
+
+## EF-SAFE-INSTALL-01 preflight slice (IMPLEMENTED + HOST PASS 11-01)
+
+- `scripts/Confirm-EFSafeInstall01.ps1`: fail-closed
+  read-only preflight covering FR-SAFE-01 gates
+  1–10 (device, user, APK identity, installed
+  package, signing, run-as inventory, backup
+  re-verification, destructive authorization,
+  defined post-install checks). No
+  install/uninstall/clear/rm code path exists.
+- `scripts/Test-EFSafeInstall01.ps1`: 17/17 PASS
+  with mocked adb/aapt/apksigner + synthetic
+  fixtures (base/benchmark refusal, auth/user/
+  signing/backup/inventory negatives,
+  acknowledged new-identity PASS, authorized
+  destructive PASS, missing-tool ERROR,
+  whole-run zero-mutation assertion).
+- NOT promoted: no physical dry-run, no backup
+  creation, no banner/labels (app changes out
+  of slice), C1/C2 + fleet decisions retained
+  open. Procedure: `docs/ef-safe-install-01.md`.
+
+## EF-ANDROID-GLOBAL-01 slice (IMPLEMENTED, device + JVM validation NOT RUN)
+
+- Consent-policy upload gate (default OFF):
+  `GlobalContract.CONSENT_POLICY_APPROVED=false`;
+  `GlobalClient.submit` returns Blocked naming the
+  unapproved policy; review hides Approve with an
+  honest status reason. Revoke/refresh ungated.
+  Enabling needs owner policy approval + reviewed
+  source change (a tripwire JVM test fails on flip).
+- `EvidenceStore.delete(id)` + history Delete local
+  result actions for shared + unshared records,
+  with explicit local-vs-cloud distinction.
+  Known: delete drops the local submissionId, so
+  withdraw-before-delete is the documented order;
+  re-imported identical bytes still dedup
+  server-side for uncertain recovery.
+- Deployed-worker handoff/policy/enrollment files
+  NOT accessible from this environment: worker
+  schema conformance, enrollment flow, genuine
+  upload enablement STOPPED, nothing invented.
+  No endpoint URL hardcoded; origin stays
+  user-configured; no tokens or secrets in code.
+- 4 new JVM tests (policy tripwire + delete x3);
+  suite NOT RUN here (no JDK/SDK). Physical
+  validation NOT RUN (no ADB). Host suites green.
