@@ -149,6 +149,41 @@ data class MemConditions(
     )
 
     companion object {
+        /**
+         * Parses a `x_mem_conditions` block (see [toMap]).
+         * Null on any structural problem: callers fail
+         * closed to an unrestored result, never a partial
+         * fabrication.
+         */
+        fun fromMap(map: Map<String, Any?>): MemConditions? {
+            return try {
+                MemConditions(
+                    totalRamBytes =
+                        (map["total_ram_bytes"] as? Number)?.toLong(),
+                    availBytesStart =
+                        (map["avail_bytes_start"] as? Number)?.toLong(),
+                    availPctStart =
+                        (map["avail_pct_start"] as? Number)?.toDouble(),
+                    warningThresholdPct =
+                        (map["warning_threshold_pct"] as? Number)
+                            ?.toDouble() ?: return null,
+                    belowThresholdStart =
+                        map["below_threshold_start"] as? Boolean,
+                    lowMemoryStart =
+                        map["low_memory_start"] as? Boolean,
+                    lowThresholdBytes =
+                        (map["low_threshold_bytes"] as? Number)?.toLong(),
+                    availBytesEnd =
+                        (map["avail_bytes_end"] as? Number)?.toLong(),
+                    availPctEnd =
+                        (map["avail_pct_end"] as? Number)?.toDouble(),
+                    method = map["method"] as? String ?: return null
+                )
+            } catch (_: Exception) {
+                null
+            }
+        }
+
         fun startOf(
             totalBytes: Long?,
             availBytes: Long?,
@@ -195,4 +230,19 @@ data class FailureEvidence(
         "stage" to stage,
         "native_started" to nativeStarted
     )
+
+    companion object {
+        /** Parses a `x_failure` block (see [toMap]). */
+        fun fromMap(map: Map<String, Any?>): FailureEvidence? {
+            return try {
+                FailureEvidence(
+                    stage = map["stage"] as? String ?: return null,
+                    nativeStarted = map["native_started"] as? Boolean
+                        ?: return null
+                )
+            } catch (_: Exception) {
+                null
+            }
+        }
+    }
 }

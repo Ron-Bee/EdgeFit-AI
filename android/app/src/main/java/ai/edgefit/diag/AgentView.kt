@@ -46,6 +46,45 @@ object AgentView {
             "attempts ${parent.budgetUsed}/${parent.budgetMax}"
 
     /**
+     * EF-ANDROID-AGENT-HOME-POLISH-03: session card
+     * chip mapping. Active reads sky, finished
+     * terminal states neutral, anything unexpected
+     * amber - the sub-line always carries the full
+     * status text. Pure for unit tests.
+     */
+    fun statusChipKind(status: String): EdgeFitCards.ChipKind =
+        when {
+            status == AgentManager.STATUS_ACTIVE ->
+                EdgeFitCards.ChipKind.ACTIVE
+            status.startsWith(AgentManager.STATUS_FINISHED) ->
+                EdgeFitCards.ChipKind.NEUTRAL
+            else -> EdgeFitCards.ChipKind.WARNING
+        }
+
+    /**
+     * Short chip label for the session card header.
+     * The full status (including terminal reason)
+     * stays in the sub-line. Pure for unit tests.
+     */
+    fun statusChipText(status: String): String =
+        when {
+            status == AgentManager.STATUS_ACTIVE -> "ACTIVE"
+            status.startsWith(AgentManager.STATUS_FINISHED) ->
+                "FINISHED"
+            else -> status
+        }
+
+    /**
+     * Session card sub-line: full status plus budget
+     * use. Same fields as [parentLine] minus the id,
+     * which the card header carries. Pure for unit
+     * tests.
+     */
+    fun sessionSubLine(parent: SessionRecord): String =
+        agentStatus(parent) + " \u00B7 attempts " +
+            "${parent.budgetUsed}/${parent.budgetMax}"
+
+    /**
      * Notice arbitration after an in-place action + refresh
      * (AUD-02): a refresh failure (list/detail error) wins, since
      * it describes the visible state; otherwise the action's own
@@ -101,6 +140,25 @@ object AgentView {
      * renderer can tint the status word. Text unchanged.
      */
     data class ExperimentItem(val status: String, val text: String)
+
+    /**
+     * EF-AGENT-REPAIR-01: per-experiment bootstrap action. Unmeasured
+     * children (no benchmark yet) offer the designed first step from
+     * this screen instead of stranding the user at a blocked
+     * proposal gate. Null when the experiment already ran —
+     * measured or failed runs use proposals or recovery. Pure.
+     */
+    data class RunAction(val label: String, val needsPrediction: Boolean)
+
+    fun runActionFor(child: SessionRecord): RunAction? {
+        if (child.benchmark != null) return null
+        val seq = child.experimentSeq ?: return null
+        return if (child.prediction == null) {
+            RunAction("Predict & Run Exp $seq", true)
+        } else {
+            RunAction("Run Exp $seq", false)
+        }
+    }
 
     fun experimentLines(detail: AgentDetail): List<String> =
         experimentItems(detail).map { it.text }
@@ -251,7 +309,10 @@ object AgentView {
         onClose: (() -> Unit)? = null,
         // EF-AGENT-REVIEW-01: developer Modify action for a
         // pending proposal; null hides the button.
-        onModify: ((String) -> Unit)? = null
+        onModify: ((String) -> Unit)? = null,
+        // EF-AGENT-REPAIR-01: per-experiment bootstrap
+        // (parentId, childId); null hides the buttons.
+        onRunExperiment: ((String, String) -> Unit)? = null
     ) {
         var dialog: AlertDialog? = null
         var selected = initialId
@@ -277,16 +338,58 @@ object AgentView {
                 orientation = LinearLayout.VERTICAL
             }
             for (parent in list.take(10)) {
-                val row = Button(activity).apply {
-                    text = (if (parent.sessionId == selected) "> " else "") +
-                        parentLine(parent)
-                    textSize = 12f
+                // EF-ANDROID-AGENT-HOME-POLISH-03: dark
+                // session card, not a blue pill. Selection
+                // reads as glow, status reads as chip.
+                val isCurrent = parent.sessionId == selected
+                val status = agentStatus(parent)
+                val header = LinearLayout(activity).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                }
+                val idView = TextView(activity).apply {
+                    text = "Session " + parent.sessionId
+                    textSize = 14f
+                    setTextColor(AeroUi.inkColor(activity))
+                }
+                SemanticUi.bold(idView)
+                header.addView(idView, LinearLayout.LayoutParams(
+                    0, LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f))
+                header.addView(EdgeFitCards.statusChip(activity,
+                    statusChipText(status),
+                    statusChipKind(status)))
+                val row = LinearLayout(activity).apply {
+                    orientation = LinearLayout.VERTICAL
+                    background = activity.getDrawable(
+                        if (isCurrent)
+                            R.drawable.aero_card_glow_bg
+                        else R.drawable.aero_card_bg)
+                    val padH = dp(12)
+                    setPadding(padH, dp(10), padH, dp(10))
+                    isClickable = true
+                    isFocusable = true
+                    contentDescription = "Agent session " +
+                        parent.sessionId +
+                        if (isCurrent) ", selected" else ""
                     setOnClickListener {
                         selected = parent.sessionId
                         refresh()
                     }
                 }
-                switcher.addView(row)
+                row.addView(header)
+                val sub = TextView(activity).apply {
+                    text = sessionSubLine(parent)
+                    textSize = 12f
+                    setTextColor(
+                        AeroUi.secondaryColor(activity))
+                    setPadding(0, dp(4), 0, 0)
+                }
+                row.addView(sub)
+                switcher.addView(row,
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT)
+                        .apply { bottomMargin = dp(8) })
             }
             body.addView(switcher)
             body.addView(Button(activity).apply {
@@ -299,7 +402,10 @@ object AgentView {
                     notice.text = resolveNotice(
                         notice.text.toString(), message)
                 }
-            })
+            }, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT)
+                .apply { topMargin = dp(4) })
             val id = selected
             val snapshot = id?.let {
                 try {
@@ -309,18 +415,52 @@ object AgentView {
                     null
                 }
             } ?: return
-            body.addView(TextView(activity).apply {
-                text = statusText(snapshot)
+            // EF-ANDROID-AGENT-HOME-POLISH-03: detail
+            // header (id plus status chip) over a real
+            // card with the remaining status lines.
+            val detailStatus = agentStatus(snapshot.parent)
+            val detailHeader = LinearLayout(activity).apply {
+                orientation = LinearLayout.HORIZONTAL
+                setPadding(0, dp(12), 0, dp(8))
+            }
+            val detailTitle = TextView(activity).apply {
+                text = "Agent session " +
+                    snapshot.parent.sessionId
+                textSize = 16f
+                setTextColor(AeroUi.inkColor(activity))
+            }
+            SemanticUi.bold(detailTitle)
+            detailHeader.addView(detailTitle,
+                LinearLayout.LayoutParams(0,
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    1f))
+            detailHeader.addView(EdgeFitCards.statusChip(
+                activity, statusChipText(detailStatus),
+                statusChipKind(detailStatus)))
+            body.addView(detailHeader)
+            val detailCard = LinearLayout(activity).apply {
+                orientation = LinearLayout.VERTICAL
+                background = activity.getDrawable(
+                    R.drawable.aero_card_bg)
+                setPadding(dp(12), dp(10), dp(12), dp(10))
+            }
+            detailCard.addView(TextView(activity).apply {
+                text = statusText(snapshot).lines().drop(1)
+                    .joinToString("\n")
                 textSize = 13f
-                setPadding(0, dp(8), 0, 0)
+                setTextColor(AeroUi.inkColor(activity))
+                setTextIsSelectable(true)
+                setLineSpacing(dp(2).toFloat(), 1f)
             })
-            for (item in experimentItems(snapshot)) {
+            body.addView(detailCard)
+            for ((child, item) in snapshot.children.zip(
+                experimentItems(snapshot))) {
                 // One card per experiment: number, config,
                 // prediction, outcome stay grouped.
                 val card = LinearLayout(activity).apply {
                     orientation = LinearLayout.VERTICAL
                     background =
-                        activity.getDrawable(R.drawable.card_bg)
+                        activity.getDrawable(R.drawable.aero_card_bg)
                     setPadding(dp(12), dp(8), dp(12), dp(8))
                 }
                 val row = TextView(activity).apply { textSize = 13f }
@@ -329,23 +469,60 @@ object AgentView {
                     SemanticUi.accentColor(activity,
                         InsightCards.statusAccent(item.status)))
                 card.addView(row)
+                // EF-AGENT-REPAIR-01: unmeasured experiments offer
+                // the designed first step in place (see
+                // runActionFor); measured or failed runs use
+                // proposals or recovery instead.
+                val runAction = runActionFor(child)
+                if (runAction != null && onRunExperiment != null &&
+                    agentStatus(snapshot.parent) ==
+                        AgentManager.STATUS_ACTIVE
+                ) {
+                    card.addView(Button(activity).apply {
+                        AeroUi.stylePrimary(activity, this)
+                        text = runAction.label
+                        setOnClickListener {
+                            dialog?.dismiss()
+                            onRunExperiment.invoke(
+                                snapshot.parent.sessionId, child.sessionId)
+                        }
+                    }, LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT)
+                        .apply { topMargin = dp(8) })
+                }
                 val params = LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.MATCH_PARENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT)
-                params.setMargins(0, dp(4), 0, dp(4))
+                params.setMargins(0, dp(8), 0, 0)
                 body.addView(card, params)
             }
             @Suppress("UNCHECKED_CAST")
             val agent = snapshot.parent.agent as? Map<String, Any?>
             val pending = agent?.get("pending_proposal") as? Map<String, Any?>
             if (pending != null) {
-                body.addView(TextView(activity).apply {
+                val proposalCard = LinearLayout(activity)
+                    .apply {
+                        orientation = LinearLayout.VERTICAL
+                        background = activity.getDrawable(
+                            R.drawable.aero_card_bg)
+                        setPadding(dp(12), dp(10), dp(12),
+                            dp(10))
+                    }
+                proposalCard.addView(TextView(activity).apply {
                     text = proposalText(pending, snapshot.review)
                     textSize = 13f
+                    setTextColor(AeroUi.inkColor(activity))
                     setTextIsSelectable(true)
-                    setPadding(0, dp(8), 0, 0)
+                    setLineSpacing(dp(2).toFloat(), 1f)
                 })
+                body.addView(proposalCard,
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT)
+                        .apply { topMargin = dp(8) })
                 body.addView(Button(activity).apply {
+                    AeroUi.styleSecondary(activity, this)
                     text = "Review Details"
                     setOnClickListener {
                         CardDialog.show(activity, "Proposal Review",
@@ -355,14 +532,32 @@ object AgentView {
                                 snapshot.parent.budgetMax,
                                 snapshot.review))
                     }
-                })
+                }, LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT)
+                    .apply { topMargin = dp(8) })
             }
             if (agentStatus(snapshot.parent) != AgentManager.STATUS_ACTIVE) {
-                body.addView(TextView(activity).apply {
+                val summaryCard = LinearLayout(activity)
+                    .apply {
+                        orientation = LinearLayout.VERTICAL
+                        background = activity.getDrawable(
+                            R.drawable.aero_card_bg)
+                        setPadding(dp(12), dp(10), dp(12),
+                            dp(10))
+                    }
+                summaryCard.addView(TextView(activity).apply {
                     text = summaryText(snapshot.parent)
                     textSize = 13f
-                    setPadding(0, dp(8), 0, 0)
+                    setTextColor(AeroUi.inkColor(activity))
+                    setTextIsSelectable(true)
+                    setLineSpacing(dp(2).toFloat(), 1f)
                 })
+                body.addView(summaryCard,
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT)
+                        .apply { topMargin = dp(8) })
                 return
             }
             // UX-01E: vertical stack — multi-word labels
@@ -377,9 +572,12 @@ object AgentView {
                     isSingleLine = true
                     setOnClickListener { action() }
                 }
-                actions.addView(button, LinearLayout.LayoutParams(
-                    LinearLayout.LayoutParams.MATCH_PARENT,
-                    LinearLayout.LayoutParams.WRAP_CONTENT))
+                actions.addView(button,
+                    LinearLayout.LayoutParams(
+                        LinearLayout.LayoutParams.MATCH_PARENT,
+                        LinearLayout.LayoutParams.WRAP_CONTENT)
+                        .apply { bottomMargin = dp(8) })
+                AeroUi.styleSecondary(activity, button)
                 return button
             }
             if (pending == null) {
@@ -428,7 +626,10 @@ object AgentView {
                 notice.text = resolveNotice(
                     notice.text.toString(), message)
             }
-            body.addView(actions)
+            body.addView(actions, LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT)
+                .apply { topMargin = dp(12) })
         }
         val content = LinearLayout(activity).apply {
             orientation = LinearLayout.VERTICAL

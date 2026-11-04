@@ -1,7 +1,6 @@
 package ai.edgefit.diag
 
 import android.app.Activity
-import android.content.res.ColorStateList
 import android.graphics.Typeface
 import android.text.SpannableString
 import android.text.Spanned
@@ -23,27 +22,27 @@ object SemanticUi {
         accent: InsightCards.Accent
     ): Int {
         val res = when (accent) {
-            InsightCards.Accent.MEASURED -> R.color.edgefit_measured
-            InsightCards.Accent.PREDICTED -> R.color.edgefit_predicted
-            InsightCards.Accent.ERROR -> R.color.edgefit_error
-            InsightCards.Accent.NONE -> R.color.edgefit_text
+            InsightCards.Accent.MEASURED -> R.color.aero_measured
+            InsightCards.Accent.PREDICTED -> R.color.aero_predicted
+            InsightCards.Accent.ERROR -> R.color.aero_error
+            InsightCards.Accent.NONE -> R.color.aero_text_primary
         }
         return activity.resources.getColor(res, activity.theme)
     }
 
-    /** Blue filled primary action with white text. */
+    /** Aero primary action (delegates to the kit). */
     fun stylePrimary(activity: Activity, button: Button) {
-        button.backgroundTintList = ColorStateList.valueOf(
-            activity.resources.getColor(
-                R.color.edgefit_primary, activity.theme))
-        button.setTextColor(activity.resources.getColor(
-            R.color.edgefit_on_primary, activity.theme))
+        AeroUi.stylePrimary(activity, button)
     }
 
     /** Destructive action: error-red text, neutral body. */
     fun styleDestructive(activity: Activity, button: Button) {
+        // Dark-surface destructive: secondary body (the
+        // manifest theme would otherwise supply a primary
+        // fill), then error-red text.
+        AeroUi.styleSecondary(activity, button)
         button.setTextColor(activity.resources.getColor(
-            R.color.edgefit_error, activity.theme))
+            R.color.aero_error, activity.theme))
     }
 
     /**

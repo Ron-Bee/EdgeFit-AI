@@ -50,7 +50,8 @@ object BenchWorkloadView {
         activity: Activity,
         config: BenchConfigData,
         modelLabel: String?,
-        prefillTokens: Int?
+        prefillTokens: Int?,
+        onDismiss: (() -> Unit)? = null
     ) {
         val text = TextView(activity).apply {
             this.text = buildText(config, modelLabel, prefillTokens)
@@ -60,10 +61,13 @@ object BenchWorkloadView {
             setPadding(pad, pad, pad, pad)
         }
         val scroller = ScrollView(activity).apply { addView(text) }
-        AlertDialog.Builder(activity)
+        val dialog = AlertDialog.Builder(activity)
             .setTitle("Standard Benchmark Workload")
             .setView(scroller)
             .setPositiveButton("Close", null)
             .show()
+        if (onDismiss != null) {
+            dialog.setOnDismissListener { onDismiss() }
+        }
     }
 }

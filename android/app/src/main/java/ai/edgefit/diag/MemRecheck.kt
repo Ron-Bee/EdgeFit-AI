@@ -88,4 +88,39 @@ object MemRecheck {
                 )
             }
         )
+
+    /** Parses a `x_mem_recheck` block (see [toMap]). */
+    fun fromMap(map: Map<String, Any?>): MemRecheckEvidence? {
+        return try {
+            @Suppress("UNCHECKED_CAST")
+            val raw = map["samples"] as? List<*> ?: return null
+            val samples = raw.map { item ->
+                val entry = item as? Map<String, Any?> ?: return null
+                MemRecheckSample(
+                    availBytes = (entry["avail_bytes"] as? Number)
+                        ?.toLong() ?: return null,
+                    lowMemory = entry["low_memory"] as? Boolean
+                        ?: return null,
+                    elapsedRealtimeMs =
+                        (entry["elapsed_realtime_ms"] as? Number)
+                            ?.toLong() ?: return null
+                )
+            }
+            MemRecheckEvidence(
+                requiredBytes = (map["required_bytes"] as? Number)
+                    ?.toLong() ?: return null,
+                initialAvailBytes =
+                    (map["initial_avail_bytes"] as? Number)
+                        ?.toLong() ?: return null,
+                initialLowMemory =
+                    map["initial_low_memory"] as? Boolean ?: return null,
+                samples = samples,
+                admitted = map["admitted"] as? Boolean ?: return null,
+                recheckMs = (map["recheck_ms"] as? Number)
+                    ?.toLong() ?: return null
+            )
+        } catch (_: Exception) {
+            null
+        }
+    }
 }

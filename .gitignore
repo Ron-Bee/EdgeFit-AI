@@ -38,3 +38,4 @@ android/app/.cxx/
 android/.kotlin/
 Microsoft/
 node_modules/
+.backend-ref/

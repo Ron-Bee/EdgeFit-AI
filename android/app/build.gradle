@@ -32,13 +32,78 @@ android {
         buildConfig true
     }
 
+    // Release signing is owner-supplied off-repo (never committed).
+    // When ~/.gradle/gradle.properties defines releaseKeystoreFile,
+    // releaseKeystorePassword, releaseKeyAlias and releaseKeyPassword,
+    // the publicPreview build signs with it; otherwise the build
+    // produces an unsigned APK for gate inspection only.
+    signingConfigs {
+        preview {
+            def propsFile = new File(
+                System.getProperty('user.home') +
+                '/.gradle/gradle.properties')
+            def props = new Properties()
+            if (propsFile.exists()) {
+                propsFile.withInputStream { props.load(it) }
+            }
+            def ks = props.getProperty('releaseKeystoreFile')
+            if (ks != null) {
+                storeFile = new File(ks)
+                storePassword = props.getProperty(
+                    'releaseKeystorePassword')
+                keyAlias = props.getProperty('releaseKeyAlias')
+                keyPassword = props.getProperty('releaseKeyPassword')
+            }
+        }
+    }
+
     buildTypes {
         debug {
-            buildConfigField "String", "NATIVE_OPT", '"toolchain default (unoptimized)"'
+            // EF-BENCH-STALL-03: debug builds use the same -O3 native flags
+            // as the benchmark variant. The unoptimized (-O0) native lib
+            // made prefill 20-100x slower (941ms -> 45s+), presenting as a
+            // stall after the .bench package was removed on Nov 1.
+            // Debuggable install preserved.
+            buildConfigField "String", "NATIVE_OPT", '"-O3 -g"'
+            externalNativeBuild {
+                cmake {
+                    cFlags '-O3 -g'
+                    cppFlags '-O3 -g'
+                }
+            }
         }
         release {
             minifyEnabled false
             buildConfigField "String", "NATIVE_OPT", '"toolchain default"'
+        }
+        // Public-preview release: non-debuggable, stable applicationId,
+        // -O3 native (same flags as the verified debug/benchmark builds;
+        // unoptimized native presented as a prefill stall). Signed only
+        // when the owner keystore props exist; otherwise unsigned.
+        publicPreview {
+            initWith release
+            debuggable false
+            jniDebuggable false
+            minifyEnabled false
+            buildConfigField "String", "NATIVE_OPT", '"-O3 -g"'
+            externalNativeBuild {
+                cmake {
+                    cFlags '-O3 -g'
+                    cppFlags '-O3 -g'
+                }
+            }
+            // Sign here (not in afterEvaluate): AGP finalizes the DSL
+            // before project afterEvaluate callbacks run.
+            def ksProps = new Properties()
+            def ksPropsFile = new File(
+                System.getProperty('user.home') +
+                '/.gradle/gradle.properties')
+            if (ksPropsFile.exists()) {
+                ksPropsFile.withInputStream { ksProps.load(it) }
+            }
+            if (ksProps.getProperty('releaseKeystoreFile') != null) {
+                signingConfig signingConfigs.preview
+            }
         }
         // Optimized benchmark variant: debuggable install with -O3 native
         // code (llama.cpp, ggml, JNI). Portable arm64 only, no -march.
@@ -54,6 +119,14 @@ android {
                     cFlags '-O3 -g'
                     cppFlags '-O3 -g'
                 }
+            }
+        }
+    }
+    applicationVariants.configureEach {
+        if (buildType.name == 'publicPreview') {
+            outputs.configureEach {
+                versionCodeOverride = 3
+                versionNameOverride = '0.2.1-preview.1'
             }
         }
     }

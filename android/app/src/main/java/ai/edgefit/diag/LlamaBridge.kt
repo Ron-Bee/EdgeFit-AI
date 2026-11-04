@@ -41,7 +41,8 @@ object LlamaBridge {
     /**
      * Runs load + prefill + generation synchronously. Returns a JSON object
      * string: {"ok":true,...} or {"ok":false,"error":...}. Polls the mailbox
-     * byte each token; nonzero aborts promptly with cancelled=true.
+     * byte each token and inside native decode via the llama abort
+     * callback; nonzero aborts promptly with cancelled=true.
      * Progress is written to [progressMailbox] when it holds at least 64
      * bytes; otherwise the benchmark runs without live display.
      */

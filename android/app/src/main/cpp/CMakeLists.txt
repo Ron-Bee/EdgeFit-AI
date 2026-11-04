@@ -15,5 +15,5 @@ set(LLAMA_CURL OFF CACHE BOOL "" FORCE)
 add_subdirectory(${LLAMA_DIR} llama-build)
 
 add_library(bench-jni SHARED bench_jni.cpp)
-target_link_libraries(bench-jni PRIVATE llama)
+target_link_libraries(bench-jni PRIVATE llama log)
 target_compile_features(bench-jni PRIVATE cxx_std_17)

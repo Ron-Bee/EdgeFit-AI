@@ -104,12 +104,25 @@ The [official hackathon overview](https://cerebralvalley.ai/e/meta-ai-developer-
 
 All screenshots are genuine device captures. Model-compatibility estimates are unverified until measured; public Global aggregates should not be claimed until qualified contributions exist.
 
+#### Complete capture index
+
+| Home dashboard: device card, live telemetry, staged model, last measurement | ![Home dashboard](assets/screenshots/home-dashboard.png) |
+| Device Details (live): specs plus live battery, thermal, memory | ![Device details](assets/screenshots/device-details.png) |
+| Benchmark setup: model, configuration, evidence-sharing steps | ![Benchmark setup](assets/screenshots/benchmark-setup.png) |
+| Benchmark tab: config line, memory readiness, Run Benchmark | ![Benchmark execution](assets/screenshots/benchmark-execution.png) |
+| Completed run: 64/64 tokens, measured 15.3 tok/s with chart | ![Benchmark result](assets/screenshots/benchmark-result.png) |
+| Sessions ledger: durable prediction → benchmark records | ![Sessions](assets/screenshots/sessions.png) |
+| Agent tab: bounded optimization with explicit approvals | ![Agent](assets/screenshots/agent-view.png) |
+| Meta API settings: session-only key custody, explicit authorization | ![Meta BYOK](assets/screenshots/meta-byok.png) |
+| Recommended models: measured values vs unverified estimates | ![Model recommendations](assets/screenshots/model-recommendations.png) |
+| Contribute review: run provenance with consent scope | ![Global contribute](assets/screenshots/global-contribute.png) |
+| Settings: workload, export, diagnostics, Global connection, build | ![Settings](assets/screenshots/settings.png) |
+
 ## D. Model recommendations
 
 A major EdgeFit feature: the offline GGUF catalog recommends candidate models for *your measured hardware* — weighing compatibility (ABI, runtime), model size against device RAM/storage constraints, and estimated performance with explicit uncertainty. Every card carries provenance (catalog version, source) and states what is known vs guessed.
 
 Crucially, the UI separates **offline catalog recommendations** from **verified physical benchmarks**: compatibility guesses are labeled ESTIMATED / unverified until a real benchmark exists, and measured values are never pooled with estimates. Not every recommended model has been physically benchmarked — the app tells you exactly which have. See [the recommendations capture](assets/screenshots/model-recommendations.png) and [evidence showcase](docs/evidence-showcase.md).
-
 ## E. How EdgeFit works
 
 ```
@@ -320,9 +333,9 @@ Live Meta round trips are owner-executed only, require `MODEL_API_KEY`, and neve
 - Physical evidence spans **three contributing installs** (Galaxy S22 Ultra, S22+, Pixel XL) with small per-config samples (1–3 runs per config): all comparisons are **exploratory**, not confirmatory.
 - Device-profile collection is **not** inference benchmarking; only COMPLETED bench runs count as measurements.
 - The one live BYOK session, one agent loop, and six-run study are scoped demonstrations — see [qualification-status](docs/qualification-status.md).
-- Global backend + dashboard are **deployed** (verified 2026-11-04): 34 accepted staging contributions from 3 installs, zero published cohorts — publication gate closed, exact-cohort quorum unmet (closest cohort: 11 runs / 1 install; live counts on the [dashboard](https://edgefit-ai.pages.dev/dashboard)).
+- Global backend + dashboard are **deployed** (verified 2026-11-04): 34 accepted staging contributions from 3 installs, zero published cohorts â€” publication gate closed, exact-cohort quorum unmet (closest cohort: 11 runs / 1 install; live counts on the [dashboard](https://edgefit-ai.pages.dev/dashboard)).
 - Signed Android pre-release v0.2.1-preview.1 is published ([release](https://github.com/Ron-Bee/EdgeFit-AI/releases/tag/v0.2.1-preview.1)); physical-install test not yet verified; no Play listing ([note](docs/play-distribution-note.md)).
-- On Nov 1 the study phone's benchmark package was removed by an unattributed actor and a fresh base build installed (later INSTALL-07 recovery reported PASS on the S22); workstation evidence is intact; governed by mandatory safe-install preflight (`docs/ef-safe-install-01.md`, companion workstream file, lands separately).
+- On Nov 1 the study phone's benchmark package was removed by an unattributed actor and a fresh base build installed (later INSTALL-07 recovery reported PASS on the S22); workstation evidence is intact; governed by mandatory safe-install preflight ([ef-safe-install-01](docs/ef-safe-install-01.md)).
 - Roadmap: public-preview APK → first genuine uploads + quorum → Play publication. Proposed-only: none remaining in the showcase — the explorer is deployed.
 
 ## Q. Hackathon information and original-work scope

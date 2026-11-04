@@ -163,6 +163,37 @@ tombstone rows and exclude them from aggregates. Dependencies:
 EF-CLOUD-01. Status: PROPOSED. Acceptance: staged submit → revoke
 → aggregate exclusion with tombstone retained.
 
+### FR-SAFE-01 Installation and evidence preservation (EF-SAFE-INSTALL-01, OWNER APPROVED — MANDATORY)
+
+No destructive or identity-changing APK operation on a
+data-bearing EdgeFit installation SHALL proceed without:
+(1) independent physical device identity confirmation;
+(2) Android user/profile confirmation; (3) APK
+applicationId and build variant verification; (4)
+signing-certificate compatibility verification; (5)
+current installed-package identity verification; (6)
+pre-install session/evidence inventory; (7) verified,
+recoverable evidence backup; (8) explicit owner
+authorization for any uninstall, clear-data, package
+removal, identity change, or destructive migration;
+(9) post-install session/evidence preservation checks;
+(10) fail-closed behavior if any required check fails.
+An install SHALL NOT be declared data-safe merely
+because `adb install -r` was used. Secrets and
+private Meta credentials SHALL NOT be exported
+without separate explicit authorization. Applies to
+every physical fleet device. Dependencies: EF-DIST-01
+(variant identity), EF-SESSION-01 (inventory
+semantics). Status: APPROVED; implementation
+PROPOSED. Acceptance: cross-identity install over a
+data-bearing package refused without an explicit
+flag; signing mismatch refused; backup re-hashed
+before any destructive step; post-install counts
+match pre-install inventory or the run stops with a
+named discrepancy; fresh installs (firstInstall ==
+lastUpdate, zero sessions) show an explanatory
+banner; no acceptance test exports key material.
+
 ### FR-QUAL-01 Physical compatibility matrix
 
 Each release SHALL record tested SoCs, Android versions, and
