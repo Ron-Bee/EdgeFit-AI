@@ -123,7 +123,7 @@ profile → recommend → predict → authorize → benchmark → compare → re
 5. **Benchmark** — real llama.cpp inference on the phone; load, prefill, generation tok/s with thermal/memory conditions per run.
 6. **Compare** — host computes predicted-vs-measured error deterministically from persisted records.
 7. **Retain** — sessions persist in the on-device ledger; exports are contract-v1 JSON; workstation SQLite keeps additive history.
-8. **Contribute** — consent-gated per-submission review uploads to the deployed Global backend (client ready; first genuine upload not yet run).
+8. **Contribute** — consent-gated per-submission review uploads to the deployed Global backend (client live; first genuine uploads accepted, publication pending).
 
 ## EdgeFit AI — How It Works
 
@@ -208,7 +208,7 @@ The Global backend is **deployed on Cloudflare Free** (three Workers + one D1 da
 
 | Service | URL | Role |
 |---|---|---|
-| 📊 Dashboard | [edgefit-ai.pages.dev/dashboard.html](https://edgefit-ai.pages.dev/dashboard.html) | Public evidence dashboard (empty state) |
+| 📊 Dashboard | [edgefit-ai.pages.dev/dashboard.html](https://edgefit-ai.pages.dev/dashboard.html) | Public evidence dashboard (counts live, aggregates unpublished) |
 | 📖 Public reader | `edgefit-evidence-public.ronbaute92.workers.dev` | Anonymous GET-only aggregates/models |
 | 📥 Ingest gateway | `edgefit-evidence-ingest-demo.ronbaute92.workers.dev` | Per-install authenticated uploads |
 
@@ -218,7 +218,9 @@ The Global backend is **deployed on Cloudflare Free** (three Workers + one D1 da
 
 **Current status (2026-11-01): zero genuine publications.** 19 legacy/synthetic test rows, 0 `device_contribution` rows, empty allowlist, consent `ef-consent-01` PROPOSED not approved, first genuine upload (P0) not run. The dashboard's empty charts and `artifacts:[]` API responses are the *correct* output — nothing estimated, nothing filled in.
 
-**Independently verified by this workstream:** dashboard 200 with honest empty copy; `/v1/models` → `artifacts:[]`; ingest `GET /v1/models` → 404 (narrow routing intact); backend suite 297/297 re-run from the pinned-commit archive; rate-limit (120) and scheduler ceiling (10) confirmed in source. D1 census and 401 behavior attributed to Muse B's dated handoff (`cba27c3`).
+**Current status (2026-11-04):** 34 accepted staging contributions from 3 installs under ef-consent-01 (SM-S908U 14, SM-S906U 10, Pixel XL 10); 0 published — publication gate closed, exact-cohort quorum unmet (closest cohort: 11 runs / 1 install; quorum needs 5 / 3). Live counts: [dashboard](https://edgefit-ai.pages.dev/dashboard).
+
+**Independently verified by this workstream (2026-11-01):** dashboard 200 with honest empty copy; `/v1/models` → `artifacts:[]`; ingest `GET /v1/models` → 404 (narrow routing intact); backend suite 297/297 re-run from the pinned-commit archive; rate-limit (120) and scheduler ceiling (10) confirmed in source. D1 census and 401 behavior attributed to Muse B's dated handoff (`cba27c3`).
 
 ### Website and dashboard visual evidence — remaining captures
 
@@ -241,7 +243,7 @@ Build-from-source requirements: Android Studio (AGP 8.7.3, compileSdk 35), NDK, 
 
 ## K. Why Google Play distribution is pending
 
-No store listing exists because there is no signed release candidate, and the hackathon window does not fit the store timeline (policy review, data safety, rollout — plus, for personal accounts created after Nov 13 2023, a 12-tester / 14-day closed test before applying for production access). Direct GitHub distribution is the planned preview channel. Full note: [docs/play-distribution-note.md](docs/play-distribution-note.md).
+No store listing exists yet: the signed build ships as a GitHub pre-release while the hackathon window does not fit the store timeline (policy review, data safety, rollout — plus, for personal accounts created after Nov 13 2023, a 12-tester / 14-day closed test before applying for production access). Direct GitHub distribution is the planned preview channel. Full note: [docs/play-distribution-note.md](docs/play-distribution-note.md).
 
 ## L. Architecture diagram and technical stack
 
@@ -251,13 +253,13 @@ flowchart LR
     JSON["Contract-v1 JSON\nexport / import"]
     SQLite["Workstation SQLite\n(private evidence store)"]
     Muse["Meta Muse Spark\n(predict + follow-up)"]
-    Cloud["Global backend + dashboard\n(DEPLOYED, honestly empty)"]
+    Cloud["Global backend + dashboard\n(DEPLOYED, publication pending)"]
 
     Phone -->|"explicit export,\nno auto-upload"| JSON
     JSON -->|"two-flag commit\nimport"| SQLite
     SQLite -->|"bounded validated\nretrieval"| Muse
     Muse -->|"prediction recorded\nbefore measurement"| Phone
-    Phone -.->|"consent-gated upload\n(deployed; first\n genuine upload pending)| Cloud
+    Phone -.->|"consent-gated upload\n(deployed; first uploads accepted)"| Cloud
 ```
 
 Stack: Kotlin + JNI (llama.cpp v0.7.0, CPU), programmatic Views + Aero design system, app-private JSON ledger, Python stdlib workstation tooling, Cloudflare Workers + D1 (zero-dependency JS) Global backend.
@@ -315,11 +317,11 @@ Live Meta round trips are owner-executed only, require `MODEL_API_KEY`, and neve
 
 ## P. Limitations, known issues and roadmap
 
-- Physical evidence comes from **one device** (Galaxy S22 Ultra) with small samples (1–3 runs per config): all comparisons are **exploratory**, not confirmatory.
+- Physical evidence spans **three contributing installs** (Galaxy S22 Ultra, S22+, Pixel XL) with small per-config samples (1–3 runs per config): all comparisons are **exploratory**, not confirmatory.
 - Device-profile collection is **not** inference benchmarking; only COMPLETED bench runs count as measurements.
 - The one live BYOK session, one agent loop, and six-run study are scoped demonstrations — see [qualification-status](docs/qualification-status.md).
-- Global backend + dashboard are **deployed but empty**: zero genuine uploads, zero published cohorts, consent unapproved, P0–P3 not run. No multi-device data exists.
-- No signed public release yet ([gates](docs/release-readiness.md)); no Play listing ([note](docs/play-distribution-note.md)).
+- Global backend + dashboard are **deployed** (verified 2026-11-04): 34 accepted staging contributions from 3 installs, zero published cohorts — publication gate closed, exact-cohort quorum unmet (closest cohort: 11 runs / 1 install; live counts on the [dashboard](https://edgefit-ai.pages.dev/dashboard)).
+- Signed Android pre-release v0.2.1-preview.1 is published ([release](https://github.com/Ron-Bee/EdgeFit-AI/releases/tag/v0.2.1-preview.1)); physical-install test not yet verified; no Play listing ([note](docs/play-distribution-note.md)).
 - On Nov 1 the study phone's benchmark package was removed by an unattributed actor and a fresh base build installed (later INSTALL-07 recovery reported PASS on the S22); workstation evidence is intact; governed by mandatory safe-install preflight (`docs/ef-safe-install-01.md`, companion workstream file, lands separately).
 - Roadmap: public-preview APK → first genuine uploads + quorum → Play publication. Proposed-only: none remaining in the showcase — the explorer is deployed.
 
