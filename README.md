@@ -177,6 +177,8 @@ Details: [docs/muse-integration.md](docs/muse-integration.md).
 
 ## G. Scientific methodology and measured findings
 
+**Practical finding:** In an exploratory Galaxy S22 Ultra comparison, four threads achieved a median 16.52 tokens/sec versus 10.49 at eight threads—approximately 57.5% higher generation throughput—showing how device-specific benchmarking can identify substantially faster configurations (three runs per configuration).
+
 Headline (exploratory, n=3/config, one device): candidate A (4 threads) median **16.52 tok/s**; candidate B (8 threads) median **10.49 tok/s** — more threads measured *slower* on this device/workload. Prediction-before-measurement ordering enforced by timestamp; frozen SHA-256 evidence manifests; per-run thermal/memory conditions; host-computed errors; single-device honesty throughout.
 
 Full claim→artifact map: [docs/evidence-showcase.md](docs/evidence-showcase.md). Results: [docs/validation-results.md](docs/validation-results.md). Method: [docs/evidence-methodology.md](docs/evidence-methodology.md).
