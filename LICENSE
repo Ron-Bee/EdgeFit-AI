@@ -1,10 +1,21 @@
-EdgeFit AI — Proprietary Project License Notice
-Copyright (c) 2026 Ron Baute. All rights reserved.
+MIT License
 
-Unless a separate, express written license grants otherwise, the original EdgeFit AI source code, documentation, artwork, and other original project materials are not licensed for copying, modification, redistribution, sublicensing, or commercial use.
+Copyright (c) 2026 Ron Baute
 
-The public availability of this repository does not, by itself, grant a license to reuse its original contents. Rights provided by applicable law remain unaffected.
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
 
-Third-party components are NOT covered by this proprietary notice. They remain governed by their respective licenses, which take precedence for those components. See THIRD_PARTY_NOTICES.md and the original license texts distributed with third-party components.
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
 
-This notice does not override any applicable competition terms, any rights already granted to the hackathon organizers, or any separate license agreement.
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

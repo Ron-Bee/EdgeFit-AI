@@ -9,9 +9,9 @@ and verbatim upstream license fetches. This file covers components actually
 redistributed in the release APK plus test-only and user-supplied components that
 callers sometimes mistake for redistributed ones.
 
-EdgeFit AI original code, documentation, and artwork are NOT covered by this
-file; they remain rights-reserved under [LICENSE](LICENSE). Nothing here
-relicenses EdgeFit AI under an open-source license.
+Original EdgeFit AI project materials are licensed under the MIT License in
+[LICENSE](LICENSE). Third-party components retain their respective licenses;
+this file documents those components and does not replace their license terms.
 
 ## 1. llama.cpp / ggml (native inference, MIT)
 

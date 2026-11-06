@@ -331,7 +331,7 @@ Live Meta round trips are owner-executed only, require `MODEL_API_KEY`, and neve
 
 ## Q. Hackathon information and original-work scope
 
-Built for the **2026 Meta Global AI Developer Hackathon** (deadline Nov 4, 2026). Original work: Android harness + Aero UI, session/agent/consent architecture, cloud foundation + deployed Global backend, dashboard website, study design + frozen corpus, and all documentation. Pinned third-party code: llama.cpp v0.7.0 (reviewed, ownership-tested). Meta Muse Spark (`muse-spark-1.3`) used via API for predictions, follow-ups, and agent proposals; Muse Code assisted test-harness and scaffolding development. Original project materials are rights-reserved under [LICENSE](LICENSE); third-party notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Built for the **2026 Meta Global AI Developer Hackathon** (deadline Nov 4, 2026). Original work: Android harness + Aero UI, session/agent/consent architecture, cloud foundation + deployed Global backend, dashboard website, study design + frozen corpus, and all documentation. Pinned third-party code: llama.cpp v0.7.0 (reviewed, ownership-tested). Meta Muse Spark (`muse-spark-1.3`) used via API for predictions, follow-ups, and agent proposals; Muse Code assisted test-harness and scaffolding development. Original project materials are licensed under the [MIT License](LICENSE); third-party notices: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
 
 ### AI-Assisted Development at Scale
 
@@ -351,4 +351,4 @@ Verified links: this repository, the [live dashboard](https://edgefit-ai.pages.d
 
 ## Licensing and third-party notices
 
-Original EdgeFit AI project materials are rights-reserved; public access to this repository is not permission to reuse them. See [LICENSE](LICENSE). Third-party software remains under its respective licenses, including MIT-licensed llama.cpp/ggml, Apache-2.0 Kotlin runtime components and LLVM OpenMP, Unicode data, and the EPL-1.0 JUnit test dependency. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Attaching the full third-party license texts to the signed APK GitHub release is a pending owner step.
+Original EdgeFit AI project materials are licensed under the [MIT License](LICENSE), copyright (c) 2026 Ron Baute. Third-party software remains under its respective licenses, including MIT-licensed llama.cpp/ggml, Apache-2.0 Kotlin runtime components and LLVM OpenMP, Unicode data, and the EPL-1.0 JUnit test dependency. See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). Attaching the full third-party license texts to the signed APK GitHub release is a pending owner step.
